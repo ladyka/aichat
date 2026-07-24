@@ -1,0 +1,28 @@
+# Files and paths that must not be uploaded to production.
+# Syntax is similar to .gitignore:
+#   pattern     — ignore matching paths
+#   !pattern    — un-ignore (exception)
+#   # comment
+
+# Secrets and local config
+.env
+.env.*
+.env.example
+
+# VCS and tooling
+.git/
+.gitignore
+.uploadignore
+Makefile
+HANDOFF.md
+scripts/
+__pycache__/
+*.pyc
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
