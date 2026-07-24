@@ -26,3 +26,7 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+
+.venv
+.venv/
