@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}aichat — чат и API к LLM{% endblock %}
+{% block body_class %}page-landing{% endblock %}
+{% block content %}
+<section class="hero">
+  <div class="hero-copy">
+    <p class="brand-mark">aichat</p>
+    <h1>Чат с LLM и свой API в одном месте</h1>
+    <p class="lede">Пишите моделям в браузере или подключайте приложения через OpenAI-совместимый endpoint.</p>
+    <div class="cta-row">
+      {% if user %}
+        <a class="btn" href="/chat">Открыть чат</a>
+        <a class="btn btn-ghost" href="/tokens">API-токены</a>
+      {% else %}
+        <a class="btn" href="/register">Создать аккаунт</a>
+        <a class="btn btn-ghost" href="/login">Войти</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="hero-visual" aria-hidden="true">
+    <div class="orbit">
+      <div class="orbit-ring"></div>
+      <div class="orbit-ring delay"></div>
+      <div class="chat-preview">
+        <div class="bubble user">Собери краткий ответ по API</div>
+        <div class="bubble bot">POST /v1/chat/completions — и готово.</div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

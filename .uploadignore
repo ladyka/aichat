@@ -18,6 +18,8 @@ HANDOFF.md
 scripts/
 __pycache__/
 *.pyc
+aichat.db
+*.db
 
 # OS / editor junk
 .DS_Store
@@ -26,7 +28,6 @@ Thumbs.db
 *~
 .idea/
 .vscode/
-
 
 .venv
 .venv/

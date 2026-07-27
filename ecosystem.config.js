@@ -1,9 +1,10 @@
+const { apps } = require("./ecosystem.config");
+
 module.exports = {
-	"apps" : 
-	[
-		{
-			"name" : "xn--80ab2alw.xn--90ais",
-			"script" : "server.py"
-		}
-	]
-}
+    apps: [
+        {
+            name: "aichat.by",
+            script: "server.py",
+        },
+    ],
+};

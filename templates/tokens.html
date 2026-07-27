@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}API-токены — aichat{% endblock %}
+{% block body_class %}page-tokens{% endblock %}
+{% block content %}
+<section class="tokens-panel">
+  <h1>API-токены</h1>
+  <p class="muted">Используйте токен как Bearer для <code>POST /v1/chat/completions</code> (OpenAI-совместимый формат).</p>
+
+  {% if new_token %}
+  <div class="token-reveal">
+    <p><strong>Скопируйте токен сейчас</strong> — больше он не будет показан.</p>
+    <code class="token-value">{{ new_token }}</code>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/tokens" class="token-create">
+    <label>Имя токена
+      <input type="text" name="name" value="default" maxlength="100">
+    </label>
+    <button class="btn" type="submit">Создать токен</button>
+  </form>
+
+  <div class="example">
+    <p class="muted">Пример:</p>
+    <pre>curl https://YOUR_HOST/v1/chat/completions \
+  -H "Authorization: Bearer aichat_…" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"{{ default_model }}","messages":[{"role":"user","content":"Привет"}]}'</pre>
+  </div>
+
+  <ul class="token-list">
+    {% for t in tokens %}
+    <li>
+      <div>
+        <strong>{{ t.name }}</strong>
+        <span class="muted">{{ t.prefix }}…</span>
+        <span class="muted">{{ t.created_at }}</span>
+      </div>
+      <form method="post" action="/tokens/{{ t.id }}/revoke">
+        <button type="submit" class="btn btn-ghost btn-small">Отозвать</button>
+      </form>
+    </li>
+    {% else %}
+    <li class="muted">Активных токенов пока нет.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

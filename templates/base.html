@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}aichat{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  <header class="site-header">
+    <a class="brand" href="/">aichat</a>
+    <nav class="nav">
+      {% if user %}
+        <a href="/chat">Чат</a>
+        <a href="/tokens">API</a>
+        <form action="/logout" method="post" class="inline-form">
+          <button type="submit" class="linkish">Выйти</button>
+        </form>
+      {% else %}
+        <a href="/login">Войти</a>
+        <a class="btn btn-small" href="/register">Начать</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main class="{% block main_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
