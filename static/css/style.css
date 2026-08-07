@@ -296,6 +296,7 @@ textarea { resize: vertical; min-height: 64px; }
 .chat-main { padding: 0; }
 .chat-spa {
   height: calc(100vh - 72px);
+  height: calc(100dvh - 72px);
   max-width: none;
   margin: 0;
   padding: 0;
@@ -421,4 +422,53 @@ textarea { resize: vertical; min-height: 64px; }
     align-items: end;
   }
   .side-link { grid-column: 1 / -1; }
+}
+
+@media (max-width: 768px) {
+  /* Mobile: chat is a full-screen app, hide the global header */
+  .page-chat .site-header { display: none; }
+  .page-chat .chat-spa {
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+@media (max-width: 480px) {
+  .site-header {
+    padding: 0.9rem 1rem;
+  }
+  .nav {
+    gap: 0.75rem;
+  }
+  .brand {
+    font-size: 1.4rem;
+  }
+  .hero {
+    padding: 1.25rem 1rem 2.5rem;
+  }
+  .lede {
+    font-size: 1rem;
+  }
+  .auth-panel,
+  .tokens-panel,
+  .narrow-card {
+    padding: 1.2rem;
+  }
+  .auth-panel h1,
+  .tokens-panel h1,
+  .narrow-card h1 {
+    font-size: 1.8rem;
+  }
+  .token-list li {
+    flex-wrap: wrap;
+  }
+  .example pre {
+    padding: 0.85rem;
+  }
+  /* Prevent iOS Safari auto-zoom on focus */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }

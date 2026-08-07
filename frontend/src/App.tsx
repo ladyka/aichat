@@ -5,15 +5,21 @@ import { Thread } from "@/components/Thread";
 import { ThreadList } from "@/components/ThreadList";
 
 const SIDEBAR_KEY = "aichat.sidebarOpen";
+const MOBILE_QUERY = "(max-width: 768px)";
+
+function isMobileViewport(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches;
+}
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
-      return raw === null ? true : raw === "1";
+      if (raw !== null) return raw === "1";
     } catch {
-      return true;
+      /* ignore */
     }
+    return !isMobileViewport();
   });
 
   useEffect(() => {
@@ -26,10 +32,19 @@ export default function App() {
 
   return (
     <RuntimeProvider>
-      <div className="flex h-full min-h-0 bg-[var(--chat-bg)] text-[var(--chat-ink)]">
+      <div className="relative flex h-full min-h-0 bg-[var(--chat-bg)] text-[var(--chat-ink)]">
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/25 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden="true"
+          />
+        )}
         <aside
-          className={`flex shrink-0 flex-col border-r border-[var(--chat-line)] bg-[var(--chat-panel)] transition-[width] duration-200 ${
-            sidebarOpen ? "w-64" : "w-0 overflow-hidden border-r-0"
+          className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col border-r border-[var(--chat-line)] bg-[var(--chat-panel)] shadow-xl transition-transform duration-200 md:static md:z-auto md:shadow-none md:transition-[width] ${
+            sidebarOpen
+              ? "translate-x-0 md:w-64"
+              : "-translate-x-full md:w-0 md:translate-x-0 md:overflow-hidden md:border-r-0"
           }`}
         >
           <div className="flex items-center justify-between border-b border-[var(--chat-line)] px-3 py-2">

@@ -49,18 +49,18 @@ export function Thread() {
         />
       </ThreadPrimitive.Viewport>
 
-      <div className="border-t border-[var(--chat-line)] bg-[var(--chat-panel)] px-4 py-3">
-        <ComposerPrimitive.Root className="mx-auto flex max-w-3xl items-end gap-2">
+      <div className="border-t border-[var(--chat-line)] bg-[var(--chat-panel)] px-2 py-2 sm:px-4 sm:py-3">
+        <ComposerPrimitive.Root className="mx-auto flex max-w-3xl items-end gap-1.5 sm:gap-2">
           <ComposerPrimitive.Input
             className="aui-composer-input"
             rows={2}
             placeholder="Напишите сообщение…"
           />
-          <ComposerPrimitive.Send className="inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--chat-accent)] px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+          <ComposerPrimitive.Send className="inline-flex shrink-0 items-center justify-center rounded-full bg-[var(--chat-accent)] px-3 py-2.5 text-sm font-medium text-white disabled:opacity-50 sm:px-4">
             Отправить
           </ComposerPrimitive.Send>
           <ThreadPrimitive.If running>
-            <ComposerPrimitive.Cancel className="inline-flex shrink-0 items-center justify-center rounded-full border border-[var(--chat-line)] px-4 py-2.5 text-sm font-medium">
+            <ComposerPrimitive.Cancel className="inline-flex shrink-0 items-center justify-center rounded-full border border-[var(--chat-line)] px-3 py-2.5 text-sm font-medium sm:px-4">
               Стоп
             </ComposerPrimitive.Cancel>
           </ThreadPrimitive.If>

@@ -67,3 +67,18 @@ body,
   background: var(--chat-panel);
   border: 1px solid var(--chat-line);
 }
+
+@media (max-width: 768px) {
+  /* Prevent iOS Safari auto-zoom on focus */
+  .aui-composer-input {
+    font-size: 16px;
+  }
+
+  .msg-bubble {
+    max-width: 100%;
+  }
+
+  .aui-thread-viewport {
+    padding: 0.75rem;
+  }
+}
