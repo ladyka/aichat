@@ -60,15 +60,26 @@ make run
 python3 api_check.py --host https://YOUR_HOST --token aichat_…
 ```
 
+## Документация
+
+Продуктовые заметки (видение, MVP): каталог [`docs/`](docs/), сборка MkDocs Material.
+
+```bash
+make docs-serve   # http://127.0.0.1:8000/  (нужен Docker)
+make docs-build   # strict build в ./site/
+```
+
 ## Структура
 
 ```
 app/           # FastAPI: auth, DB, OpenRouter, routes
 templates/     # Jinja2 страницы
 static/        # CSS / chat.js
+docs/          # MkDocs (продукт / видение)
 server.py      # entrypoint (uvicorn, port или SOCKET)
 scripts/       # FTP deploy
 api_check.py   # smoke-тест API
+mkdocs.yml     # конфиг документации
 ```
 
 ## Деплой (hoster / FTP)

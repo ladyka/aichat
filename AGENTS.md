@@ -34,6 +34,7 @@
 | `server.py` | entrypoint (uvicorn; `PORT` или `SOCKET`) |
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
+| `docs/`, `mkdocs.yml` | продуктовая документация (MkDocs Material) |
 
 ### Stack
 

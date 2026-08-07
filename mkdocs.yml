@@ -1,0 +1,41 @@
+site_name: aichat Documentation
+site_description: LLM-чат и OpenAI-совместимый API-прокси (OpenRouter)
+theme:
+  name: material
+  language: ru
+  palette:
+    - scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - toc.integrate
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.annotate
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      permalink: true
+nav:
+  - Главная: index.md
+  - Продукт:
+    - Видение (Беларусь): product/vision-belarus.md
+    - MVP и следующие шаги: product/mvp-next-steps.md

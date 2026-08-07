@@ -31,3 +31,12 @@ Thumbs.db
 
 .venv
 .venv/
+
+# Docs (MkDocs); not needed on app host
+docs/
+mkdocs.yml
+site/
+AGENTS.md
+README.md
+.cursor/
+
