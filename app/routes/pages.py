@@ -51,6 +51,16 @@ def landing(request: Request, user: User | None = Depends(get_current_user_optio
     return render(request, "landing.html", user)
 
 
+@router.get("/privacy", response_class=HTMLResponse)
+def privacy_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+    return render(request, "privacy.html", user)
+
+
+@router.get("/terms", response_class=HTMLResponse)
+def terms_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+    return render(request, "terms.html", user)
+
+
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request, user: User | None = Depends(get_current_user_optional)):
     if user:
@@ -100,6 +110,7 @@ def register_submit(
     email: str = Form(...),
     password: str = Form(...),
     password2: str = Form(...),
+    consent: str = Form(""),
     db: Session = Depends(get_db),
 ):
     settings = get_settings()
@@ -107,6 +118,8 @@ def register_submit(
     error = None
     if "@" not in email_norm or "." not in email_norm:
         error = "Укажите корректный email"
+    elif consent != "on":
+        error = "Необходимо согласие с политикой конфиденциальности и пользовательским соглашением"
     elif len(password) < 6:
         error = "Пароль должен быть не короче 6 символов"
     elif password != password2:
@@ -159,6 +172,50 @@ def chat_page(
     return render(request, "chat.html", user)
 
 
+def _settings_render(
+    request: Request,
+    user: User,
+    db: Session,
+    *,
+    error: str | None = None,
+    saved: bool = False,
+    token_error: str | None = None,
+    new_token: str | None = None,
+    status_code: int = 200,
+):
+    settings = get_settings()
+    preferred = (user.preferred_model or "").strip() or settings.default_model or PUBLIC_DEFAULT_ID
+    tokens, usage = _tokens_view_data(db, user)
+    return render(
+        request,
+        "settings.html",
+        user,
+        status_code=status_code,
+        preferred_model=preferred,
+        error=error,
+        saved=saved,
+        token_error=token_error,
+        new_token=new_token,
+        tokens=tokens,
+        token_usage=usage,
+        api_daily_limit=settings.api_daily_limit,
+        max_tokens_per_user=settings.max_tokens_per_user,
+        active_tokens=len(tokens),
+    )
+
+
+@router.get("/profile", response_class=HTMLResponse)
+def profile_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    return render(request, "profile.html", user)
+
+
 @router.get("/settings", response_class=HTMLResponse)
 def settings_page(
     request: Request,
@@ -168,15 +225,7 @@ def settings_page(
     user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
     if not user:
         return RedirectResponse("/login", status_code=303)
-    preferred = (user.preferred_model or "").strip() or settings.default_model or PUBLIC_DEFAULT_ID
-    return render(
-        request,
-        "settings.html",
-        user,
-        preferred_model=preferred,
-        error=None,
-        saved=False,
-    )
+    return _settings_render(request, user, db)
 
 
 @router.post("/settings", response_class=HTMLResponse)
@@ -195,27 +244,17 @@ async def settings_submit(
     try:
         resolve_upstream_model(model)
     except HTTPException as exc:
-        preferred = (user.preferred_model or "").strip() or PUBLIC_DEFAULT_ID
-        return render(
+        return _settings_render(
             request,
-            "settings.html",
             user,
+            db,
             status_code=400,
-            preferred_model=preferred,
             error=str(exc.detail),
-            saved=False,
         )
 
     user.preferred_model = model
     db.commit()
-    return render(
-        request,
-        "settings.html",
-        user,
-        preferred_model=model,
-        error=None,
-        saved=True,
-    )
+    return _settings_render(request, user, db, saved=True)
 
 
 @router.get("/tokens", response_class=HTMLResponse)
@@ -227,8 +266,7 @@ def tokens_page(
     user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
     if not user:
         return RedirectResponse("/login", status_code=303)
-    tokens, usage = _tokens_view_data(db, user)
-    return _tokens_render(request, user, tokens, usage, new_token=None, error=None)
+    return RedirectResponse("/settings", status_code=303)
 
 
 def _tokens_view_data(
@@ -252,29 +290,6 @@ def _tokens_view_data(
     return tokens, usage
 
 
-def _tokens_render(
-    request: Request,
-    user: User,
-    tokens: list[ApiToken],
-    usage: dict[int, int],
-    new_token: str | None,
-    error: str | None,
-):
-    settings = get_settings()
-    return render(
-        request,
-        "tokens.html",
-        user,
-        tokens=tokens,
-        token_usage=usage,
-        api_daily_limit=settings.api_daily_limit,
-        max_tokens_per_user=settings.max_tokens_per_user,
-        active_tokens=len(tokens),
-        new_token=new_token,
-        error=error,
-    )
-
-
 @router.post("/tokens")
 def create_token(
     request: Request,
@@ -293,14 +308,11 @@ def create_token(
         )
     )
     if active_count >= settings.max_tokens_per_user:
-        tokens, usage = _tokens_view_data(db, user)
-        return _tokens_render(
+        return _settings_render(
             request,
             user,
-            tokens,
-            usage,
-            new_token=None,
-            error=(
+            db,
+            token_error=(
                 f"Достигнут лимит: не более {settings.max_tokens_per_user} "
                 "токенов на пользователя. Отзовите один из активных токенов."
             ),
@@ -316,8 +328,7 @@ def create_token(
     db.add(token)
     db.commit()
 
-    tokens, usage = _tokens_view_data(db, user)
-    return _tokens_render(request, user, tokens, usage, new_token=raw, error=None)
+    return _settings_render(request, user, db, new_token=raw)
 
 
 @router.post("/tokens/{token_id}/revoke")
@@ -335,4 +346,4 @@ def revoke_token(
     if token and token.user_id == user.id and token.revoked_at is None:
         token.revoked_at = datetime.now(timezone.utc)
         db.commit()
-    return RedirectResponse("/tokens", status_code=303)
+    return RedirectResponse("/settings", status_code=303)

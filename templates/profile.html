@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Профиль — aichat{% endblock %}
+{% block content %}
+<section class="auth-card narrow-card">
+  <h1>Профиль</h1>
+  <p class="muted">Данные вашего аккаунта.</p>
+  <dl class="profile-list">
+    <div>
+      <dt>Email</dt>
+      <dd>{{ user.email }}</dd>
+    </div>
+    <div>
+      <dt>Аккаунт создан</dt>
+      <dd>{{ user.created_at }}</dd>
+    </div>
+  </dl>
+  <div class="cta-row">
+    <a class="btn" href="/settings">Настройки</a>
+    <a class="btn btn-ghost" href="/chat">← К чату</a>
+  </div>
+  <form action="/logout" method="post" class="inline-form">
+    <button type="submit" class="btn btn-ghost">Выйти</button>
+  </form>
+</section>
+{% endblock %}

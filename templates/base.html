@@ -11,25 +11,17 @@
   {% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
-  <header class="site-header">
-    <a class="brand" href="/">aichat</a>
-    <nav class="nav">
-      {% if user %}
-        <a href="/chat">Чат</a>
-        <a href="/settings">Свойства</a>
-        <a href="/tokens">API</a>
-        <form action="/logout" method="post" class="inline-form">
-          <button type="submit" class="linkish">Выйти</button>
-        </form>
-      {% else %}
-        <a href="/login">Войти</a>
-        <a class="btn btn-small" href="/register">Начать</a>
-      {% endif %}
-    </nav>
-  </header>
   <main class="{% block main_class %}{% endblock %}">
     {% block content %}{% endblock %}
   </main>
+  <footer class="site-footer">
+    <span class="muted">aichat</span>
+    <nav class="footer-nav">
+      <a href="/privacy">Политика конфиденциальности</a>
+      <a href="/terms">Пользовательское соглашение</a>
+    </nav>
+    <p class="footer-disclaimer">Чатбот может ошибаться и галлюцинировать — проверяйте ответы на реальность.</p>
+  </footer>
   {% block scripts %}{% endblock %}
 </body>
 </html>

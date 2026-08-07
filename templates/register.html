@@ -16,6 +16,10 @@
     <label>Повторите пароль
       <input type="password" name="password2" required minlength="6" autocomplete="new-password">
     </label>
+    <label class="checkbox">
+      <input type="checkbox" name="consent" value="on" required>
+      <span>Я согласен с <a href="/privacy">политикой конфиденциальности</a> и <a href="/terms">пользовательским соглашением</a></span>
+    </label>
     <button class="btn" type="submit">Создать аккаунт</button>
   </form>
   <p class="muted">Уже есть аккаунт? <a href="/login">Войти</a></p>

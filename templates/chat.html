@@ -9,5 +9,6 @@
 <div id="root" class="chat-root"></div>
 {% endblock %}
 {% block scripts %}
+<script>window.AICHAT_USER = {{ user.email|tojson }};</script>
 <script type="module" src="/chat-ui/assets/chat.js"></script>
 {% endblock %}

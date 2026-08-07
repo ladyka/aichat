@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Home,
+  PanelLeftClose,
+  PanelLeftOpen,
+  UserRound,
+} from "lucide-react";
 import { RuntimeProvider } from "@/components/RuntimeProvider";
 import { Thread } from "@/components/Thread";
 import { ThreadList } from "@/components/ThreadList";
 
 const SIDEBAR_KEY = "aichat.sidebarOpen";
 const MOBILE_QUERY = "(max-width: 768px)";
+
+const userEmail: string | undefined =
+  typeof window !== "undefined"
+    ? (window as unknown as { AICHAT_USER?: string }).AICHAT_USER
+    : undefined;
 
 function isMobileViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches;
@@ -21,6 +33,7 @@ export default function App() {
     }
     return !isMobileViewport();
   });
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -48,18 +61,76 @@ export default function App() {
           }`}
         >
           <div className="flex items-center justify-between border-b border-[var(--chat-line)] px-3 py-2">
-            <span className="text-sm font-medium">Истории</span>
             <a
-              href="/settings"
-              className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-[var(--chat-muted)] hover:bg-black/5 hover:text-[var(--chat-ink)]"
-              title="Свойства"
+              href="/"
+              className="inline-flex items-center gap-2 rounded px-2 py-1 text-sm text-[var(--chat-muted)] hover:bg-black/5 hover:text-[var(--chat-ink)]"
+              title="На главную"
             >
-              <Settings className="h-3.5 w-3.5" />
-              Модель
+              <Home className="h-4 w-4" />
+              На главную
             </a>
           </div>
           <div className="min-h-0 flex-1">
             <ThreadList />
+          </div>
+          <div className="relative border-t border-[var(--chat-line)] p-2">
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen((v) => !v)}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm text-[var(--chat-ink)] hover:bg-black/5"
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
+            >
+              <UserRound className="h-4 w-4 shrink-0 text-[var(--chat-muted)]" />
+              <span className="min-w-0 flex-1 truncate text-left">
+                {userEmail ?? "Аккаунт"}
+              </span>
+              {userMenuOpen ? (
+                <ChevronUp className="h-4 w-4 shrink-0 text-[var(--chat-muted)]" />
+              ) : (
+                <ChevronDown className="h-4 w-4 shrink-0 text-[var(--chat-muted)]" />
+              )}
+            </button>
+            {userMenuOpen && (
+              <div className="absolute bottom-full left-2 right-2 z-50 mb-2 overflow-hidden rounded-lg border border-[var(--chat-line)] bg-[var(--chat-panel)] shadow-xl">
+                <a
+                  href="/profile"
+                  className="block px-3 py-2 text-sm text-[var(--chat-ink)] hover:bg-black/5"
+                >
+                  Профиль
+                </a>
+                <a
+                  href="/settings"
+                  className="block px-3 py-2 text-sm text-[var(--chat-ink)] hover:bg-black/5"
+                >
+                  Настройки
+                </a>
+                <a
+                  href="/privacy"
+                  className="block px-3 py-2 text-sm text-[var(--chat-muted)] hover:bg-black/5"
+                >
+                  Политика конфиденциальности
+                </a>
+                <a
+                  href="/terms"
+                  className="block px-3 py-2 text-sm text-[var(--chat-muted)] hover:bg-black/5"
+                >
+                  Пользовательское соглашение
+                </a>
+                <form
+                  action="/logout"
+                  method="post"
+                  className="border-t border-[var(--chat-line)]"
+                >
+                  <button
+                    type="submit"
+                    className="w-full px-3 py-2 text-left text-sm text-[var(--chat-ink)] hover:bg-black/5"
+                  >
+                    Выйти
+                  </button>
+                </form>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -78,18 +149,6 @@ export default function App() {
               )}
               {sidebarOpen ? "Скрыть" : "Истории"}
             </button>
-            <a
-              href="/settings"
-              className="ml-auto text-sm text-[var(--chat-muted)] hover:text-[var(--chat-accent)]"
-            >
-              Свойства
-            </a>
-            <a
-              href="/tokens"
-              className="text-sm text-[var(--chat-muted)] hover:text-[var(--chat-accent)]"
-            >
-              API
-            </a>
           </div>
           <div className="min-h-0 flex-1">
             <Thread />

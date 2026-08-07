@@ -16,6 +16,10 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
   font-family: var(--font-sans);
   color: var(--ink);
   background:
@@ -24,50 +28,10 @@ body {
     linear-gradient(180deg, var(--bg0), var(--bg1));
   background-attachment: fixed;
 }
+main { flex: 1; }
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
-.site-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.1rem 1.5rem;
-  position: sticky;
-  top: 0;
-  backdrop-filter: blur(10px);
-  background: rgba(243, 246, 244, 0.75);
-  border-bottom: 1px solid transparent;
-  z-index: 10;
-}
-
-.brand {
-  font-family: var(--font-display);
-  font-size: 1.6rem;
-  color: var(--ink);
-  text-decoration: none;
-  letter-spacing: -0.02em;
-}
-
-.nav {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-.nav a { color: var(--ink); text-decoration: none; font-weight: 500; }
-.nav a:hover { color: var(--accent); }
-
-.inline-form { display: inline; margin: 0; }
-.linkish {
-  background: none;
-  border: none;
-  color: var(--ink);
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
-}
-.linkish:hover { color: var(--accent); }
 
 .btn {
   display: inline-flex;
@@ -95,7 +59,7 @@ a:hover { text-decoration: underline; }
 .btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
 
 .hero {
-  min-height: calc(100vh - 72px);
+  min-height: calc(100dvh - 144px);
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
   gap: 2rem;
@@ -196,15 +160,13 @@ a:hover { text-decoration: underline; }
 .bubble.user { justify-self: end; background: #dff3ea; }
 .bubble.bot { justify-self: start; animation: pulse 2.8s ease-in-out infinite; }
 
-.page-auth main,
-.page-tokens main {
+.page-auth main {
   display: flex;
   justify-content: center;
   padding: 2rem 1rem 3rem;
 }
 
-.auth-panel,
-.tokens-panel {
+.auth-panel {
   width: min(560px, 100%);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -213,10 +175,8 @@ a:hover { text-decoration: underline; }
   box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
 }
-.tokens-panel { width: min(720px, 100%); }
 
-.auth-panel h1,
-.tokens-panel h1 {
+.auth-panel h1 {
   font-family: var(--font-display);
   font-weight: 400;
   font-size: 2.2rem;
@@ -242,6 +202,17 @@ label {
   gap: 0.35rem;
   font-weight: 500;
   font-size: 0.95rem;
+}
+label.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 400;
+}
+label.checkbox input {
+  width: auto;
+  flex: none;
+  margin: 0;
 }
 input, select, textarea {
   width: 100%;
@@ -295,8 +266,8 @@ textarea { resize: vertical; min-height: 64px; }
 
 .chat-main { padding: 0; }
 .chat-spa {
-  height: calc(100vh - 72px);
-  height: calc(100dvh - 72px);
+  height: 100vh;
+  height: 100dvh;
   max-width: none;
   margin: 0;
   padding: 0;
@@ -310,6 +281,16 @@ textarea { resize: vertical; min-height: 64px; }
   background: #e8f7f0;
   border-radius: 10px;
   padding: 0.7rem 0.85rem;
+}
+.divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 1.6rem 0;
+}
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
 }
 .narrow-card {
   width: min(520px, 100%);
@@ -330,6 +311,61 @@ textarea { resize: vertical; min-height: 64px; }
   display: grid;
   gap: 0.9rem;
   margin: 1.2rem 0;
+}
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  border-top: 1px solid var(--line);
+  margin-top: 2rem;
+}
+.page-chat .site-footer { display: none; }
+.footer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+.footer-nav a { font-size: 0.9rem; }
+.footer-disclaimer {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0;
+}
+.legal h2 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 1.2rem 0 0.4rem;
+}
+.legal p { margin: 0.4rem 0; }
+.legal ul { margin: 0.4rem 0; padding-left: 1.2rem; }
+.back-link { margin: 0 0 0.75rem; font-size: 0.9rem; }
+.profile-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.2rem 0;
+}
+.profile-list div {
+  display: grid;
+  gap: 0.2rem;
+}
+.profile-list dt {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.profile-list dd {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 .chat-shell {
   display: grid;
@@ -425,8 +461,7 @@ textarea { resize: vertical; min-height: 64px; }
 }
 
 @media (max-width: 768px) {
-  /* Mobile: chat is a full-screen app, hide the global header */
-  .page-chat .site-header { display: none; }
+  /* Chat is a full-screen app on mobile */
   .page-chat .chat-spa {
     height: 100vh;
     height: 100dvh;
@@ -434,15 +469,6 @@ textarea { resize: vertical; min-height: 64px; }
 }
 
 @media (max-width: 480px) {
-  .site-header {
-    padding: 0.9rem 1rem;
-  }
-  .nav {
-    gap: 0.75rem;
-  }
-  .brand {
-    font-size: 1.4rem;
-  }
   .hero {
     padding: 1.25rem 1rem 2.5rem;
   }
@@ -450,12 +476,10 @@ textarea { resize: vertical; min-height: 64px; }
     font-size: 1rem;
   }
   .auth-panel,
-  .tokens-panel,
   .narrow-card {
     padding: 1.2rem;
   }
   .auth-panel h1,
-  .tokens-panel h1,
   .narrow-card h1 {
     font-size: 1.8rem;
   }

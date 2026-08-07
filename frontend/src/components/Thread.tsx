@@ -47,8 +47,8 @@ export function Thread() {
             <p className="text-lg font-medium text-[var(--chat-ink)]">
               Новый диалог
             </p>
-            <p className="mt-1 text-sm">
-              Напишите сообщение. Модель задаётся в настройках.
+            <p className="mt-2 text-xs">
+              Чатбот может ошибаться и галлюцинировать — проверяйте ответы на реальность.
             </p>
           </div>
         ) : null}
@@ -76,6 +76,9 @@ export function Thread() {
             </ComposerPrimitive.Cancel>
           </ThreadPrimitive.If>
         </ComposerPrimitive.Root>
+        <p className="pb-1 text-center text-[0.7rem] leading-tight text-[var(--chat-muted)]">
+          Чатбот может ошибаться и галлюцинировать — проверяйте ответы на реальность.
+        </p>
       </div>
     </ThreadPrimitive.Root>
   );

@@ -40,7 +40,12 @@ def db():
 def register(client, email, password="secret123"):
     return client.post(
         "/register",
-        data={"email": email, "password": password, "password2": password},
+        data={
+            "email": email,
+            "password": password,
+            "password2": password,
+            "consent": "on",
+        },
         follow_redirects=False,
     )
 

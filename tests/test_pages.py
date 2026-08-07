@@ -21,6 +21,16 @@ def test_login_page(client):
     assert client.get("/register").status_code == 200
 
 
+def test_register_requires_consent(client):
+    address = email()
+    response = client.post(
+        "/register",
+        data={"email": address, "password": "secret123", "password2": "secret123"},
+    )
+    assert response.status_code == 400
+    assert "согласие" in response.text
+
+
 def test_register_validation(client):
     address = email()
     assert register(client, "not-an-email").status_code == 400
@@ -107,6 +117,14 @@ def test_tokens_page_requires_auth(client):
     assert client.get("/tokens", follow_redirects=False).status_code == 303
 
 
+def test_profile_page(client):
+    assert client.get("/profile", follow_redirects=False).status_code == 303
+    register(client, email())
+    page = client.get("/profile")
+    assert page.status_code == 200
+    assert "Профиль" in page.text
+
+
 def test_create_token_shows_value_and_usage(client):
     register(client, email())
     token, response = create_token(client)
@@ -140,5 +158,5 @@ def test_revoke_token(client, db):
 
     response = client.post(f"/tokens/{row.id}/revoke", follow_redirects=False)
     assert response.status_code == 303
-    page = client.get("/tokens")
+    page = client.get("/settings")
     assert "Активных токенов пока нет" in page.text
