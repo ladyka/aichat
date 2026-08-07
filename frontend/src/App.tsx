@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
+import { useAui } from "@assistant-ui/react";
 import {
+  Archive,
   ChevronDown,
   ChevronUp,
   Home,
   Link2,
   PanelLeftClose,
   PanelLeftOpen,
+  Trash2,
   UserRound,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { RuntimeProvider } from "@/components/RuntimeProvider";
 import { ShareDialog } from "@/components/ShareDialog";
 import { Thread } from "@/components/Thread";
@@ -28,6 +32,7 @@ function isMobileViewport(): boolean {
 
 function ChatLayout() {
   const conversationId = useConversationId();
+  const aui = useAui();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);
@@ -39,6 +44,13 @@ function ChatLayout() {
   });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [confirm, setConfirm] = useState<null | "archive" | "delete">(null);
+
+  const runConfirm = () => {
+    if (confirm === "archive") aui.threadListItem.archive();
+    if (confirm === "delete") aui.threadListItem.delete();
+    setConfirm(null);
+  };
 
   useEffect(() => {
     try {
@@ -154,15 +166,35 @@ function ChatLayout() {
             {sidebarOpen ? "Скрыть" : "Истории"}
           </button>
           {conversationId && (
-            <button
-              type="button"
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
-              onClick={() => setShareOpen(true)}
-              aria-label="Поделиться диалогом"
-            >
-              <Link2 className="h-4 w-4" />
-              Поделиться
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setConfirm("archive")}
+                aria-label="Архивировать диалог"
+              >
+                <Archive className="h-4 w-4" />
+                Архив
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setConfirm("delete")}
+                aria-label="Удалить диалог"
+              >
+                <Trash2 className="h-4 w-4" />
+                Удалить
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setShareOpen(true)}
+                aria-label="Поделиться диалогом"
+              >
+                <Link2 className="h-4 w-4" />
+                Поделиться
+              </button>
+            </div>
           )}
         </div>
         <div className="min-h-0 flex-1">
@@ -174,6 +206,21 @@ function ChatLayout() {
         <ShareDialog
           conversationId={conversationId}
           onClose={() => setShareOpen(false)}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          title={confirm === "archive" ? "Архивировать диалог" : "Удалить диалог"}
+          message={
+            confirm === "archive"
+              ? "Диалог уйдёт в архив. Его можно восстановить позже."
+              : "Диалог будет удалён без возможности восстановления."
+          }
+          confirmLabel={confirm === "archive" ? "Архивировать" : "Удалить"}
+          danger={confirm === "delete"}
+          onConfirm={runConfirm}
+          onClose={() => setConfirm(null)}
         />
       )}
     </div>
