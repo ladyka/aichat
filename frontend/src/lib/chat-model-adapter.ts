@@ -1,6 +1,77 @@
 import type { ChatModelAdapter, ThreadMessage } from "@assistant-ui/react";
 import { fetchSettings } from "@/lib/api";
 
+type Location = { lat: number; lon: number };
+
+type OpenAIToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+type OpenAIMessage = {
+  role: string;
+  content?: string | null;
+  tool_calls?: OpenAIToolCall[];
+  tool_call_id?: string;
+};
+
+type LocationRequestEvent = {
+  type: "location_request";
+  assistant_tool_call: OpenAIMessage;
+};
+
+const LOCATION_KEY = "aichat_location_v1";
+const LOCATION_TTL_MS = 2 * 60 * 60 * 1000;
+
+function readLocation(): Location | null {
+  try {
+    const raw = localStorage.getItem(LOCATION_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (
+      v &&
+      typeof v.lat === "number" &&
+      typeof v.lon === "number" &&
+      Date.now() - v.ts < LOCATION_TTL_MS
+    ) {
+      return { lat: v.lat, lon: v.lon };
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveLocation(loc: Location): void {
+  try {
+    localStorage.setItem(LOCATION_KEY, JSON.stringify({ ...loc, ts: Date.now() }));
+  } catch {
+    /* ignore */
+  }
+}
+
+function askGeolocation(): Promise<Location | string> {
+  return new Promise((resolve) => {
+    if (!("geolocation" in navigator)) {
+      resolve("unsupported");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (err) =>
+        resolve(
+          err.code === 1
+            ? "permission_denied"
+            : err.code === 2
+              ? "position_unavailable"
+              : "timeout",
+        ),
+      { timeout: 10000, maximumAge: 60000 },
+    );
+  });
+}
+
 function textFromMessage(message: ThreadMessage): string {
   if (message.role === "system") {
     const part = message.content[0];
@@ -12,13 +83,98 @@ function textFromMessage(message: ThreadMessage): string {
     .join("");
 }
 
-function toOpenAIMessages(messages: readonly ThreadMessage[]) {
+function toOpenAIMessages(messages: readonly ThreadMessage[]): OpenAIMessage[] {
   return messages
     .filter((m) => m.role === "user" || m.role === "assistant" || m.role === "system")
     .map((m) => ({
       role: m.role,
       content: textFromMessage(m),
     }));
+}
+
+type StreamState = { locationRequest: LocationRequestEvent | null };
+
+type PostOptions = {
+  model: string;
+  conversationId: string | null;
+  history: OpenAIMessage[];
+  abortSignal: AbortSignal;
+  state: StreamState;
+  location?: Location | null;
+};
+
+async function* postAndStream(
+  options: PostOptions,
+): AsyncGenerator<{ content: { type: "text"; text: string }[] }> {
+  const { model, conversationId, location, history, abortSignal, state } = options;
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    signal: abortSignal,
+    body: JSON.stringify({
+      model,
+      stream: true,
+      messages: history,
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(location ? { location } : {}),
+    }),
+  });
+
+  if (!res.ok) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const data = await res.json();
+      detail = data.error || data.detail || detail;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail);
+  }
+
+  if (!res.body) {
+    throw new Error("Empty response body");
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      let obj: Record<string, unknown>;
+      try {
+        obj = JSON.parse(data);
+      } catch {
+        /* ignore partial JSON */
+        continue;
+      }
+      if (obj?.type === "location_request") {
+        state.locationRequest = obj as LocationRequestEvent;
+        continue;
+      }
+      const delta =
+        (obj?.choices as { delta?: { content?: unknown } }[] | undefined)?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta) {
+        text += delta;
+        yield { content: [{ type: "text" as const, text }] };
+      }
+    }
+  }
+
+  if (!text && !state.locationRequest) {
+    yield { content: [{ type: "text" as const, text: "" }] };
+  }
 }
 
 let cachedModel: string | null = null;
@@ -49,64 +205,113 @@ export function createChatModelAdapter(
     async *run({ messages, abortSignal }) {
       const model = await preferredModel();
       const conversationId = getConversationId();
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        signal: abortSignal,
-        body: JSON.stringify({
-          model,
-          stream: true,
-          messages: toOpenAIMessages(messages),
-          ...(conversationId ? { conversation_id: conversationId } : {}),
-        }),
-      });
+      const state: StreamState = { locationRequest: null };
 
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const data = await res.json();
-          detail = data.error || data.detail || detail;
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
+      const history = toOpenAIMessages(messages);
+      let yielded = false;
+
+      for await (const value of postAndStream({
+        model,
+        conversationId,
+        history,
+        abortSignal,
+        state,
+      })) {
+        yielded = true;
+        yield value;
       }
 
-      if (!res.body) {
-        throw new Error("Empty response body");
-      }
+      if (!state.locationRequest) return;
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let text = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const data = trimmed.slice(5).trim();
-          if (!data || data === "[DONE]") continue;
-          try {
-            const obj = JSON.parse(data);
-            const delta = obj?.choices?.[0]?.delta?.content;
-            if (typeof delta === "string" && delta) {
-              text += delta;
-              yield { content: [{ type: "text" as const, text }] };
-            }
-          } catch {
-            /* ignore partial JSON */
+      // The model asked for the user's location.
+      // Try to use cached location first, then fall back to browser prompt.
+      let coords = readLocation();
+      if (!coords) {
+        const res = await askGeolocation();
+        if (typeof res === "object") {
+          coords = res;
+          saveLocation(coords);
+        } else {
+          // Use the error reason (e.g. 'permission_denied') as the tool result
+          const toolCallId = state.locationRequest.assistant_tool_call.tool_calls?.[0]?.id;
+          const nextHistory: OpenAIMessage[] = [
+            ...history,
+            state.locationRequest.assistant_tool_call,
+            { role: "tool", tool_call_id: toolCallId, content: JSON.stringify({ error: "location_unavailable", reason: res }) },
+          ];
+          for await (const value of postAndStream({
+            model,
+            conversationId,
+            history: nextHistory,
+            abortSignal,
+            state,
+          })) {
+            yielded = true;
+            yield value;
           }
+          if (!yielded) yield { content: [{ type: "text" as const, text: "" }] };
+          return;
         }
       }
 
-      if (!text) {
+      const assistant = state.locationRequest.assistant_tool_call;
+      const toolCallId = assistant.tool_calls?.[0]?.id;
+      const nextHistory: OpenAIMessage[] = [
+        ...history,
+        assistant,
+        { role: "tool", tool_call_id: toolCallId, content: JSON.stringify(coords) },
+      ];
+
+      for await (const value of postAndStream({
+        model,
+        conversationId,
+        location: coords,
+        history: nextHistory,
+        abortSignal,
+        state,
+      })) {
+        yielded = true;
+        yield value;
+      }
+
+      if (!yielded) {
+        yield { content: [{ type: "text" as const, text: "" }] };
+      }
+    },
+  };
+}
+
+      if (!state.locationRequest) return;
+
+      // The model asked for the user's location: prompt the browser for it.
+      const coords = await askGeolocation();
+      const assistant = state.locationRequest.assistant_tool_call;
+      const toolCallId = assistant.tool_calls?.[0]?.id;
+      const result =
+        typeof coords === "object"
+          ? JSON.stringify({ lat: coords.lat, lon: coords.lon })
+          : JSON.stringify({ error: "location_unavailable", reason: coords });
+
+      const nextHistory: OpenAIMessage[] = [
+        ...history,
+        assistant,
+        { role: "tool", tool_call_id: toolCallId, content: result },
+      ];
+
+      for await (const value of postAndStream({
+        model,
+        conversationId,
+        location: typeof coords === "object" ? coords : location,
+        history: nextHistory,
+        abortSignal,
+        state,
+      })) {
+        yielded = true;
+        yield value;
+      }
+
+      if (typeof coords === "object") saveLocation(coords);
+      if (!yielded) {
         yield { content: [{ type: "text" as const, text: "" }] };
       }
     },
