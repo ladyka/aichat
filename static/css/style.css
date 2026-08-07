@@ -431,9 +431,7 @@ textarea { resize: vertical; min-height: 64px; }
 @keyframes rise {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: none; }
-}
-@keyframes fade {
-  from { opacity: 0; }
+}@keyframes fade {  from { opacity: 0; }
   to { opacity: 1; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -495,4 +493,60 @@ textarea { resize: vertical; min-height: 64px; }
   textarea {
     font-size: 16px;
   }
+}
+
+/* === Share page (/s/<key>) === */
+.share-main {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2rem;
+}
+.share-wrap { display: grid; gap: 1.1rem; }
+.share-head h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.9rem;
+  margin: 0.2rem 0 0.5rem;
+}
+.share-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  margin: 0;
+  width: fit-content;
+}
+.share-date { font-size: 0.85rem; margin: 0.4rem 0 0; }
+.share-log { display: grid; gap: 0.8rem; }
+.share-bubble { max-width: 100%; }
+.share-bubble.bot { animation: none; }
+.share-bubble .md > :first-child { margin-top: 0; }
+.share-bubble .md > :last-child { margin-bottom: 0; }
+.share-bubble .md p { margin: 0.4rem 0; }
+.share-bubble .md pre {
+  overflow-x: auto;
+  background: rgba(0, 0, 0, 0.045);
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+}
+.share-bubble .md code { font-size: 0.9em; }
+.share-bubble .md img { max-width: 100%; }
+.share-name {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+.share-missing {
+  text-align: center;
+  padding: 3rem 1rem;
+  display: grid;
+  gap: 0.8rem;
+  justify-items: center;
+}
+.share-missing h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
 }

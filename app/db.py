@@ -66,6 +66,10 @@ class Conversation(Base):
         cascade="all, delete-orphan",
         order_by="Message.id",
     )
+    shares: Mapped[list["ShareLink"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
 
 
 class Message(Base):
@@ -125,6 +129,40 @@ class ApiTokenUsage(Base):
     count: Mapped[int] = mapped_column(Integer, default=0)
 
     token: Mapped[ApiToken] = relationship(back_populates="usage")
+
+
+class ShareLink(Base):
+    __tablename__ = "share_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    conversation: Mapped[Conversation] = relationship(back_populates="shares")
+    accesses: Mapped[list["ShareAccess"]] = relationship(
+        back_populates="share",
+        cascade="all, delete-orphan",
+        order_by="ShareAccess.accessed_at.desc()",
+    )
+
+
+class ShareAccess(Base):
+    __tablename__ = "share_accesses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    share_id: Mapped[int] = mapped_column(ForeignKey("share_links.id"), index=True)
+    ip: Mapped[str] = mapped_column(String(64))
+    accessed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    share: Mapped[ShareLink] = relationship(back_populates="accesses")
 
 
 class UsageLog(Base):

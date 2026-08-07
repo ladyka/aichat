@@ -5,11 +5,13 @@ import {
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
 import { createChatModelAdapter } from "@/lib/chat-model-adapter";
+import { ConversationIdContext } from "@/lib/conversation-id";
 import { useAichatThreadListAdapter } from "@/lib/thread-list-adapter";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export function RuntimeProvider({ children }: { children: ReactNode }) {
   const conversationIdRef = useRef<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const chatModel = useMemo(
     () =>
       createChatModelAdapter(() => conversationIdRef.current),
@@ -21,6 +23,7 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
     adapter,
     onThreadIdChange: (threadId) => {
       conversationIdRef.current = threadId ?? null;
+      setConversationId(threadId ?? null);
     },
     runtimeHook: function RuntimeHook() {
       return useLocalRuntime(chatModel);
@@ -28,8 +31,10 @@ export function RuntimeProvider({ children }: { children: ReactNode }) {
   });
 
   return (
-    <AssistantRuntimeProvider runtime={runtime}>
-      {children}
-    </AssistantRuntimeProvider>
+    <ConversationIdContext.Provider value={conversationId}>
+      <AssistantRuntimeProvider runtime={runtime}>
+        {children}
+      </AssistantRuntimeProvider>
+    </ConversationIdContext.Provider>
   );
 }

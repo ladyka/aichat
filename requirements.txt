@@ -12,6 +12,7 @@ python-dotenv>=1.0.1
 itsdangerous>=2.2.0
 arize-otel>=0.13.0
 openinference-instrumentation>=0.1.57
+markdown>=3.6
 
 # Tests
 pytest>=8.0.0

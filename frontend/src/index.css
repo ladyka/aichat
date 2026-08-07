@@ -7,6 +7,7 @@
   --chat-accent: #0f7a5f;
   --chat-panel: rgba(255, 255, 255, 0.85);
   --chat-line: rgba(20, 32, 26, 0.12);
+  --chat-danger: #8a1f1f;
   font-family: "DM Sans", system-ui, sans-serif;
   color: var(--chat-ink);
   background: var(--chat-bg);

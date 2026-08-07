@@ -98,3 +98,37 @@ export async function appendMessages(
   });
   if (!res.ok) throw new Error(await parseError(res));
 }
+
+export type ShareInfo = {
+  shared: boolean;
+  key?: string;
+  created_at: string | null;
+  expires_at: string | null;
+};
+
+export async function getShare(id: string): Promise<ShareInfo> {
+  const res = await fetch(`/api/conversations/${id}/share`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function createShare(id: string): Promise<ShareInfo> {
+  const res = await fetch(`/api/conversations/${id}/share`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function revokeShare(id: string): Promise<void> {
+  const res = await fetch(`/api/conversations/${id}/share/revoke`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}

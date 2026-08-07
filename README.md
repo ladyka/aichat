@@ -11,6 +11,7 @@
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
 - `GET /v1/models` — список free-моделей (кеш), публичные id без суффикса `:free`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
+- Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
 
 ## Quick Start
 
@@ -60,6 +61,7 @@ cd frontend && npm run dev   # :5173
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |
 | `API_DAILY_LIMIT` | Дневной лимит `/v1/chat/completions` на один API-токен (по умолчанию `10`) |
 | `MAX_TOKENS_PER_USER` | Максимум активных API-токенов на пользователя (по умолчанию `10`) |
+| `SHARE_TTL_DAYS` | Срок действия ссылки на общий чат `/s/<key>` (по умолчанию `30`) |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
 | `FTP_*` | Деплой через `make update-prod` |
@@ -79,6 +81,9 @@ cd frontend && npm run dev   # :5173
 | `GET` | `/api/models` | cookie-сессия (UI) |
 | `GET/PUT` | `/api/settings` | cookie-сессия |
 | `*` | `/api/conversations…` | cookie-сессия |
+| `GET/POST` | `/api/conversations/{id}/share` | cookie-сессия |
+| `POST` | `/api/conversations/{id}/share/revoke` | cookie-сессия |
+| `GET` | `/s/{key}` | нет (публичная страница чтения) |
 
 Проверка токена против хоста:
 

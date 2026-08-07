@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{% if not_found %}Ссылка недействительна — aichat{% else %}{{ title or 'Поделиться чатом' }} — aichat{% endif %}{% endblock %}
+{% block body_class %}page-share{% endblock %}
+{% block main_class %}share-main{% endblock %}
+{% block content %}
+{% if not_found %}
+  <section class="share-missing">
+    <h1>Ссылка недействительна</h1>
+    <p>Эта ссылка отозвана, истекла или не существует. Запросите новую ссылку у автора.</p>
+    <a class="btn" href="/">На главную</a>
+  </section>
+{% else %}
+  <div class="share-wrap">
+    <div class="share-head">
+      <a class="back-link" href="/">← На главную</a>
+      <h1>{{ title or "Без названия" }}</h1>
+      <p class="share-badge">Просмотр</p>
+      <p class="muted share-date">{% if created_at %}Опубликовано {{ created_at[:10] }}{% endif %}{% if updated_at and updated_at != created_at %} · обновлено {{ updated_at[:10] }}{% endif %}</p>
+    </div>
+    {% if messages %}
+      <div class="share-log">
+        {% for m in messages %}
+          <div class="bubble share-bubble {% if m.role == 'user' %}user{% else %}bot{% endif %}">
+            {% if m.role != 'user' %}
+              <div class="share-name">Чатбот</div>
+            {% endif %}
+            {{ m.html | safe }}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">В этом чате пока нет сообщений.</p>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

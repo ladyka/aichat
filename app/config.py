@@ -36,6 +36,7 @@ class Settings:
         self.models_cache_ttl = int(_env("MODELS_CACHE_TTL", "3600") or "3600")
         self.api_daily_limit = int(_env("API_DAILY_LIMIT", "10") or "10")
         self.max_tokens_per_user = int(_env("MAX_TOKENS_PER_USER", "10") or "10")
+        self.share_ttl_days = int(_env("SHARE_TTL_DAYS", "30") or "30")
 
         # Arize AX / Phoenix OTLP (see app/telemetry.py). Same vars as /tmp/aichat example.
         self.arize_space_id = _env("ARIZE_SPACE_ID", "") or ""
