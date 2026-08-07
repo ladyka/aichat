@@ -1,27 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Чат — aichat{% endblock %}
 {% block body_class %}page-chat{% endblock %}
-{% block main_class %}chat-main{% endblock %}
+{% block main_class %}chat-main chat-spa{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="/chat-ui/assets/index.css">
+{% endblock %}
 {% block content %}
-<section class="chat-shell">
-  <aside class="chat-side">
-    <label class="model-label">Модель
-      <select id="model-select" data-default="{{ default_model }}">
-        <option value="{{ default_model }}" selected>{{ default_model }}</option>
-      </select>
-    </label>
-    <button type="button" class="btn btn-ghost" id="clear-chat">Очистить</button>
-    <a class="side-link" href="/tokens">API-токены →</a>
-  </aside>
-  <div class="chat-panel">
-    <div id="messages" class="messages" aria-live="polite"></div>
-    <form id="chat-form" class="composer">
-      <textarea id="prompt" rows="2" placeholder="Напишите сообщение…" required></textarea>
-      <button class="btn" type="submit" id="send-btn">Отправить</button>
-    </form>
-  </div>
-</section>
+<div id="root" class="chat-root"></div>
 {% endblock %}
 {% block scripts %}
-<script src="/static/js/chat.js"></script>
+<script type="module" src="/chat-ui/assets/chat.js"></script>
 {% endblock %}

@@ -1,4 +1,4 @@
-.PHONY: run update-prod venv docs-serve docs-build
+.PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build
 
 PORT ?= 8080
 INSTANCE_HOST ?= 127.0.0.1
@@ -6,6 +6,7 @@ VENV ?= .venv
 PYTHON := $(VENV)/bin/python
 DOCKER ?= docker
 MKDOCS_IMAGE ?= squidfunk/mkdocs-material
+NPM ?= npm
 
 venv:
 	python3 -m venv $(VENV)
@@ -18,7 +19,13 @@ run: $(VENV)/bin/python
 $(VENV)/bin/python:
 	$(MAKE) venv
 
-update-prod: $(VENV)/bin/python
+frontend-install:
+	cd frontend && $(NPM) install
+
+frontend-build:
+	cd frontend && $(NPM) run build
+
+update-prod: $(VENV)/bin/python frontend-build
 	@echo "Checking production FTP upload access…"
 	$(PYTHON) scripts/deploy_ftp.py
 

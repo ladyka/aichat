@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -20,6 +20,7 @@ from app.auth import (
 )
 from app.config import get_settings
 from app.db import ApiToken, User, get_db, get_user_by_email
+from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(get_settings().root / "templates"))
@@ -156,6 +157,65 @@ def chat_page(
     if not user:
         return RedirectResponse("/login", status_code=303)
     return render(request, "chat.html", user)
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    preferred = (user.preferred_model or "").strip() or settings.default_model or PUBLIC_DEFAULT_ID
+    return render(
+        request,
+        "settings.html",
+        user,
+        preferred_model=preferred,
+        error=None,
+        saved=False,
+    )
+
+
+@router.post("/settings", response_class=HTMLResponse)
+async def settings_submit(
+    request: Request,
+    preferred_model: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+
+    model = (preferred_model or "").strip() or PUBLIC_DEFAULT_ID
+    await get_models_list()
+    try:
+        resolve_upstream_model(model)
+    except HTTPException as exc:
+        preferred = (user.preferred_model or "").strip() or PUBLIC_DEFAULT_ID
+        return render(
+            request,
+            "settings.html",
+            user,
+            status_code=400,
+            preferred_model=preferred,
+            error=str(exc.detail),
+            saved=False,
+        )
+
+    user.preferred_model = model
+    db.commit()
+    return render(
+        request,
+        "settings.html",
+        user,
+        preferred_model=model,
+        error=None,
+        saved=True,
+    )
 
 
 @router.get("/tokens", response_class=HTMLResponse)

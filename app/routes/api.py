@@ -139,6 +139,12 @@ async def api_models(request: Request, db: Session = Depends(get_db)):
 
 
 async def _proxy(user: User, body: dict[str, Any], source: str, db: Session):
+    # Prefer explicit model; UI chat falls back to user preference.
+    if source == "chat" and not (body.get("model") or "").strip():
+        preferred = (getattr(user, "preferred_model", None) or "").strip()
+        if preferred:
+            body = {**body, "model": preferred}
+
     public_model, payload = _payload_from_body(body)
     upstream_model = str(payload.get("model"))
 

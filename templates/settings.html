@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Свойства — aichat{% endblock %}
+{% block content %}
+<section class="auth-card narrow-card">
+  <h1>Свойства</h1>
+  <p class="lede">Модель для чата. На странице чата выбор модели скрыт.</p>
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  {% if saved %}
+  <p class="ok">Сохранено.</p>
+  {% endif %}
+  <form method="post" action="/settings" class="stack">
+    <label>Модель
+      <select name="preferred_model" id="preferred-model" required>
+        <option value="{{ preferred_model }}" selected>{{ preferred_model }}</option>
+      </select>
+    </label>
+    <button class="btn" type="submit">Сохранить</button>
+  </form>
+  <p class="muted"><a href="/chat">← К чату</a></p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const select = document.getElementById("preferred-model");
+  const current = {{ preferred_model|tojson }};
+  fetch("/api/models", { credentials: "include" })
+    .then((r) => r.ok ? r.json() : null)
+    .then((data) => {
+      if (!data || !Array.isArray(data.data)) return;
+      select.innerHTML = "";
+      for (const item of data.data) {
+        const id = item.id;
+        if (!id) continue;
+        const opt = document.createElement("option");
+        opt.value = id;
+        opt.textContent = id;
+        if (id === current) opt.selected = true;
+        select.appendChild(opt);
+      }
+      if (![...select.options].some((o) => o.selected) && select.options.length) {
+        const preferred = [...select.options].find((o) => o.value === current)
+          || [...select.options].find((o) => o.value === "default")
+          || select.options[0];
+        preferred.selected = true;
+      }
+    })
+    .catch(() => {});
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  --chat-bg: #f3f6f4;
+  --chat-ink: #14201a;
+  --chat-muted: #5b6b62;
+  --chat-accent: #0f7a5f;
+  --chat-panel: rgba(255, 255, 255, 0.85);
+  --chat-line: rgba(20, 32, 26, 0.12);
+  font-family: "DM Sans", system-ui, sans-serif;
+  color: var(--chat-ink);
+  background: var(--chat-bg);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.aui-root {
+  height: 100%;
+}
+
+.aui-thread-viewport {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.aui-composer-input {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--chat-line);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  font: inherit;
+  background: #fff;
+}
+
+.aui-composer-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--chat-accent) 35%, transparent);
+  border-color: var(--chat-accent);
+}
+
+.msg-bubble {
+  max-width: min(720px, 92%);
+  padding: 0.85rem 1.05rem;
+  border-radius: 16px;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.msg-bubble.user {
+  margin-left: auto;
+  background: var(--chat-accent);
+  color: #f7fffb;
+}
+
+.msg-bubble.assistant {
+  margin-right: auto;
+  background: var(--chat-panel);
+  border: 1px solid var(--chat-line);
+}

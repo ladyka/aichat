@@ -33,12 +33,52 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    preferred_model: Mapped[str] = mapped_column(String(120), default="default")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
     api_tokens: Mapped[list["ApiToken"]] = relationship(back_populates="user")
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="Новый чат")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User] = relationship(back_populates="conversations")
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="Message.id",
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    role: Mapped[str] = mapped_column(String(32))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
 
 
 class UserSession(Base):
@@ -92,8 +132,25 @@ engine = create_engine(_settings.database_url, pool_pre_ping=True, connect_args=
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
+def _ensure_user_preferred_model_column() -> None:
+    """Add preferred_model to existing DBs (create_all does not alter columns)."""
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "users" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "preferred_model" in cols:
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text("ALTER TABLE users ADD COLUMN preferred_model VARCHAR(120) DEFAULT 'default'")
+        )
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _ensure_user_preferred_model_column()
 
 
 def get_db() -> Session:

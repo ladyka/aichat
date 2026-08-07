@@ -28,6 +28,14 @@ def create_app() -> FastAPI:
     static_dir = settings.root / "static"
     static_dir.mkdir(exist_ok=True)
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    chat_ui_dir = settings.root / "frontend" / "dist"
+    if chat_ui_dir.is_dir():
+        app.mount(
+            "/chat-ui",
+            StaticFiles(directory=str(chat_ui_dir)),
+            name="chat-ui",
+        )
     return app
 
 

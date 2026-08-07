@@ -40,3 +40,16 @@ AGENTS.md
 README.md
 .cursor/
 
+# Frontend source/tooling; upload built assets only
+frontend/node_modules/
+frontend/src/
+frontend/*.json
+frontend/*.html
+frontend/*.ts
+frontend/*.md
+frontend/.oxlintrc.json
+frontend/.gitignore
+frontend/public/
+!frontend/dist/
+!frontend/dist/**
+

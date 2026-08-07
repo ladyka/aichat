@@ -7,3 +7,5 @@ aichat.db
 *.db
 .idea/
 site/
+frontend/node_modules/
+frontend/dist/
