@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
+from contextlib import nullcontext
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
@@ -20,9 +21,18 @@ from app.models_catalog import (
     to_public_id,
 )
 from app.openrouter import chat_completions, stream_chat_completions
+from app import telemetry as telemetry_mod
 
 router = APIRouter()
 logger = logging.getLogger("aichat.completions")
+
+
+def _trace_user(user: User):
+    if telemetry_mod.tracer is None:
+        return nullcontext()
+    from openinference.instrumentation import using_attributes
+
+    return using_attributes(user_id=str(user.id))
 
 
 def _normalize_public_model(model: str | None) -> str:
@@ -139,6 +149,11 @@ async def api_models(request: Request, db: Session = Depends(get_db)):
 
 
 async def _proxy(user: User, body: dict[str, Any], source: str, db: Session):
+    with _trace_user(user):
+        return await _proxy_inner(user, body, source, db)
+
+
+async def _proxy_inner(user: User, body: dict[str, Any], source: str, db: Session):
     # Prefer explicit model; UI chat falls back to user preference.
     if source == "chat" and not (body.get("model") or "").strip():
         preferred = (getattr(user, "preferred_model", None) or "").strip()

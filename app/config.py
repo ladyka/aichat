@@ -35,6 +35,18 @@ class Settings:
         self.default_model = _env("DEFAULT_MODEL", "default")
         self.models_cache_ttl = int(_env("MODELS_CACHE_TTL", "3600") or "3600")
 
+        # Arize AX / Phoenix OTLP (see app/telemetry.py). Same vars as /tmp/aichat example.
+        self.arize_space_id = _env("ARIZE_SPACE_ID", "") or ""
+        self.arize_api_key = _env("ARIZE_API_KEY", "") or ""
+        self.arize_project_name = _env("ARIZE_PROJECT_NAME", "aichat") or "aichat"
+        # Example uses ARIZE_OTLP_ENDPOINT; arize-otel also reads ARIZE_COLLECTOR_ENDPOINT.
+        self.arize_otlp_endpoint = (
+            _env("ARIZE_OTLP_ENDPOINT")
+            or _env("ARIZE_COLLECTOR_ENDPOINT")
+            or ""
+        )
+        self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
+
     def _database_url(self) -> str:
         explicit = _env("DATABASE_URL")
         if explicit:

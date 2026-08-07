@@ -9,12 +9,17 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.db import init_db
 from app.routes import api_router
+from app.telemetry import setup_telemetry, shutdown_telemetry
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    setup_telemetry()
     init_db()
-    yield
+    try:
+        yield
+    finally:
+        shutdown_telemetry()
 
 
 def create_app() -> FastAPI:

@@ -55,6 +55,9 @@ cd frontend && npm run dev   # :5173
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
 | `FTP_*` | Деплой через `make update-prod` |
+| `ARIZE_SPACE_ID` / `ARIZE_API_KEY` | Включить OTLP-трейсы (Arize / Phoenix) |
+| `ARIZE_PROJECT_NAME` | Имя проекта в коллекторе (по умолчанию `aichat`) |
+| `ARIZE_OTLP_ENDPOINT` | OTLP endpoint, напр. `http://127.0.0.1:6006/v1/traces` для Phoenix |
 
 ## API (кратко)
 

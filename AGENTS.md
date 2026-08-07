@@ -30,6 +30,7 @@
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream |
 | `app/openrouter.py` | HTTP-прокси к OpenRouter |
+| `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |

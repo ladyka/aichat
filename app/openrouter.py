@@ -8,6 +8,7 @@ import httpx
 from fastapi import HTTPException
 
 from app.config import get_settings
+from app.telemetry import llm_instrument
 
 
 def _headers() -> dict[str, str]:
@@ -23,6 +24,7 @@ def _headers() -> dict[str, str]:
     }
 
 
+@llm_instrument("openrouter.chat.completions")
 async def chat_completions(payload: dict[str, Any]) -> httpx.Response:
     settings = get_settings()
     url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
@@ -31,6 +33,7 @@ async def chat_completions(payload: dict[str, Any]) -> httpx.Response:
     return response
 
 
+@llm_instrument("openrouter.chat.completions.stream")
 async def stream_chat_completions(payload: dict[str, Any]) -> AsyncIterator[bytes]:
     settings = get_settings()
     url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
