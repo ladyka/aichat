@@ -80,7 +80,7 @@ def get_current_user_optional(
     return get_user_from_session(db, raw)
 
 
-def get_user_from_api_token(db: Session, authorization: str | None) -> User:
+def get_user_from_api_token(db: Session, authorization: str | None) -> tuple[User, ApiToken]:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing Bearer token")
     raw = authorization.split(" ", 1)[1].strip()
@@ -97,4 +97,4 @@ def get_user_from_api_token(db: Session, authorization: str | None) -> User:
     user = db.get(User, token.user_id)
     if not user:
         raise HTTPException(status_code=401, detail="Invalid token")
-    return user
+    return user, token

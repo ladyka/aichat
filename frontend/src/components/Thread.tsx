@@ -3,7 +3,10 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAuiState,
+  type TextMessagePartProps,
 } from "@assistant-ui/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 function UserMessage() {
   return (
@@ -15,11 +18,19 @@ function UserMessage() {
   );
 }
 
+function MarkdownText({ text }: TextMessagePartProps) {
+  return (
+    <div className="md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+    </div>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="flex w-full justify-start">
       <div className="msg-bubble assistant">
-        <MessagePrimitive.Content />
+        <MessagePrimitive.Content components={{ Text: MarkdownText }} />
       </div>
     </MessagePrimitive.Root>
   );

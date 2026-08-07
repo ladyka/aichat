@@ -6,6 +6,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 from app.config import get_settings
 from app.db import init_db
 from app.routes import api_router
@@ -23,10 +28,6 @@ async def lifespan(_app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
     settings = get_settings()
     app = FastAPI(title="aichat", lifespan=lifespan)
     app.include_router(api_router)

@@ -16,6 +16,8 @@
 Makefile
 HANDOFF.md
 scripts/
+tests/
+pytest.ini
 __pycache__/
 *.pyc
 aichat.db

@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Any
 
-import httpx
+import httpx2 as httpx
 from fastapi import HTTPException
 
 from app.config import get_settings

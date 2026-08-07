@@ -51,7 +51,6 @@ body,
   max-width: min(720px, 92%);
   padding: 0.85rem 1.05rem;
   border-radius: 16px;
-  white-space: pre-wrap;
   line-height: 1.5;
   word-break: break-word;
 }
@@ -60,12 +59,117 @@ body,
   margin-left: auto;
   background: var(--chat-accent);
   color: #f7fffb;
+  white-space: pre-wrap;
 }
 
 .msg-bubble.assistant {
   margin-right: auto;
   background: var(--chat-panel);
   border: 1px solid var(--chat-line);
+}
+
+.msg-bubble.assistant .md > :first-child {
+  margin-top: 0;
+}
+
+.msg-bubble.assistant .md > :last-child {
+  margin-bottom: 0;
+}
+
+.msg-bubble.assistant .md p {
+  margin: 0.5em 0;
+  white-space: pre-wrap;
+}
+
+.msg-bubble.assistant .md h1,
+.msg-bubble.assistant .md h2,
+.msg-bubble.assistant .md h3,
+.msg-bubble.assistant .md h4,
+.msg-bubble.assistant .md h5,
+.msg-bubble.assistant .md h6 {
+  margin: 0.9em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.msg-bubble.assistant .md h1 { font-size: 1.35em; }
+.msg-bubble.assistant .md h2 { font-size: 1.2em; }
+.msg-bubble.assistant .md h3 { font-size: 1.1em; }
+
+.msg-bubble.assistant .md ul,
+.msg-bubble.assistant .md ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.msg-bubble.assistant .md li {
+  margin: 0.2em 0;
+}
+
+.msg-bubble.assistant .md a {
+  color: var(--chat-accent);
+  text-decoration: underline;
+}
+
+.msg-bubble.assistant .md blockquote {
+  margin: 0.6em 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--chat-line);
+  color: var(--chat-muted);
+}
+
+.msg-bubble.assistant .md code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: rgba(20, 32, 26, 0.07);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+
+.msg-bubble.assistant .md pre {
+  margin: 0.7em 0;
+  padding: 0.85rem 1rem;
+  background: #132019;
+  color: #e8f2ec;
+  border-radius: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.msg-bubble.assistant .md pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.msg-bubble.assistant .md table {
+  margin: 0.7em 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  display: block;
+  overflow-x: auto;
+}
+
+.msg-bubble.assistant .md th,
+.msg-bubble.assistant .md td {
+  border: 1px solid var(--chat-line);
+  padding: 0.4em 0.7em;
+}
+
+.msg-bubble.assistant .md th {
+  background: rgba(20, 32, 26, 0.05);
+  font-weight: 600;
+}
+
+.msg-bubble.assistant .md hr {
+  margin: 0.9em 0;
+  border: none;
+  border-top: 1px solid var(--chat-line);
+}
+
+.msg-bubble.assistant .md img {
+  max-width: 100%;
+  border-radius: 10px;
 }
 
 @media (max-width: 768px) {

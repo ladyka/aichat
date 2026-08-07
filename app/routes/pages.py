@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -19,7 +19,7 @@ from app.auth import (
     verify_password,
 )
 from app.config import get_settings
-from app.db import ApiToken, User, get_db, get_user_by_email
+from app.db import ApiToken, ApiTokenUsage, User, get_db, get_user_by_email
 from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
 
 router = APIRouter()
@@ -227,12 +227,52 @@ def tokens_page(
     user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
     if not user:
         return RedirectResponse("/login", status_code=303)
+    tokens, usage = _tokens_view_data(db, user)
+    return _tokens_render(request, user, tokens, usage, new_token=None, error=None)
+
+
+def _tokens_view_data(
+    db: Session, user: User
+) -> tuple[list[ApiToken], dict[int, int]]:
     tokens = db.scalars(
         select(ApiToken)
         .where(ApiToken.user_id == user.id, ApiToken.revoked_at.is_(None))
         .order_by(ApiToken.created_at.desc())
     ).all()
-    return render(request, "tokens.html", user, tokens=tokens, new_token=None)
+    usage: dict[int, int] = {}
+    if tokens:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        rows = db.execute(
+            select(ApiTokenUsage).where(
+                ApiTokenUsage.token_id.in_([t.id for t in tokens]),
+                ApiTokenUsage.day == today,
+            )
+        ).scalars().all()
+        usage = {r.token_id: r.count for r in rows}
+    return tokens, usage
+
+
+def _tokens_render(
+    request: Request,
+    user: User,
+    tokens: list[ApiToken],
+    usage: dict[int, int],
+    new_token: str | None,
+    error: str | None,
+):
+    settings = get_settings()
+    return render(
+        request,
+        "tokens.html",
+        user,
+        tokens=tokens,
+        token_usage=usage,
+        api_daily_limit=settings.api_daily_limit,
+        max_tokens_per_user=settings.max_tokens_per_user,
+        active_tokens=len(tokens),
+        new_token=new_token,
+        error=error,
+    )
 
 
 @router.post("/tokens")
@@ -246,6 +286,26 @@ def create_token(
     if not user:
         return RedirectResponse("/login", status_code=303)
 
+    active_count = db.scalar(
+        select(func.count(ApiToken.id)).where(
+            ApiToken.user_id == user.id,
+            ApiToken.revoked_at.is_(None),
+        )
+    )
+    if active_count >= settings.max_tokens_per_user:
+        tokens, usage = _tokens_view_data(db, user)
+        return _tokens_render(
+            request,
+            user,
+            tokens,
+            usage,
+            new_token=None,
+            error=(
+                f"Достигнут лимит: не более {settings.max_tokens_per_user} "
+                "токенов на пользователя. Отзовите один из активных токенов."
+            ),
+        )
+
     raw, prefix = create_api_token_raw()
     token = ApiToken(
         user_id=user.id,
@@ -256,12 +316,8 @@ def create_token(
     db.add(token)
     db.commit()
 
-    tokens = db.scalars(
-        select(ApiToken)
-        .where(ApiToken.user_id == user.id, ApiToken.revoked_at.is_(None))
-        .order_by(ApiToken.created_at.desc())
-    ).all()
-    return render(request, "tokens.html", user, tokens=tokens, new_token=raw)
+    tokens, usage = _tokens_view_data(db, user)
+    return _tokens_render(request, user, tokens, usage, new_token=raw, error=None)
 
 
 @router.post("/tokens/{token_id}/revoke")

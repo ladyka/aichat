@@ -8,6 +8,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     create_engine,
     select,
 )
@@ -109,6 +110,21 @@ class ApiToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="api_tokens")
+    usage: Mapped[list["ApiTokenUsage"]] = relationship(back_populates="token")
+
+
+class ApiTokenUsage(Base):
+    __tablename__ = "api_token_usage"
+    __table_args__ = (
+        UniqueConstraint("token_id", "day", name="uq_api_token_usage_day"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token_id: Mapped[int] = mapped_column(ForeignKey("api_tokens.id"), index=True)
+    day: Mapped[str] = mapped_column(String(10))
+    count: Mapped[int] = mapped_column(Integer, default=0)
+
+    token: Mapped[ApiToken] = relationship(back_populates="usage")
 
 
 class UsageLog(Base):

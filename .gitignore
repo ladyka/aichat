@@ -9,3 +9,5 @@ aichat.db
 site/
 frontend/node_modules/
 frontend/dist/
+.coverage
+.pytest_cache/

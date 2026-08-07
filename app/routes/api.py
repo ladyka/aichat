@@ -4,15 +4,18 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import nullcontext
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.auth import get_user_from_api_token, get_user_from_session
 from app.config import get_settings
-from app.db import UsageLog, User, get_db
+from app.db import ApiToken, ApiTokenUsage, UsageLog, User, get_db
 from app.models_catalog import (
     PUBLIC_DEFAULT_ID,
     UPSTREAM_DEFAULT_ID,
@@ -85,6 +88,46 @@ def _log_usage(db: Session, user: User, model: str, source: str, usage: dict | N
         )
     )
     db.commit()
+
+
+def _api_usage_exceeded(db: Session, token: ApiToken) -> JSONResponse | None:
+    """Enforce the per-token daily API limit; increment the counter if allowed."""
+    settings = get_settings()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    usage = db.scalar(
+        select(ApiTokenUsage).where(
+            ApiTokenUsage.token_id == token.id,
+            ApiTokenUsage.day == today,
+        )
+    )
+    if usage is None:
+        usage = ApiTokenUsage(token_id=token.id, day=today, count=0)
+        db.add(usage)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            usage = db.scalar(
+                select(ApiTokenUsage).where(
+                    ApiTokenUsage.token_id == token.id,
+                    ApiTokenUsage.day == today,
+                )
+            )
+    if usage is None or usage.count >= settings.api_daily_limit:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": (
+                    f"Дневной лимит API исчерпан: не более "
+                    f"{settings.api_daily_limit} запросов в сутки на токен. "
+                    "Лимит обновится завтра."
+                )
+            },
+            headers={"Retry-After": "86400"},
+        )
+    usage.count += 1
+    db.commit()
+    return None
 
 
 def _models_response(payload: dict[str, Any]) -> Response:
@@ -214,6 +257,9 @@ async def v1_chat_completions(
     db: Session = Depends(get_db),
     authorization: str | None = Header(default=None),
 ):
-    user = get_user_from_api_token(db, authorization)
+    user, token = get_user_from_api_token(db, authorization)
+    usage_error = _api_usage_exceeded(db, token)
+    if usage_error:
+        return usage_error
     body = await request.json()
     return await _proxy(user, body, "api", db)

@@ -4,7 +4,11 @@
 {% block content %}
 <section class="tokens-panel">
   <h1>API-токены</h1>
-  <p class="muted">Используйте токен как Bearer для <code>POST /v1/chat/completions</code> (OpenAI-совместимый формат).</p>
+  <p class="muted">Используйте токен как Bearer для <code>POST /v1/chat/completions</code> (OpenAI-совместимый формат). Каждый токен — до <strong>{{ api_daily_limit }}</strong> запросов в сутки; чат в браузере не учитывается. Активных токенов: <strong>{{ active_tokens }}/{{ max_tokens_per_user }}</strong>.</p>
+
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
 
   {% if new_token %}
   <div class="token-reveal">
@@ -35,6 +39,7 @@
         <strong>{{ t.name }}</strong>
         <span class="muted">{{ t.prefix }}…</span>
         <span class="muted">{{ t.created_at }}</span>
+        <span class="muted">сегодня: {{ token_usage.get(t.id, 0) }}/{{ api_daily_limit }}</span>
       </div>
       <form method="post" action="/tokens/{{ t.id }}/revoke">
         <button type="submit" class="btn btn-ghost btn-small">Отозвать</button>

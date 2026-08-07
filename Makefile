@@ -1,4 +1,4 @@
-.PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build
+.PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build test-coverage
 
 PORT ?= 8080
 INSTANCE_HOST ?= 127.0.0.1
@@ -28,6 +28,9 @@ frontend-build:
 update-prod: $(VENV)/bin/python frontend-build
 	@echo "Checking production FTP upload access…"
 	$(PYTHON) scripts/deploy_ftp.py
+
+test-coverage: $(VENV)/bin/python
+	$(PYTHON) -m pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=80
 
 docs-serve:
 	$(DOCKER) run --rm -it -p 8000:8000 -v "$(CURDIR):/docs" -w /docs $(MKDOCS_IMAGE)
