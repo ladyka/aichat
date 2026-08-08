@@ -13,7 +13,9 @@ itsdangerous>=2.2.0
 PyJWT[crypto]>=2.8.0
 arize-otel>=0.13.0
 openinference-instrumentation>=0.1.57
+newrelic>=13.0.0
 markdown>=3.6
+newrelic>=13.4.0
 
 # Tests
 pytest>=8.0.0

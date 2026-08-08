@@ -94,6 +94,9 @@ cd frontend && npm run dev   # :5173
 | `ARIZE_SPACE_ID` / `ARIZE_API_KEY` | Включить OTLP-трейсы (Arize / Phoenix) |
 | `ARIZE_PROJECT_NAME` | Имя проекта в коллекторе (по умолчанию `aichat`) |
 | `ARIZE_OTLP_ENDPOINT` | OTLP endpoint. Arize cloud gRPC: `https://otlp.<region>.arize.com/v1`; HTTPS: `https://otlp.<region>.arize.com/v1/traces`; локальный Phoenix: `http://127.0.0.1:6006/v1/traces`. Транспорт (gRPC/HTTP) выбирается автоматически: HTTP — для `http://` и путей `/v1/traces`, иначе gRPC (как в `example/aichat`) |
+| `NEW_RELIC_LICENSE_KEY` | Включить New Relic: APM-метрики + автоматический форвардинг логов (`logging`) |
+| `NEW_RELIC_USER_KEY` | Ключ пользователя New Relic для запросов к API (GraphQL); самому агенту не нужен |
+| `NEW_RELIC_APP_NAME` | Имя приложения в New Relic (по умолчанию `aichat`) |
 
 ### OAuth-вход (Google / Apple)
 

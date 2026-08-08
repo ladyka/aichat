@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.db import init_db
+from app.newrelic_telemetry import shutdown_newrelic, wrap_asgi
 from app.routes import api_router
 from app.telemetry import setup_telemetry, shutdown_telemetry
 
@@ -25,6 +26,7 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         shutdown_telemetry()
+        shutdown_newrelic()
 
 
 def create_app() -> FastAPI:
@@ -45,4 +47,4 @@ def create_app() -> FastAPI:
     return app
 
 
-app = create_app()
+app = wrap_asgi(create_app())

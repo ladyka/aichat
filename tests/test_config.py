@@ -9,6 +9,8 @@ def test_settings_defaults(monkeypatch):
         "OPENROUTER_API_KEY",
         "ARIZE_SPACE_ID",
         "ARIZE_API_KEY",
+        "NEW_RELIC_LICENSE_KEY",
+        "NEW_RELIC_USER_KEY",
     ):
         monkeypatch.delenv(key, raising=False)
     settings = Settings()
@@ -20,6 +22,7 @@ def test_settings_defaults(monkeypatch):
     assert settings.api_daily_limit == 10
     assert settings.max_tokens_per_user == 10
     assert not settings.arize_enabled
+    assert not settings.new_relic_enabled
 
 
 def test_settings_database_url_explicit(monkeypatch):
@@ -52,6 +55,26 @@ def test_settings_arize_enabled(monkeypatch):
     assert settings.arize_enabled
     assert settings.arize_project_name == "aichat"
     assert settings.arize_otlp_endpoint == ""
+
+
+def test_settings_newrelic_defaults(monkeypatch):
+    monkeypatch.delenv("NEW_RELIC_LICENSE_KEY", raising=False)
+    monkeypatch.delenv("NEW_RELIC_USER_KEY", raising=False)
+    settings = Settings()
+    assert not settings.new_relic_enabled
+    assert settings.new_relic_app_name == "aichat"
+    assert settings.new_relic_user_key == ""
+
+
+def test_settings_newrelic_enabled(monkeypatch):
+    monkeypatch.setenv("NEW_RELIC_LICENSE_KEY", "secret")
+    monkeypatch.setenv("NEW_RELIC_USER_KEY", "user-key")
+    monkeypatch.setenv("NEW_RELIC_APP_NAME", "my-app")
+    settings = Settings()
+    assert settings.new_relic_enabled
+    assert settings.new_relic_license_key == "secret"
+    assert settings.new_relic_user_key == "user-key"
+    assert settings.new_relic_app_name == "my-app"
 
 
 def test_settings_custom_values(monkeypatch):

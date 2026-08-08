@@ -58,6 +58,13 @@ class Settings:
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
 
+        # New Relic (see app/newrelic_telemetry.py). Enable by setting NEW_RELIC_LICENSE_KEY.
+        # The agent reads NEW_RELIC_* env vars itself; these are used for gating and the app name.
+        self.new_relic_license_key = _env("NEW_RELIC_LICENSE_KEY", "") or ""
+        self.new_relic_user_key = _env("NEW_RELIC_USER_KEY", "") or ""
+        self.new_relic_app_name = _env("NEW_RELIC_APP_NAME", "aichat") or "aichat"
+        self.new_relic_enabled = bool(self.new_relic_license_key)
+
     def _database_url(self) -> str:
         explicit = _env("DATABASE_URL")
         if explicit:
