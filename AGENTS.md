@@ -30,6 +30,7 @@
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream |
 | `app/openrouter.py` | HTTP-прокси к OpenRouter |
+| `app/tools.py` | инструменты чата: `get_weather` / `get_user_location` (OpenWeatherMap) |
 | `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
@@ -37,10 +38,12 @@
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |
 | `frontend/` | React + assistant-ui (чат) |
+| `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация) |
 | `templates/`, `static/` | Jinja лендинг/auth/tokens/settings |
 | `server.py` | entrypoint (uvicorn; `PORT` или `SOCKET`) |
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
+| `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды) |
 | `docs/`, `mkdocs.yml` | продуктовая документация (MkDocs Material) |
 
 ### Stack
@@ -84,4 +87,4 @@ python3 api_check.py --host http://127.0.0.1:8080 --token aichat_…
 4. Если трогали API — `api_check.py` или curl на `/v1/models` и completions.
 5. В ответе пользователю кратко укажи, что проверено.
 
-Автотестов в репозитории пока нет; не раздувай инфраструктуру тестов без запроса.
+Автотесты: pytest (`make test-coverage`), Vitest во `frontend/src/tests/` (`cd frontend && npm run test`), интеграционный тест погоды (`tests/integration_weather.py`).

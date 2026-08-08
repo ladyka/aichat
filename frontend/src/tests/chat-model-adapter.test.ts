@@ -1,134 +1,148 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createChatModelAdapter } from "@/lib/chat-model-adapter";
+import { createChatModelAdapter, invalidateModelCache } from "@/lib/chat-model-adapter";
+
+function sseResponse(...events: string[]): Response {
+  return new Response(events.join("\n\n") + "\n\ndata: [DONE]\n\n", {
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
+function locationRequestSse(): Response {
+  return sseResponse(
+    `data: ${JSON.stringify({
+      type: "location_request",
+      assistant_tool_call: {
+        role: "assistant",
+        content: "",
+        tool_calls: [
+          {
+            id: "call_loc",
+            type: "function",
+            function: { name: "get_user_location", arguments: "{}" },
+          },
+        ],
+      },
+    })}`,
+  );
+}
+
+function textSse(text: string): Response {
+  return sseResponse(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}`);
+}
+
+function settingsResponse(): Response {
+  return new Response(JSON.stringify({ preferred_model: "default" }), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+const runOptions = (messages: unknown[]) => ({
+  messages,
+  abortSignal: new AbortController().signal,
+} as never);
+
+function userMessage(text: string): unknown {
+  return {
+    id: "msg_" + Math.random(),
+    createdAt: new Date(),
+    role: "user",
+    content: [{ type: "text", text }],
+    attachments: [],
+    metadata: { custom: {} },
+  };
+}
+
+async function collect(
+  adapter: ReturnType<typeof createChatModelAdapter>,
+  messages: unknown[],
+): Promise<string[]> {
+  const texts: string[] = [];
+  for await (const res of adapter.run(runOptions(messages))) {
+    texts.push(res.content[0].text);
+  }
+  return texts;
+}
 
 describe("ChatModelAdapter Geolocation Flow", () => {
-  const mockGetConversationId = () => "conv_123";
+  let fetchMock: ReturnType<typeof vi.fn>;
+  let geoMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    invalidateModelCache();
     localStorage.clear();
-    // Mock fetch
-    global.fetch = vi.fn();
-    // Mock navigator.geolocation
-    global.navigator.geolocation = {
-      getCurrentPosition: vi.fn(),
-    };
+
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as never;
+
+    geoMock = vi.fn();
+    Object.defineProperty(navigator, "geolocation", {
+      value: { getCurrentPosition: geoMock },
+      configurable: true,
+    });
   });
 
   it("should lazy-request location when server returns location_request", async () => {
-    const adapter = createChatModelAdapter(mockGetConversationId);
+    const adapter = createChatModelAdapter(() => "conv_123");
 
-    // Mock 1st response: location_request
-    const response1 = new Response(
-      JSON.stringify({
-        type: "location_request",
-        assistant_tool_call: {
-          role: "assistant",
-          content: "",
-          tool_calls: [{ id: "call_loc", type: "function", function: { name: "get_user_location", arguments: "{}" } }],
-        },
-      })
-      .split("").map(c => `data: ${JSON.stringify({choices:[{delta:{content:''}}]})}\n\n`).join("") // Not exactly right but we mock the SSE
-    );
-    
-    // Actually, simpler to mock the exact SSE stream the adapter expects
-    const sse1 = new Response(
-      `data: {"type": "location_request", "assistant_tool_call": {"role": "assistant", "content": "", "tool_calls": [{"id": "call_loc", "type": "function", "function": {"name": "get_user_location", "arguments": "{}"}}]}}\n\ndata: [DONE]\n\n`,
-      { headers: { "Content-Type": "text/event-stream" } }
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(locationRequestSse())
+      .mockResolvedValueOnce(textSse("В Минске +15"));
+
+    geoMock.mockImplementationOnce((success: (pos: { coords: { latitude: number; longitude: number } }) => void) =>
+      success({ coords: { latitude: 53.9, longitude: 27.5 } }),
     );
 
-    // Mock 2nd response: final weather answer
-    const sse2 = new Response(
-      `data: {"choices": [{"delta": {"content": "В Минске +15"}}]}\n\ndata: [DONE]\n\n`,
-      { headers: { "Content-Type": "text/event-stream" } }
-    );
+    const texts = await collect(adapter, [userMessage("Какая погода?")]);
 
-    fetch
-      .mockResolvedValueOnce(sse1)
-      .mockResolvedValueOnce(sse2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(geoMock).toHaveBeenCalledTimes(1);
+    expect(texts[texts.length - 1]).toContain("В Минске +15");
 
-    // Mock geolocation success
-    navigator.geolocation.getCurrentPosition.mockImplementationOnce((success) => 
-      success({ coords: { latitude: 53.9, longitude: 27.5 } })
-    );
-
-    const messages = [{ role: "user", content: "Какая погода?" }] as any;
-    const results = [];
-    for await (const res of adapter.run({ messages, abortSignal: new AbortController().signal })) {
-      results.push(res);
-    }
-
-    // Verify:
-    // 1. Two fetches were made
-    expect(fetch).toHaveBeenCalledTimes(2);
-    // 2. Geolocation was requested
-    expect(navigator.geolocation.getCurrentPosition).toHaveBeenCalled();
-    // 3. Final answer is correct
-    expect(results[results.length - 1].content[0].text).toContain("В Минске +15");
-    // 4. Second fetch included the location in body
-    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    const secondBody = JSON.parse(fetchMock.mock.calls[2][1].body);
     expect(secondBody.location).toEqual({ lat: 53.9, lon: 27.5 });
   });
 
   it("should handle geolocation permission denied", async () => {
-    const adapter = createChatModelAdapter(mockGetConversationId);
+    const adapter = createChatModelAdapter(() => "conv_123");
 
-    const sse1 = new Response(
-      `data: {"type": "location_request", "assistant_tool_call": {"role": "assistant", "content": "", "tool_calls": [{"id": "call_loc", "type": "function", "function": {"name": "get_user_location", "arguments": "{}"}}]}}\n\ndata: [DONE]\n\n`,
-      { headers: { "Content-Type": "text/event-stream" } }
-    );
-    const sse2 = new Response(
-      `data: {"choices": [{"delta": {"content": "Пожалуйста, укажите город вручную"}}]}\n\ndata: [DONE]\n\n`,
-      { headers: { "Content-Type": "text/event-stream" } }
-    );
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(locationRequestSse())
+      .mockResolvedValueOnce(textSse("Пожалуйста, укажите город вручную"));
 
-    fetch.mockResolvedValueOnce(sse1).mockResolvedValueOnce(sse2);
-
-    // Mock geolocation denial
-    navigator.geolocation.getCurrentPosition.mockImplementationOnce((success, error) => 
-      error({ code: 1 }) // PERMISSION_DENIED
+    geoMock.mockImplementationOnce(
+      (_success: unknown, error: (err: { code: number }) => void) => error({ code: 1 }),
     );
 
-    const messages = [{ role: "user", content: "Какая погода?" }] as any;
-    const results = [];
-    for await (const res of adapter.run({ messages, abortSignal: new AbortController().signal })) {
-      results.push(res);
-    }
+    const texts = await collect(adapter, [userMessage("Какая погода?")]);
 
-    expect(results[results.length - 1].content[0].text).toContain("Укажите город");
-    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
-    // Should not include location coords
+    expect(texts[texts.length - 1]).toContain("укажите город");
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[2][1].body);
     expect(secondBody.location).toBeUndefined();
   });
 
   it("should use cached location without prompting browser", async () => {
-    const adapter = createChatModelAdapter(mockGetConversationId);
+    const adapter = createChatModelAdapter(() => "conv_123");
 
-    // Cache location manually
-    localStorage.setItem("aichat_location_v1", JSON.stringify({ lat: 40.7, lon: -74.0, ts: Date.now() }));
-
-    const sse1 = new Response(
-      `data: {"type": "location_request", "assistant_tool_call": {"role": "assistant", "content": "", "tool_calls": [{"id": "call_loc", "type": "function", "function": {"name": "get_user_location", "arguments": "{}"}}]}}\n\ndata: [DONE]\n\n`,
-      { headers: { "Content-Type": "text/event-stream" } }
-    );
-    const sse2 = new Response(
-      `data: {"choices": [{"delta": {"content": "В Нью-Йорке +10"}}]}\n\ndata: [DONE]\n\n`,
-      { headers: { "Content-Type": "text/event-stream" } }
+    localStorage.setItem(
+      "aichat_location_v1",
+      JSON.stringify({ lat: 40.7, lon: -74.0, ts: Date.now() }),
     );
 
-    fetch.mockResolvedValueOnce(sse1).mockResolvedValueOnce(sse2);
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(locationRequestSse())
+      .mockResolvedValueOnce(textSse("В Нью-Йорке +10"));
 
-    const messages = [{ role: "user", content: "Погода?" }] as any;
-    const results = [];
-    for await (const res of adapter.run({ messages, abortSignal: new AbortController().signal })) {
-      results.push(res);
-    }
+    const texts = await collect(adapter, [userMessage("Погода?")]);
 
-    // Geolocation API should NOT have been called
-    expect(navigator.geolocation.getCurrentPosition).not.toHaveBeenCalled();
-    expect(results[results.length - 1].content[0].text).toContain("В Нью-Йорке +10");
-    
-    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(geoMock).not.toHaveBeenCalled();
+    expect(texts[texts.length - 1]).toContain("В Нью-Йорке +10");
+
+    const secondBody = JSON.parse(fetchMock.mock.calls[2][1].body);
     expect(secondBody.location).toEqual({ lat: 40.7, lon: -74.0 });
   });
 });

@@ -12,6 +12,7 @@
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
 - `GET /v1/models` — список free-моделей (кеш), публичные id без суффикса `:free`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
+- Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
 - Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
 
 ## Quick Start
@@ -42,6 +43,19 @@ make run
 
 ```bash
 make test-coverage
+```
+
+Тесты фронтенда (Vitest + jsdom, геолокация/SSE-поток адаптера):
+
+```bash
+cd frontend && npm run test       # прогон
+cd frontend && npm run test:cov   # с покрытием
+```
+
+Интеграционный тест погоды (нужен запущенный сервер на `:8080`; запрашивает `Какая погода в Минске?`, проверяет атрибуцию OpenWeatherMap и наличие реальных данных; при ошибке показывает серверный лог, чтобы отличить сбой LLM от сбоя погодного сервиса):
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/integration_weather.py
 ```
 
 Линтеры (flake8 + isort + black):
@@ -128,11 +142,12 @@ make docs-build   # strict build в ./site/
 ## Структура
 
 ```
-app/           # FastAPI: auth, DB, OpenRouter, routes
-frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/)
+app/           # FastAPI: auth, DB, OpenRouter, tools, routes
+frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
 templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
 static/        # CSS
 docs/          # MkDocs (продукт / видение)
+tests/         # pytest + integration_weather.py (интеграционный тест погоды)
 server.py      # entrypoint (uvicorn, port или SOCKET)
 scripts/       # FTP deploy
 api_check.py   # smoke-тест API
