@@ -52,9 +52,7 @@ def _message_item(m: Message) -> dict[str, Any]:
     }
 
 
-def _get_owned_conversation(
-    db: Session, user: User, conversation_id: int
-) -> Conversation | None:
+def _get_owned_conversation(db: Session, user: User, conversation_id: int) -> Conversation | None:
     return db.scalar(
         select(Conversation)
         .where(Conversation.id == conversation_id, Conversation.user_id == user.id)

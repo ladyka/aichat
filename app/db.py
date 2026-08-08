@@ -42,6 +42,24 @@ class User(Base):
     sessions: Mapped[list["UserSession"]] = relationship(back_populates="user")
     api_tokens: Mapped[list["ApiToken"]] = relationship(back_populates="user")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
+    oauth_identities: Mapped[list["OAuthIdentity"]] = relationship(back_populates="user")
+
+
+class OAuthIdentity(Base):
+    """One external identity (Google / Apple sub) linked to a User."""
+
+    __tablename__ = "oauth_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_oauth_provider_subject"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(20))
+    subject: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship(back_populates="oauth_identities")
 
 
 class Conversation(Base):
@@ -119,9 +137,7 @@ class ApiToken(Base):
 
 class ApiTokenUsage(Base):
     __tablename__ = "api_token_usage"
-    __table_args__ = (
-        UniqueConstraint("token_id", "day", name="uq_api_token_usage_day"),
-    )
+    __table_args__ = (UniqueConstraint("token_id", "day", name="uq_api_token_usage_day"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     token_id: Mapped[int] = mapped_column(ForeignKey("api_tokens.id"), index=True)
@@ -217,3 +233,13 @@ def get_db() -> Session:
 
 def get_user_by_email(db: Session, email: str) -> User | None:
     return db.scalar(select(User).where(User.email == email.lower().strip()))
+
+
+def get_user_by_oauth(db: Session, provider: str, subject: str) -> User | None:
+    identity = db.scalar(
+        select(OAuthIdentity).where(
+            OAuthIdentity.provider == provider,
+            OAuthIdentity.subject == subject,
+        )
+    )
+    return db.get(User, identity.user_id) if identity else None

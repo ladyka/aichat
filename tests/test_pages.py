@@ -1,6 +1,5 @@
 import uuid
 
-import pytest
 from fastapi import HTTPException
 
 from tests.conftest import create_token, login, register
@@ -144,9 +143,9 @@ def test_token_creation_limit(client):
 
 
 def test_revoke_token(client, db):
-    from app.auth import hash_token
     from sqlalchemy import select
 
+    from app.auth import hash_token
     from app.db import ApiToken
 
     register(client, email())

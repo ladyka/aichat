@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
@@ -37,5 +37,9 @@ export default defineConfig({
       "/tokens": "http://127.0.0.1:8080",
       "/static": "http://127.0.0.1:8080",
     },
+  },
+  test: {
+    environment: "jsdom",
+    globals: true,
   },
 });

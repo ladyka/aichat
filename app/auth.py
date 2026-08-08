@@ -72,9 +72,7 @@ def get_user_from_session(db: Session, raw: str | None) -> User | None:
     return db.get(User, session.user_id)
 
 
-def get_current_user_optional(
-    request: Request, db: Session = Depends(get_db)
-) -> User | None:
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:
     settings = get_settings()
     raw = request.cookies.get(settings.session_cookie)
     return get_user_from_session(db, raw)

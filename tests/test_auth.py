@@ -16,7 +16,6 @@ from app.auth import (
     verify_password,
 )
 from app.db import User, UserSession
-
 from tests.conftest import create_token as make_token
 from tests.conftest import register
 

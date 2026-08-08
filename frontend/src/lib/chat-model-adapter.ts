@@ -210,6 +210,7 @@ export function createChatModelAdapter(
       const history = toOpenAIMessages(messages);
       let yielded = false;
 
+      // First pass: standard request
       for await (const value of postAndStream({
         model,
         conversationId,
@@ -220,6 +221,154 @@ export function createChatModelAdapter(
         yielded = true;
         yield value;
       }
+
+      if (!state.locationRequest) {
+        if (!yielded) {
+          yield { content: [{ type: "text" as const, text: "" }] };
+        }
+        return;
+      }
+
+      // The model asked for the user's location.
+      // Try to use cached location first, then fall back to browser prompt.
+      let coords = readLocation();
+      if (!coords) {
+        const res = await askGeolocation();
+        if (typeof res === "object") {
+          coords = res;
+          saveLocation(coords);
+        } else {
+          // Use the error reason (e.g. 'permission_denied') as the tool result
+          const toolCallId = state.locationRequest.assistant_tool_call.tool_calls?.[0]?.id;
+          const nextHistory: OpenAIMessage[] = [
+            ...history,
+            state.locationRequest.assistant_tool_call,
+            {
+              role: "tool",
+              tool_call_id: toolCallId,
+              content: JSON.stringify({ error: "location_unavailable", reason: res }),
+            },
+          ];
+          for await (const value of postAndStream({
+            model,
+            conversationId,
+            history: nextHistory,
+            abortSignal,
+            state,
+          })) {
+            yielded = true;
+            yield value;
+          }
+          if (!yielded) yield { content: [{ type: "text" as const, text: "" }] };
+          return;
+        }
+      }
+
+      // Use obtained coordinates to continue the conversation
+      const assistant = state.locationRequest.assistant_tool_call;
+      const toolCallId = assistant.tool_calls?.[0]?.id;
+      const nextHistory: OpenAIMessage[] = [
+        ...history,
+        assistant,
+        {
+          role: "tool",
+          tool_call_id: toolCallId,
+          content: JSON.stringify(coords),
+        },
+      ];
+
+      for await (const value of postAndStream({
+        model,
+        conversationId,
+        location: coords,
+        history: nextHistory,
+        abortSignal,
+        state,
+      })) {
+        yielded = true;
+        yield value;
+      }
+
+      if (!yielded) {
+        yield { content: [{ type: "text" as const, text: "" }] };
+      }
+    },
+  };
+}
+
+      if (!state.locationRequest) {
+        if (!yielded) {
+          yield { content: [{ type: "text" as const, text: "" }] };
+        }
+        return;
+      }
+
+      // The model asked for the user's location.
+      // Try to use cached location first, then fall back to browser prompt.
+      let coords = readLocation();
+      if (!coords) {
+        const res = await askGeolocation();
+        if (typeof res === "object") {
+          coords = res;
+          saveLocation(coords);
+        } else {
+          // Use the error reason (e.g. 'permission_denied') as the tool result
+          const toolCallId = state.locationRequest.assistant_tool_call.tool_calls?.[0]?.id;
+          const nextHistory: OpenAIMessage[] = [
+            ...history,
+            state.locationRequest.assistant_tool_call,
+            {
+              role: "tool",
+              tool_call_id: toolCallId,
+              content: JSON.stringify({ error: "location_unavailable", reason: res }),
+            },
+          ];
+          for await (const value of postAndStream({
+            model,
+            conversationId,
+            history: nextHistory,
+            abortSignal,
+            state,
+          })) {
+            yielded = true;
+            yield value;
+          }
+          if (!yielded) yield { content: [{ type: "text" as const, text: "" }] };
+          return;
+        }
+      }
+
+      // Use obtained coordinates to continue the conversation
+      const assistant = state.locationRequest.assistant_tool_call;
+      const toolCallId = assistant.tool_calls?.[0]?.id;
+      const nextHistory: OpenAIMessage[] = [
+        ...history,
+        assistant,
+        {
+          role: "tool",
+          tool_call_id: toolCallId,
+          content: JSON.stringify(coords),
+        },
+      ];
+
+      for await (const value of postAndStream({
+        model,
+        conversationId,
+        location: coords,
+        history: nextHistory,
+        abortSignal,
+        state,
+      })) {
+        yielded = true;
+        yield value;
+      }
+
+      if (!yielded) {
+        yield { content: [{ type: "text" as const, text: "" }] };
+      }
+    },
+  };
+}
 
       if (!state.locationRequest) return;
 
@@ -237,7 +386,11 @@ export function createChatModelAdapter(
           const nextHistory: OpenAIMessage[] = [
             ...history,
             state.locationRequest.assistant_tool_call,
-            { role: "tool", tool_call_id: toolCallId, content: JSON.stringify({ error: "location_unavailable", reason: res }) },
+            {
+              role: "tool",
+              tool_call_id: toolCallId,
+              content: JSON.stringify({ error: "location_unavailable", reason: res }),
+            },
           ];
           for await (const value of postAndStream({
             model,
@@ -249,6 +402,38 @@ export function createChatModelAdapter(
             yielded = true;
             yield value;
           }
+          if (!yielded) yield { content: [{ type: "text" as const, text: "" }] };
+          return;
+        }
+      }
+
+      const assistant = state.locationRequest.assistant_tool_call;
+      const toolCallId = assistant.tool_calls?.[0]?.id;
+      const nextHistory: OpenAIMessage[] = [
+        ...history,
+        assistant,
+        {
+          role: "tool",
+          tool_call_id: toolCallId,
+          content: JSON.stringify(coords),
+        },
+      ];
+
+      for await (const value of postAndStream({
+        model,
+        conversationId,
+        location: coords,
+        history: nextHistory,
+        abortSignal,
+        state,
+      })) {
+        yielded = true;
+        yield value;
+      }
+
+      if (!yielded) {
+        yield { content: [{ type: "text" as const, text: "" }] };
+      }
           if (!yielded) yield { content: [{ type: "text" as const, text: "" }] };
           return;
         }

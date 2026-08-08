@@ -23,10 +23,12 @@ def _seed_conversation(client):
     conv = _create_conversation(client).json()
     client.post(
         f"/api/conversations/{conv['id']}/messages",
-        json={"messages": [
-            {"role": "user", "content": "Первый вопрос"},
-            {"role": "assistant", "content": "Ответ от чатбота"},
-        ]},
+        json={
+            "messages": [
+                {"role": "user", "content": "Первый вопрос"},
+                {"role": "assistant", "content": "Ответ от чатбота"},
+            ]
+        },
     )
     return conv
 
@@ -57,6 +59,7 @@ def test_share_lifecycle(client, db):
 
     # anonymous visitor can open the page
     from fastapi.testclient import TestClient
+
     from app.main import app
 
     with TestClient(app) as anon:

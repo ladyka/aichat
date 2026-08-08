@@ -13,7 +13,9 @@ _WEATHER_TOOL: dict[str, Any] = {
         "name": "get_weather",
         "description": (
             "Узнать текущую погоду. Укажи город (по-русски или по-английски) ЛИБО "
-            "координаты lat и lon (например, когда пользователь поделился геолокацией)."
+            "координаты lat и lon (например, когда пользователь поделился геолокацией). "
+            "КРИТИЧЕСКИ ВАЖНО: в итоговом ответе пользователю обязательно начни с фразы "
+            "'По данным сервиса OpenWeatherMap:' или 'Согласно данным OpenWeatherMap: '."
         ),
         "parameters": {
             "type": "object",
@@ -158,9 +160,7 @@ async def _weather(city: str, lat: Any = None, lon: Any = None) -> str:
         return json.dumps({"error": str(message)}, ensure_ascii=False)
 
     payload = {
-        "city": f"{data.get('name', city)}, {data.get('sys', {}).get('country', '')}".strip(
-            " ,"
-        ),
+        "city": f"{data.get('name', city)}, {data.get('sys', {}).get('country', '')}".strip(" ,"),
         "temperature_c": data.get("main", {}).get("temp"),
         "feels_like_c": data.get("main", {}).get("feels_like"),
         "humidity_percent": data.get("main", {}).get("humidity"),

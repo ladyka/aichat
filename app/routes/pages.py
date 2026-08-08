@@ -32,6 +32,8 @@ def _ctx(user: User | None = None, **extra):
         "user": user,
         "app_name": "aichat",
         "default_model": settings.default_model,
+        "google_oauth_enabled": settings.google_oauth_enabled,
+        "apple_oauth_enabled": settings.apple_oauth_enabled,
     }
     data.update(extra)
     return data
@@ -269,9 +271,7 @@ def tokens_page(
     return RedirectResponse("/settings", status_code=303)
 
 
-def _tokens_view_data(
-    db: Session, user: User
-) -> tuple[list[ApiToken], dict[int, int]]:
+def _tokens_view_data(db: Session, user: User) -> tuple[list[ApiToken], dict[int, int]]:
     tokens = db.scalars(
         select(ApiToken)
         .where(ApiToken.user_id == user.id, ApiToken.revoked_at.is_(None))
@@ -280,12 +280,16 @@ def _tokens_view_data(
     usage: dict[int, int] = {}
     if tokens:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        rows = db.execute(
-            select(ApiTokenUsage).where(
-                ApiTokenUsage.token_id.in_([t.id for t in tokens]),
-                ApiTokenUsage.day == today,
+        rows = (
+            db.execute(
+                select(ApiTokenUsage).where(
+                    ApiTokenUsage.token_id.in_([t.id for t in tokens]),
+                    ApiTokenUsage.day == today,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         usage = {r.token_id: r.count for r in rows}
     return tokens, usage
 

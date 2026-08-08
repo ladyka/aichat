@@ -30,8 +30,10 @@
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream |
 | `app/openrouter.py` | HTTP-прокси к OpenRouter |
+| `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
+| `app/routes/oauth.py` | `/auth/google`, `/auth/apple` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |
 | `frontend/` | React + assistant-ui (чат) |
@@ -77,8 +79,9 @@ python3 api_check.py --host http://127.0.0.1:8080 --token aichat_…
 После задач, затрагивающих код:
 
 1. Синтаксис / импорт: `python -m py_compile` по изменённым `.py` или короткий smoke через `make run`.
-2. Если трогали чат UI — `make frontend-build`.
-3. Если трогали API — `api_check.py` или curl на `/v1/models` и completions.
-4. В ответе пользователю кратко укажи, что проверено.
+2. Линтеры: `make lint` (flake8 + isort + black). Перед форматированием всего репозитория уточни у пользователя (или приведи `make format`).
+3. Если трогали чат UI — `make frontend-build`.
+4. Если трогали API — `api_check.py` или curl на `/v1/models` и completions.
+5. В ответе пользователю кратко укажи, что проверено.
 
 Автотестов в репозитории пока нет; не раздувай инфраструктуру тестов без запроса.

@@ -73,7 +73,12 @@ def test_append_messages_sets_title(client):
     conv = _create_conversation(client).json()
     response = client.post(
         f"/api/conversations/{conv['id']}/messages",
-        json={"messages": [{"role": "user", "content": "Первый вопрос"}, {"role": "assistant", "content": "Ответ"}]},
+        json={
+            "messages": [
+                {"role": "user", "content": "Первый вопрос"},
+                {"role": "assistant", "content": "Ответ"},
+            ]
+        },
     )
     assert response.status_code == 200
     assert len(response.json()["data"]) == 2
@@ -100,7 +105,9 @@ def test_conversations_are_owned(client):
     register(client, email())
     assert client.get(f"/api/conversations/{conv['id']}").status_code == 404
     assert client.delete(f"/api/conversations/{conv['id']}").status_code == 404
-    assert client.patch(f"/api/conversations/{conv['id']}", json={"archived": True}).status_code == 404
+    assert (
+        client.patch(f"/api/conversations/{conv['id']}", json={"archived": True}).status_code == 404
+    )
 
 
 def test_settings_get_and_put(client, mock_models):

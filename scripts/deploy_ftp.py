@@ -151,10 +151,7 @@ def connect_ftp(host: str, port: int, user: str, password: str) -> FTP:
     except error_perm as exc:
         msg = str(exc)
         if "530" in msg or "login" in msg.lower() or "auth" in msg.lower():
-            die(
-                f"FTP login failed for user {user!r}: {exc}. "
-                "Check FTP_USER / FTP_PASS in .env."
-            )
+            die(f"FTP login failed for user {user!r}: {exc}. " "Check FTP_USER / FTP_PASS in .env.")
         die(f"FTP login rejected: {exc}")
     except (error_temp, error_proto, OSError) as exc:
         die(f"FTP login error: {exc}")

@@ -135,12 +135,14 @@ def test_api_limit_is_per_token(client, mock_models, monkeypatch):
     for _ in range(10):
         client.post("/v1/chat/completions", headers=_auth_headers(token_a), json=body)
 
-    assert client.post(
-        "/v1/chat/completions", headers=_auth_headers(token_a), json=body
-    ).status_code == 429
-    assert client.post(
-        "/v1/chat/completions", headers=_auth_headers(token_b), json=body
-    ).status_code == 200
+    assert (
+        client.post("/v1/chat/completions", headers=_auth_headers(token_a), json=body).status_code
+        == 429
+    )
+    assert (
+        client.post("/v1/chat/completions", headers=_auth_headers(token_b), json=body).status_code
+        == 200
+    )
 
 
 def test_chat_requests_do_not_count_against_api_limit(client, mock_models, monkeypatch, db):
@@ -154,13 +156,9 @@ def test_chat_requests_do_not_count_against_api_limit(client, mock_models, monke
 
     from app.auth import hash_token
 
-    token_row = db.scalar(
-        select(ApiToken).where(ApiToken.token_hash == hash_token(token))
-    )
+    token_row = db.scalar(select(ApiToken).where(ApiToken.token_hash == hash_token(token)))
     assert token_row is not None
-    usage = db.scalar(
-        select(ApiTokenUsage).where(ApiTokenUsage.token_id == token_row.id)
-    )
+    usage = db.scalar(select(ApiTokenUsage).where(ApiTokenUsage.token_id == token_row.id))
     assert usage is None or usage.count == 0
 
 

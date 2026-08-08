@@ -10,9 +10,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import get_user_from_session, hash_token
+from app.auth import hash_token
 from app.config import get_settings
-from app.db import Conversation, Message, ShareAccess, ShareLink, User, get_db
+from app.db import Conversation, Message, ShareAccess, ShareLink, get_db
 from app.routes.conversations import _require_user
 
 router = APIRouter()
@@ -49,7 +49,6 @@ def _share_exists_payload(share: ShareLink) -> dict:
 
 
 def _active_share(db: Session, conversation_id: int) -> ShareLink | None:
-    now = datetime.now(timezone.utc)
     return db.scalar(
         select(ShareLink)
         .where(
@@ -176,9 +175,7 @@ def revoke_share(
 def share_page(key: str, request: Request, db: Session = Depends(get_db)):
     from app.routes.pages import render
 
-    share = db.scalar(
-        select(ShareLink).where(ShareLink.token_hash == hash_token(key))
-    )
+    share = db.scalar(select(ShareLink).where(ShareLink.token_hash == hash_token(key)))
     if not share or share.revoked_at is not None or _is_expired(share):
         return render(
             request,
@@ -188,10 +185,7 @@ def share_page(key: str, request: Request, db: Session = Depends(get_db)):
             not_found=True,
         )
 
-    conversation = db.scalar(
-        select(Conversation)
-        .where(Conversation.id == share.conversation_id)
-    )
+    conversation = db.scalar(select(Conversation).where(Conversation.id == share.conversation_id))
     if not conversation:
         return render(
             request,
@@ -205,9 +199,7 @@ def share_page(key: str, request: Request, db: Session = Depends(get_db)):
     db.commit()
 
     messages = db.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation.id)
-        .order_by(Message.id)
+        select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id)
     ).all()
     rendered = [{"role": m.role, "html": _render_md(m.content)} for m in messages]
 

@@ -44,7 +44,9 @@ def _headers() -> dict[str, str]:
     return headers
 
 
-def _openai_model_item(model_id: str, created: int | None = None, owned_by: str = "openrouter") -> dict[str, Any]:
+def _openai_model_item(
+    model_id: str, created: int | None = None, owned_by: str = "openrouter"
+) -> dict[str, Any]:
     return {
         "id": model_id,
         "object": "model",

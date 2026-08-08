@@ -26,9 +26,7 @@ class Settings:
     def __init__(self) -> None:
         self.root = ROOT
         self.openrouter_api_key = _env("OPENROUTER_API_KEY", "")
-        self.openrouter_base_url = _env(
-            "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
-        )
+        self.openrouter_base_url = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
         self.session_cookie = _env("SESSION_COOKIE", "aichat_session")
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()
@@ -39,15 +37,24 @@ class Settings:
         self.share_ttl_days = int(_env("SHARE_TTL_DAYS", "30") or "30")
         self.openweather_api_key = _env("OPENWEATHER_API_KEY", "") or ""
 
+        # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
+        # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com
+        self.public_base_url = (_env("PUBLIC_BASE_URL", "") or "").rstrip("/")
+        self.google_client_id = _env("GOOGLE_CLIENT_ID", "") or ""
+        self.google_client_secret = _env("GOOGLE_CLIENT_SECRET", "") or ""
+        # Apple "Sign in with Apple": Service ID + Team ID + private key (contents of .p8).
+        self.apple_client_id = _env("APPLE_CLIENT_ID", "") or ""
+        self.apple_team_id = _env("APPLE_TEAM_ID", "") or ""
+        self.apple_key_id = _env("APPLE_KEY_ID", "") or ""
+        self.apple_private_key = (_env("APPLE_PRIVATE_KEY", "") or "").replace("\\n", "\n")
+
         # Arize AX / Phoenix OTLP (see app/telemetry.py). Same vars as /tmp/aichat example.
         self.arize_space_id = _env("ARIZE_SPACE_ID", "") or ""
         self.arize_api_key = _env("ARIZE_API_KEY", "") or ""
         self.arize_project_name = _env("ARIZE_PROJECT_NAME", "aichat") or "aichat"
         # Example uses ARIZE_OTLP_ENDPOINT; arize-otel also reads ARIZE_COLLECTOR_ENDPOINT.
         self.arize_otlp_endpoint = (
-            _env("ARIZE_OTLP_ENDPOINT")
-            or _env("ARIZE_COLLECTOR_ENDPOINT")
-            or ""
+            _env("ARIZE_OTLP_ENDPOINT") or _env("ARIZE_COLLECTOR_ENDPOINT") or ""
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
 
@@ -70,3 +77,25 @@ class Settings:
 
         sqlite_path = ROOT / "aichat.db"
         return f"sqlite:///{sqlite_path}"
+
+    @property
+    def google_redirect_uri(self) -> str:
+        return f"{self.public_base_url}/auth/google/callback" if self.public_base_url else ""
+
+    @property
+    def apple_redirect_uri(self) -> str:
+        return f"{self.public_base_url}/auth/apple/callback" if self.public_base_url else ""
+
+    @property
+    def google_oauth_enabled(self) -> bool:
+        return bool(self.public_base_url and self.google_client_id and self.google_client_secret)
+
+    @property
+    def apple_oauth_enabled(self) -> bool:
+        return bool(
+            self.public_base_url
+            and self.apple_client_id
+            and self.apple_team_id
+            and self.apple_key_id
+            and self.apple_private_key
+        )

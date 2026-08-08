@@ -6,6 +6,7 @@
 
 - Публичный лендинг без авторизации
 - Регистрация / вход (email + пароль, cookie-сессия)
+- Вход через **Google** и **Apple** (OAuth 2.0 / OIDC; включается через `.env`, см. ниже)
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
 - Модель чата в **/settings** (не на экране чата)
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
@@ -43,6 +44,13 @@ make run
 make test-coverage
 ```
 
+Линтеры (flake8 + isort + black):
+
+```bash
+make lint      # проверка (flake8, isort --check, black --check)
+make format    # автоформатирование (isort + black)
+```
+
 Dev чата отдельно (прокси на FastAPI):
 
 ```bash
@@ -65,10 +73,22 @@ cd frontend && npm run dev   # :5173
 | `OPENWEATHER_API_KEY` | Ключ OpenWeatherMap: включает инструменты погоды `get_weather` и `get_user_location` в `/api/chat`. Пусто — инструменты отключены |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
+| `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); используется для построения redirect URI OAuth |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth-клиент Google (выкл., пока не заполнены оба) |
+| `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | «Sign in with Apple» (выкл., пока не заполнены все) |
 | `FTP_*` | Деплой через `make update-prod` |
 | `ARIZE_SPACE_ID` / `ARIZE_API_KEY` | Включить OTLP-трейсы (Arize / Phoenix) |
 | `ARIZE_PROJECT_NAME` | Имя проекта в коллекторе (по умолчанию `aichat`) |
 | `ARIZE_OTLP_ENDPOINT` | OTLP endpoint. Arize cloud gRPC: `https://otlp.<region>.arize.com/v1`; HTTPS: `https://otlp.<region>.arize.com/v1/traces`; локальный Phoenix: `http://127.0.0.1:6006/v1/traces`. Транспорт (gRPC/HTTP) выбирается автоматически: HTTP — для `http://` и путей `/v1/traces`, иначе gRPC (как в `example/aichat`) |
+
+### OAuth-вход (Google / Apple)
+
+Фича отключена, пока в `.env` не заполнены все соответствующие переменные. Обязателен `PUBLIC_BASE_URL` — по нему строятся redirect URI:
+
+- Google: `{PUBLIC_BASE_URL}/auth/google/callback` → указать в OAuth-клиенте Google (Authorized redirect URIs).
+- Apple: `{PUBLIC_BASE_URL}/auth/apple/callback` → указать в «Sign in with Apple» Service ID. Для Apple нужен платный Developer Account: Service ID + Team ID + Key ID + содержимое `.p8`-файла ключа (в `APPLE_PRIVATE_KEY`).
+
+Новые пользователи создаются автоматически по email из провайдера; если email совпадает с существующим — вход в тот же аккаунт. Привязка провайдера хранится в таблице `oauth_identities`. OAuth-аккаунты пароль не имеют — вход по email+пароль для них недоступен.
 
 Трейсы смотрим в [Arize app](https://app.ca-central-1a.arize.com/).
 
@@ -117,6 +137,9 @@ server.py      # entrypoint (uvicorn, port или SOCKET)
 scripts/       # FTP deploy
 api_check.py   # smoke-тест API
 mkdocs.yml     # конфиг документации
+.flake8        # flake8 (100 символов; E203/W503 выключены — конфликт с black)
+pyproject.toml # конфиг black + isort
+requirements-dev.txt # инструменты разработки (линтеры)
 ```
 
 ## Деплой (hoster / FTP)

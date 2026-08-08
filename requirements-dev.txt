@@ -1,0 +1,4 @@
+# Dev tools: linting & formatting (make lint / make format)
+flake8>=7.0.0
+black>=24.0.0
+isort>=6.0.0

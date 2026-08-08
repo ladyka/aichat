@@ -25,8 +25,14 @@ def _sse_tool_call(name, args, call_id="call_1", index=0):
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return [
-        event({"index": index, "id": call_id, "type": "function",
-               "function": {"name": "", "arguments": ""}}),
+        event(
+            {
+                "index": index,
+                "id": call_id,
+                "type": "function",
+                "function": {"name": "", "arguments": ""},
+            }
+        ),
         event({"index": index, "function": {"name": name, "arguments": ""}}),
         event({"index": index, "function": {"name": "", "arguments": args}}),
         b"data: [DONE]\n\n",
@@ -84,13 +90,12 @@ def _patch(monkeypatch, plan, weather):
     monkeypatch.setattr("app.tools._weather", weather)
 
 
-def _tool_message(name="get_weather", arguments="{\"city\": \"Minsk\"}", call_id="call_1"):
+def _tool_message(name="get_weather", arguments='{"city": "Minsk"}', call_id="call_1"):
     return {
         "role": "assistant",
         "content": None,
         "tool_calls": [
-            {"id": call_id, "type": "function",
-             "function": {"name": name, "arguments": arguments}}
+            {"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}
         ],
     }
 
@@ -193,7 +198,9 @@ def test_weather_not_found(monkeypatch):
 
     class NotFoundClient(FakeWeatherClient):
         async def get(self, *a, **kw):
-            return FakeWeatherResponse(status_code=404, data={"cod": "404", "message": "city not found"})
+            return FakeWeatherResponse(
+                status_code=404, data={"cod": "404", "message": "city not found"}
+            )
 
     monkeypatch.setattr("app.tools.httpx.AsyncClient", NotFoundClient)
 

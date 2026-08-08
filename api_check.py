@@ -112,11 +112,7 @@ def main() -> int:
         return 1
 
     model = data.get("model")
-    content = (
-        data.get("choices", [{}])[0]
-        .get("message", {})
-        .get("content", "")
-    )
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
     usage = data.get("usage", {})
     print(f"   model:   {model}")
     print(f"   reply:   {content!r}")

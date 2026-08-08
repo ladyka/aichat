@@ -7,8 +7,9 @@ os.environ["DATABASE_URL"] = f"sqlite:///{_tmpdir}/test.db"
 os.environ["OPENROUTER_BASE_URL"] = "https://openrouter.test/api/v1"
 os.environ["MODELS_CACHE_TTL"] = "3600"
 
-import pytest
-from fastapi.testclient import TestClient
+# Env must be set before the app package is imported (noqa: E402).
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 
 
 @pytest.fixture()
@@ -77,4 +78,3 @@ def mock_models(monkeypatch):
     for mod in ("app.routes.api", "app.routes.pages", "app.routes.conversations"):
         monkeypatch.setattr(f"{mod}.get_models_list", fake_get_models)
     return payload
-

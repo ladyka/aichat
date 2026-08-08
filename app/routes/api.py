@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app import telemetry as telemetry_mod
 from app.auth import get_user_from_api_token, get_user_from_session
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, UsageLog, User, get_db
@@ -25,7 +26,6 @@ from app.models_catalog import (
 )
 from app.openrouter import chat_completions, stream_chat_completions
 from app.tools import call_tool, enabled_tools, extract_tool_calls
-from app import telemetry as telemetry_mod
 
 router = APIRouter()
 logger = logging.getLogger("aichat.completions")
@@ -218,7 +218,7 @@ async def _tool_chat_response(
                 return JSONResponse(status_code=response.status_code, content=data)
             if isinstance(data, dict) and isinstance(data.get("model"), str):
                 data = {**data, "model": _response_model_id(public_model, data.get("model"))}
-            message = ((data.get("choices") or [{}])[0].get("message") or {})
+            message = (data.get("choices") or [{}])[0].get("message") or {}
             if not isinstance(message, dict) or not message.get("tool_calls"):
                 _log_usage(db, user, public_model, source, data.get("usage"))
                 return JSONResponse(content=data, status_code=response.status_code)
@@ -297,9 +297,7 @@ async def _tool_chat_response(
                 result = json.dumps(location, ensure_ascii=False)
             else:
                 result = await call_tool(call["name"], call["arguments"])
-            messages.append(
-                {"role": "tool", "tool_call_id": call["id"], "content": result}
-            )
+            messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
         payload = {**payload, "messages": messages, "stream": True}
 
@@ -315,9 +313,7 @@ async def _prefix_then(prefix: bytes, rest: AsyncIterator[bytes]) -> AsyncIterat
         yield chunk
 
 
-async def _rewrite_chunks(
-    chunks: AsyncIterator[bytes], public_model: str
-) -> AsyncIterator[bytes]:
+async def _rewrite_chunks(chunks: AsyncIterator[bytes], public_model: str) -> AsyncIterator[bytes]:
     buffer = b""
     async for chunk in chunks:
         buffer += chunk
@@ -340,7 +336,7 @@ def _sse_has_content(raw: bytes) -> bool:
             obj = json.loads(data)
         except json.JSONDecodeError:
             continue
-        delta = ((obj.get("choices") or [{}])[0].get("delta") or {})
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
         content = delta.get("content")
         if isinstance(content, str) and content:
             return True
@@ -463,9 +459,7 @@ async def _proxy_inner(user: User, body: dict[str, Any], source: str, db: Sessio
 
     # Internal chat: run the tool loop server-side, hand back the final text.
     if source == "chat" and payload.get("tools"):
-        return await _tool_chat_response(
-            public_model, payload, source, db, user, known_location
-        )
+        return await _tool_chat_response(public_model, payload, source, db, user, known_location)
 
     if payload.get("stream"):
         return StreamingResponse(
@@ -490,7 +484,9 @@ async def _proxy_inner(user: User, body: dict[str, Any], source: str, db: Sessio
             "model": _response_model_id(public_model, data.get("model")),
         }
 
-    _log_usage(db, user, public_model, source, data.get("usage") if isinstance(data, dict) else None)
+    _log_usage(
+        db, user, public_model, source, data.get("usage") if isinstance(data, dict) else None
+    )
     return JSONResponse(content=data, status_code=response.status_code)
 
 

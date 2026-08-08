@@ -41,9 +41,7 @@ def setup_telemetry() -> Any:
         register_kwargs["endpoint"] = endpoint
         # gRPC for Arize AX cloud endpoints (https://…/v1), like example/aichat.
         # HTTP only for OTLP/HTTP collectors: local Phoenix and https /v1/traces.
-        if endpoint.startswith("http://") or endpoint.rstrip("/").endswith(
-            "/v1/traces"
-        ):
+        if endpoint.startswith("http://") or endpoint.rstrip("/").endswith("/v1/traces"):
             transport = Transport.HTTP
         register_kwargs["transport"] = transport
 
