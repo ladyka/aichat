@@ -1,11 +1,45 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx2 as httpx
 
 from app.config import get_settings
+
+_RU_WEEKDAYS = [
+    "понедельник",
+    "вторник",
+    "среда",
+    "четверг",
+    "пятница",
+    "суббота",
+    "воскресенье",
+]
+
+_DATETIME_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "get_current_datetime",
+        "description": (
+            "Узнать текущие дату и время. Вызывай, когда нужны актуальные дата, день недели "
+            "или время (например, «какой сегодня день», «сколько сейчас времени»). "
+            "Необязательный параметр timezone — IANA-имя часового пояса "
+            "(например, Europe/Minsk). Без него возвращается серверное время."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "timezone": {
+                    "type": "string",
+                    "description": "IANA-название часового пояса, например Europe/Minsk.",
+                },
+            },
+        },
+    },
+}
 
 _WEATHER_TOOL: dict[str, Any] = {
     "type": "function",
@@ -54,11 +88,12 @@ _USER_LOCATION_TOOL: dict[str, Any] = {
 
 
 def enabled_tools() -> list[dict[str, Any]]:
-    """Tools, доступные боту. Без OPENWEATHER_API_KEY инструменты не включаются."""
+    """Tools, доступные боту. Дата/время — всегда; погода — при наличии ключа."""
     settings = get_settings()
-    if not settings.openweather_api_key:
-        return []
-    return [_WEATHER_TOOL, _USER_LOCATION_TOOL]
+    tools = [_DATETIME_TOOL]
+    if settings.openweather_api_key:
+        tools.extend([_WEATHER_TOOL, _USER_LOCATION_TOOL])
+    return tools
 
 
 def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
@@ -108,6 +143,8 @@ async def call_tool(name: str, arguments: str) -> str:
             {"error": "Местоположение запрашивается у пользователя на клиенте."},
             ensure_ascii=False,
         )
+    if name == "get_current_datetime":
+        return _current_datetime(arguments)
     if name != "get_weather":
         return json.dumps({"error": f"Unknown tool: {name}"}, ensure_ascii=False)
     try:
@@ -130,6 +167,34 @@ async def call_tool(name: str, arguments: str) -> str:
             ensure_ascii=False,
         )
     return await _weather(city, lat, lon)
+
+
+def _current_datetime(arguments: str) -> str:
+    try:
+        args = json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+
+    tz_name = str(args.get("timezone") or "").strip()
+    if tz_name:
+        try:
+            now = datetime.now(ZoneInfo(tz_name))
+        except ZoneInfoNotFoundError:
+            return json.dumps({"error": f"Неизвестный часовой пояс: {tz_name}"}, ensure_ascii=False)
+    else:
+        now = datetime.now().astimezone()
+
+    return json.dumps(
+        {
+            "date": now.strftime("%Y-%m-%d"),
+            "time": now.strftime("%H:%M:%S"),
+            "weekday": _RU_WEEKDAYS[now.weekday()],
+            "timezone": str(now.tzinfo),
+        },
+        ensure_ascii=False,
+    )
 
 
 async def _weather(city: str, lat: Any = None, lon: Any = None) -> str:

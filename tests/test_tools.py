@@ -103,14 +103,18 @@ def _tool_message(name="get_weather", arguments='{"city": "Minsk"}', call_id="ca
 def test_enabled_tools_without_key():
     settings = get_settings()
     settings.openweather_api_key = ""
-    assert enabled_tools() == []
+    assert [t["function"]["name"] for t in enabled_tools()] == ["get_current_datetime"]
 
 
 def test_enabled_tools_with_key(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "ow-test")
     tools = enabled_tools()
-    assert [t["function"]["name"] for t in tools] == ["get_weather", "get_user_location"]
+    assert [t["function"]["name"] for t in tools] == [
+        "get_current_datetime",
+        "get_weather",
+        "get_user_location",
+    ]
 
 
 def test_extract_tool_calls_aggregates():
@@ -137,6 +141,46 @@ def test_call_tool_unknown():
 
     result = json.loads(asyncio.run(call_tool("bogus", "{}")))
     assert result["error"]
+
+
+def test_call_tool_current_datetime():
+    import asyncio
+
+    result = json.loads(asyncio.run(call_tool("get_current_datetime", "{}")))
+    assert result["date"]
+    assert result["time"]
+    assert result["weekday"]
+    assert result["timezone"]
+    assert len(result["date"]) == 10
+    assert len(result["time"]) == 8
+
+
+def test_call_tool_current_datetime_with_timezone():
+    import asyncio
+
+    result = json.loads(
+        asyncio.run(call_tool("get_current_datetime", '{"timezone": "Europe/Minsk"}'))
+    )
+    assert result["timezone"] == "Europe/Minsk"
+    assert result["date"]
+    assert result["time"]
+
+
+def test_call_tool_current_datetime_bad_timezone():
+    import asyncio
+
+    result = json.loads(
+        asyncio.run(call_tool("get_current_datetime", '{"timezone": "No/SuchZone"}'))
+    )
+    assert "часовой пояс" in result["error"]
+
+
+def test_call_tool_current_datetime_invalid_json():
+    import asyncio
+
+    result = json.loads(asyncio.run(call_tool("get_current_datetime", "not-json")))
+    assert result["date"]
+    assert result["time"]
 
 
 class FakeWeatherResponse:
@@ -420,7 +464,11 @@ def test_stream_plain_text_no_extra_call(client, mock_models, monkeypatch):
     assert "Привет" in response.text
     assert plan.stream_calls == 1
     assert plan.chat_calls == 0
-    assert plan.stream_payloads[0]["tools"][0]["function"]["name"] == "get_weather"
+    assert [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]] == [
+        "get_current_datetime",
+        "get_weather",
+        "get_user_location",
+    ]
 
 
 def test_stream_tool_loop(client, mock_models, monkeypatch):
@@ -487,8 +535,8 @@ def test_non_stream_tool_loop(client, mock_models, monkeypatch):
     assert roles == ["user", "assistant", "tool"]
 
 
-def test_no_tools_without_key(client, mock_models, monkeypatch):
-    """Without OPENWEATHER_API_KEY no tools are advertised to the model."""
+def test_datetime_advertised_without_weather_key(client, mock_models, monkeypatch):
+    """Without OPENWEATHER_API_KEY the datetime tool is still advertised, weather is not."""
     _auth(client)
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "")
@@ -504,7 +552,9 @@ def test_no_tools_without_key(client, mock_models, monkeypatch):
         },
     )
     assert response.status_code == 200
-    assert "tools" not in plan.stream_payloads[0]
+    tools = [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]]
+    assert "get_current_datetime" in tools
+    assert "get_weather" not in tools
 
 
 def test_v1_proxies_tools(client, mock_models, monkeypatch, api_key):
