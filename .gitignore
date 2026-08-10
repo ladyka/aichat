@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 aichat.db
 *.db
+data/
 .idea/
 site/
 frontend/node_modules/

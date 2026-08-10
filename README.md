@@ -13,6 +13,7 @@
 - `GET /v1/models` — список free-моделей (кеш), публичные id без суффикса `:free`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
+- Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
 - Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
 
 ## Quick Start
@@ -85,6 +86,7 @@ cd frontend && npm run dev   # :5173
 | `MAX_TOKENS_PER_USER` | Максимум активных API-токенов на пользователя (по умолчанию `10`) |
 | `SHARE_TTL_DAYS` | Срок действия ссылки на общий чат `/s/<key>` (по умолчанию `30`) |
 | `OPENWEATHER_API_KEY` | Ключ OpenWeatherMap: включает инструменты погоды `get_weather` и `get_user_location` в `/api/chat`. Пусто — инструменты отключены |
+| `DOWNLOADS_MAX_BYTES` | Лимит размера файла для `download_file` (по умолчанию `2097152` = 2 МБ) |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
 | `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); используется для построения redirect URI OAuth |

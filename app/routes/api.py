@@ -239,7 +239,10 @@ async def _tool_chat_response(
                     result = json.dumps(location, ensure_ascii=False)
                 else:
                     result = await call_tool(
-                        call["function"]["name"], call["function"]["arguments"]
+                        call["function"]["name"],
+                        call["function"]["arguments"],
+                        user=user,
+                        db=db,
                     )
                 messages.append(
                     {
@@ -296,7 +299,7 @@ async def _tool_chat_response(
             if call["name"] == "get_user_location":
                 result = json.dumps(location, ensure_ascii=False)
             else:
-                result = await call_tool(call["name"], call["arguments"])
+                result = await call_tool(call["name"], call["arguments"], user=user, db=db)
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
         payload = {**payload, "messages": messages, "stream": True}

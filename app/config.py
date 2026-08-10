@@ -37,6 +37,10 @@ class Settings:
         self.share_ttl_days = int(_env("SHARE_TTL_DAYS", "30") or "30")
         self.openweather_api_key = _env("OPENWEATHER_API_KEY", "") or ""
 
+        # Download tool (see app/tools.py): per-user storage + hard size cap.
+        self.downloads_root = ROOT / "data" / "customers"
+        self.downloads_max_bytes = int(_env("DOWNLOADS_MAX_BYTES", "2097152") or "2097152")
+
         # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
         # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com
         self.public_base_url = (_env("PUBLIC_BASE_URL", "") or "").rstrip("/")

@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import hashlib
+import ipaddress
 import json
+import logging
+import os
+import re
+import socket
+import urllib.parse
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx2 as httpx
+from sqlalchemy import select
 
 from app.config import get_settings
+from app.db import Download
+
+logger = logging.getLogger("aichat.tools")
 
 _RU_WEEKDAYS = [
     "понедельник",
@@ -86,11 +98,87 @@ _USER_LOCATION_TOOL: dict[str, Any] = {
     },
 }
 
+_DOWNLOAD_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "download_file",
+        "description": (
+            "Скачать страницу или файл по URL и вернуть его содержимое. Вызывай, когда "
+            "пользователь просит посмотреть, что находится по ссылке, прочитать текст "
+            "страницы или документа. Скачиваются только текстовые файлы размером до 2 МБ; "
+            "повторные запросы одного и того же URL не перекачиваются заново."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Полный http/https адрес, например https://example.com/page",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+}
+
+# Допустимые текстовые MIME-типы (whitelist) + эвристики для неизвестных типов.
+_TEXT_MIMES = frozenset(
+    {
+        "text/plain",
+        "text/html",
+        "text/markdown",
+        "text/x-markdown",
+        "text/csv",
+        "text/xml",
+        "text/x-yaml",
+        "text/yaml",
+        "text/javascript",
+        "text/css",
+        "application/json",
+        "application/xml",
+        "application/xhtml+xml",
+        "application/javascript",
+        "application/x-javascript",
+        "application/rss+xml",
+        "application/atom+xml",
+        "application/x-yaml",
+        "application/yaml",
+    }
+)
+_TEXT_SNIFF_BYTES = 8192
+_MAX_CONTENT_CHARS = 50 * 1024
+_MAX_REDIRECTS = 5
+_USER_AGENT = "aichat/1.0 (+download tool)"
+
+# Сети, к которым нельзя ходить из download_file (SSRF-защита):
+# приватные, loopback, link-local, резервные, документационные, multicast.
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("192.0.0.0/24"),
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("::/128"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("::ffff:0:0/96"),
+]
+
 
 def enabled_tools() -> list[dict[str, Any]]:
-    """Tools, доступные боту. Дата/время — всегда; погода — при наличии ключа."""
+    """Tools, доступные боту. Дата/время и скачивание — всегда; погода — при ключе."""
     settings = get_settings()
-    tools = [_DATETIME_TOOL]
+    tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL]
     if settings.openweather_api_key:
         tools.extend([_WEATHER_TOOL, _USER_LOCATION_TOOL])
     return tools
@@ -132,11 +220,12 @@ def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
     return [calls[index] for index in sorted(calls)]
 
 
-async def call_tool(name: str, arguments: str) -> str:
+async def call_tool(name: str, arguments: str, user: Any = None, db: Any = None) -> str:
     """Исполнить инструмент и вернуть строковый результат для role:tool.
 
     `get_user_location` исполняется не здесь: он запрашивает данные у браузера,
     поэтому маршрут обрабатывает его отдельно (см. app/routes/api.py).
+    `download_file` требует идентифицированного пользователя (`user`) и сессии БД (`db`).
     """
     if name == "get_user_location":
         return json.dumps(
@@ -145,6 +234,8 @@ async def call_tool(name: str, arguments: str) -> str:
         )
     if name == "get_current_datetime":
         return _current_datetime(arguments)
+    if name == "download_file":
+        return await _download_file(arguments, user=user, db=db)
     if name != "get_weather":
         return json.dumps({"error": f"Unknown tool: {name}"}, ensure_ascii=False)
     try:
@@ -233,3 +324,234 @@ async def _weather(city: str, lat: Any = None, lon: Any = None) -> str:
         "description": data.get("weather", [{}])[0].get("description"),
     }
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _tool_json(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _download_error(message: str) -> str:
+    return _tool_json({"error": message})
+
+
+def _resolve_host(host: str) -> list[str]:
+    """Разрешить хост во все IP-адреса (убирая IPv6 zone-id)."""
+    try:
+        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        return []
+    return list({info[4][0].split("%")[0] for info in infos})
+
+
+def _is_blocked(addr: str) -> bool:
+    """True для приватных / локальных адресов, к которым ходить нельзя."""
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return True
+    return any(ip in network for network in _PRIVATE_NETWORKS)
+
+
+def _assert_public_url(url: str) -> str | None:
+    """Вернуть текст ошибки, если URL ходить нельзя, иначе None.
+
+    SSRF-защита: разрешаем все адреса хоста и блокируем, если любой из них
+    приватный/локальный. Известное ограничение MVP: между проверкой и реальным
+    connect остаётся окно для DNS-rebinding (хост переразрешается на каждом
+    редиректе, но DNS может успевать менять ответы).
+    """
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in ("http", "https"):
+        return "Поддерживаются только http/https адреса."
+    host = parsed.hostname
+    if not host:
+        return "Некорректный URL."
+    addresses = _resolve_host(host)
+    if not addresses:
+        return "Не удалось разрешить имя хоста."
+    blocked = [addr for addr in addresses if _is_blocked(addr)]
+    if blocked:
+        logger.warning("ssrf_blocked host=%s addresses=%s", host, blocked)
+        return "Доступ к этому адресу запрещён (локальная сеть)."
+    return None
+
+
+def _is_text_content(content_type: str, data: bytes) -> bool:
+    """Whitelist текстовых типов + эвристики для неизвестных."""
+    if content_type in _TEXT_MIMES or content_type.startswith("text/"):
+        return True
+    if b"\x00" in data[:_TEXT_SNIFF_BYTES]:
+        return False
+    return content_type in ("", "application/octet-stream", "application/unknown")
+
+
+def _filename_from_url(url: str, content_type: str) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    raw = urllib.parse.unquote(parsed.path)
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", os.path.basename(raw)).strip("._")
+    if not name:
+        name = "page.html" if content_type == "text/html" else "page.txt"
+    if not Path(name).suffix:
+        if content_type == "text/html":
+            name += ".html"
+        elif content_type == "application/json":
+            name += ".json"
+        else:
+            name += ".txt"
+    return name[:255]
+
+
+def _unique_path(folder: Path, filename: str) -> Path:
+    path = folder / filename
+    stem, suffix = path.stem, path.suffix
+    n = 1
+    while path.exists():
+        path = folder / f"{stem}-{n}{suffix}"
+        n += 1
+    return path
+
+
+def _decode_text(data: bytes, content_type: str) -> str:
+    charset = ""
+    for param in content_type.split(";")[1:]:
+        if "=" in param and param.split("=", 1)[0].strip().lower() == "charset":
+            charset = param.split("=", 1)[1].strip().strip("\"'")
+    for encoding in (charset or "utf-8", "utf-8", "latin-1"):
+        if not encoding:
+            continue
+        try:
+            return data.decode(encoding)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return data.decode("utf-8", errors="replace")
+
+
+def _size_limit_message(settings) -> str:
+    return f"Файл превышает лимит в {settings.downloads_max_bytes // (1024 * 1024)} МБ."
+
+
+def _user_download_dir(user: Any) -> Path:
+    settings = get_settings()
+    digest = hashlib.sha256(str(user.id).encode("utf-8")).hexdigest()[:16]
+    return settings.downloads_root / digest
+
+
+async def _download_file(arguments: str, user: Any = None, db: Any = None) -> str:
+    """Скачать URL, сохранить в data/customers/<hash(user_id)>/ и вернуть текст.
+
+    Повторный запрос того же URL от того же пользователя отдаётся из кэша
+    (таблица downloads в БД). Файл сохраняется только если это текст.
+    """
+    if user is None or db is None:
+        return _download_error("Скачивание файлов недоступно.")
+    try:
+        args = json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+    url = str(args.get("url") or "").strip()
+    if not url:
+        return _download_error("Укажите url для скачивания.")
+
+    settings = get_settings()
+    url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()
+
+    existing = db.scalar(
+        select(Download).where(Download.user_id == user.id, Download.url_hash == url_hash)
+    )
+    if existing is not None:
+        path = Path(existing.file_path)
+        if path.is_file():
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                text = path.read_text(encoding="latin-1")
+            truncated = len(text) > _MAX_CONTENT_CHARS
+            return _tool_json(
+                {
+                    "filename": existing.filename,
+                    "url": url,
+                    "size_bytes": existing.size_bytes,
+                    "cached": True,
+                    "truncated": truncated,
+                    "content": text[:_MAX_CONTENT_CHARS],
+                }
+            )
+
+    folder = _user_download_dir(user)
+    headers = {"User-Agent": _USER_AGENT}
+    timeout = httpx.Timeout(30.0, connect=10.0)
+    current = url
+    final_url = url
+    data = b""
+    content_type = ""
+    total = 0
+
+    async with httpx.AsyncClient(
+        timeout=timeout, follow_redirects=False, headers=headers
+    ) as client:
+        for _ in range(_MAX_REDIRECTS + 1):
+            error = _assert_public_url(current)
+            if error:
+                return _download_error(error)
+            async with client.stream("GET", current) as resp:
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("location")
+                    if not location:
+                        return _download_error("Редирект без адреса Location.")
+                    current = str(resp.url.join(location))
+                    continue
+                if resp.status_code >= 400:
+                    return _download_error(f"Сервер вернул HTTP {resp.status_code}.")
+                content_type = (
+                    (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
+                )
+                declared = resp.headers.get("content-length")
+                if declared and declared.isdigit() and int(declared) > settings.downloads_max_bytes:
+                    return _download_error(_size_limit_message(settings))
+                chunks: list[bytes] = []
+                async for chunk in resp.aiter_bytes():
+                    total += len(chunk)
+                    if total > settings.downloads_max_bytes:
+                        return _download_error(_size_limit_message(settings))
+                    chunks.append(chunk)
+                data = b"".join(chunks)
+                final_url = str(resp.url)
+                break
+        else:
+            return _download_error("Слишком много редиректов.")
+
+    if not _is_text_content(content_type, data):
+        return _download_error(
+            "Формат файла не поддерживается: допускаются только текстовые файлы."
+        )
+
+    filename = _filename_from_url(final_url, content_type)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = _unique_path(folder, filename)
+    path.write_bytes(data)
+    db.add(
+        Download(
+            user_id=user.id,
+            url=url,
+            url_hash=url_hash,
+            filename=path.name,
+            file_path=str(path),
+            size_bytes=total,
+        )
+    )
+    db.commit()
+
+    text = _decode_text(data, content_type)
+    truncated = len(text) > _MAX_CONTENT_CHARS
+    return _tool_json(
+        {
+            "filename": path.name,
+            "url": final_url,
+            "size_bytes": total,
+            "content_type": content_type,
+            "truncated": truncated,
+            "content": text[:_MAX_CONTENT_CHARS],
+        }
+    )
