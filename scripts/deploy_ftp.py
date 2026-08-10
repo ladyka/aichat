@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import json
 import socket
 import sys
 from ftplib import FTP, error_perm, error_proto, error_temp
@@ -14,6 +16,18 @@ ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = ROOT / ".env"
 UPLOADIGNORE_PATH = ROOT / ".uploadignore"
 PROBE_NAME = ".aichat_upload_probe"
+MANIFEST_NAME = ".aichat_manifest.json"
+MANIFEST_TMP = ".aichat_manifest.json.tmp"
+_HASH_CHUNK = 1024 * 1024
+
+
+def sha256_file(path: Path) -> str:
+    """SHA-256 hex digest of a file, read in chunks to limit memory."""
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while chunk := fh.read(_HASH_CHUNK):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def die(message: str, code: int = 1) -> None:
@@ -92,6 +106,86 @@ def iter_upload_files(root: Path, rules: list[tuple[bool, str]]) -> list[Path]:
     return files
 
 
+def read_remote_manifest(ftp: FTP, remote: str) -> dict[str, str] | None:
+    """Download the last-deploy manifest, if present.
+
+    Returns a {rel_path: sha256} dict, or None when the file is missing or
+    unreadable/corrupt (caller then falls back to a full upload).
+    """
+    chunks: list[bytes] = []
+
+    def collect(data: bytes) -> None:
+        chunks.append(data)
+
+    try:
+        ftp.retrbinary(f"RETR {remote}", collect)
+    except (error_perm, error_temp, error_proto, OSError):
+        return None
+    try:
+        data = json.loads(b"".join(chunks))
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    manifest: dict[str, str] = {}
+    for key, value in data.items():
+        if isinstance(key, str) and isinstance(value, str):
+            manifest[key] = value
+    return manifest
+
+
+def write_remote_manifest(ftp: FTP, remote: str, manifest: dict[str, str]) -> None:
+    """Upload the manifest atomically: STOR to .tmp, then RENAME."""
+    tmp = MANIFEST_TMP
+    payload = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2).encode("utf-8")
+    ftp.storbinary(f"STOR {tmp}", BytesIO(payload))
+    try:
+        ftp.rename(tmp, remote)
+    except error_perm:
+        # Some hosts won't RENAME over an existing file; STOR directly instead.
+        ftp.storbinary(f"STOR {remote}", BytesIO(payload))
+        try:
+            ftp.delete(tmp)
+        except (error_perm, error_temp, error_proto, OSError):
+            pass
+
+
+def plan_sync(
+    local_hashes: dict[str, str],
+    manifest: dict[str, str] | None,
+    rules: list[tuple[bool, str]],
+) -> tuple[list[str], list[str], set[str]]:
+    """Decide what to upload, delete and report as new.
+
+    Returns (to_upload, to_delete, new_files). Files currently ignored by
+    .uploadignore are never deleted, even if they vanished locally.
+    """
+    remote = manifest or {}
+    to_upload: list[str] = []
+    new_files: set[str] = set()
+    for rel, digest in local_hashes.items():
+        if remote.get(rel) != digest:
+            to_upload.append(rel)
+            if rel not in remote:
+                new_files.add(rel)
+
+    to_delete = [rel for rel in remote if rel not in local_hashes and not is_ignored(rel, rules)]
+    return to_upload, to_delete, new_files
+
+
+def remove_empty_dirs(ftp: FTP, remote: str) -> None:
+    """Best-effort removal of empty parent directories for a deleted file."""
+    parent = str(Path(remote).parent).replace("\\", "/")
+    parts = [p for p in parent.split("/") if p and p != "."]
+    while parts:
+        path = "/".join(parts)
+        try:
+            ftp.rmd(path)
+        except (error_perm, error_temp, error_proto, OSError):
+            break
+        parts.pop()
+
+
 def ensure_dir(ftp: FTP, remote_dir: str) -> None:
     parts = [p for p in remote_dir.replace("\\", "/").split("/") if p and p != "."]
     path = ""
@@ -109,7 +203,6 @@ def upload_file(ftp: FTP, local: Path, remote: str) -> None:
         ensure_dir(ftp, parent)
     with local.open("rb") as fh:
         ftp.storbinary(f"STOR {remote}", fh)
-    print(f"  ↑ {remote}")
 
 
 def require_ftp_config(env: dict[str, str]) -> tuple[str, str, str, int, str]:
@@ -211,7 +304,15 @@ def verify_write_access(ftp: FTP) -> None:
     print("FTP access OK (connect, login, write).")
 
 
+def delete_file(ftp: FTP, remote: str) -> None:
+    ftp.delete(remote)
+    print(f"  ↓ {remote}")
+    remove_empty_dirs(ftp, remote)
+
+
 def main() -> None:
+    force = "--force" in sys.argv
+
     env = load_env(ENV_PATH)
     host, user, password, port, remote_root = require_ftp_config(env)
 
@@ -220,20 +321,51 @@ def main() -> None:
     if not files:
         die("Nothing to upload (all files ignored?). Check .uploadignore")
 
+    local_hashes = {local.relative_to(ROOT).as_posix(): sha256_file(local) for local in files}
+
     ftp = connect_ftp(host, port, user, password)
     try:
         enter_remote_dir(ftp, remote_root)
         verify_write_access(ftp)
 
-        print(f"Uploading {len(files)} file(s)…")
-        for local in files:
+        manifest = None if force else read_remote_manifest(ftp, MANIFEST_NAME)
+        to_upload, to_delete, new_files = plan_sync(local_hashes, manifest, rules)
+        if force:
+            new_files = set()
+
+        if to_delete:
+            print(f"Removing {len(to_delete)} stale file(s)…")
+            for remote in sorted(to_delete):
+                try:
+                    delete_file(ftp, remote)
+                except (error_perm, error_temp, error_proto, OSError) as exc:
+                    die(f"Failed to delete {remote}: {exc}")
+
+        total = len(to_upload)
+        skipped = len(files) - total
+        print(
+            f"Uploading {total} of {len(files)} file(s)"
+            + (f" ({len(new_files)} new, {skipped} up to date)…" if not force else "…")
+        )
+        for rel in to_upload:
+            local = ROOT / rel
             remote = local.relative_to(ROOT).as_posix()
+            marker = "NEW " if rel in new_files else "   "
             try:
                 upload_file(ftp, local, remote)
+                print(f"  {marker}↑ {remote}")
             except error_perm as exc:
                 die(f"Upload denied for {remote}: {exc}")
             except (error_temp, error_proto, OSError) as exc:
                 die(f"Failed to upload {remote}: {exc}")
+
+        try:
+            write_remote_manifest(ftp, MANIFEST_NAME, local_hashes)
+        except (error_perm, error_temp, error_proto, OSError) as exc:
+            print(
+                f"warning: files uploaded, but could not write {MANIFEST_NAME}: {exc}",
+                file=sys.stderr,
+            )
 
         try:
             ftp.quit()
