@@ -1,6 +1,6 @@
 .PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format
 
-PORT ?= 8080
+PORT ?= 20000
 INSTANCE_HOST ?= 0.0.0.0
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
