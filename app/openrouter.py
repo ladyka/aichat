@@ -43,7 +43,9 @@ async def stream_chat_completions(payload: dict[str, Any]) -> AsyncIterator[byte
     it after those managers have exited.
     """
     async for chunk in llm_byte_stream(
-        "openrouter.chat.completions.stream", _stream_chat_completions_raw(payload)
+        "openrouter.chat.completions.stream",
+        _stream_chat_completions_raw(payload),
+        input_payload=payload,
     ):
         yield chunk
 

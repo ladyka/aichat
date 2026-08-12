@@ -78,7 +78,12 @@ def shutdown_telemetry() -> None:
     tracer = None
 
 
-async def llm_byte_stream(name: str, chunks: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
+async def llm_byte_stream(
+    name: str,
+    chunks: AsyncIterator[bytes],
+    *,
+    input_payload: dict[str, Any] | None = None,
+) -> AsyncIterator[bytes]:
     """Yield SSE/HTTP chunks under an LLM span that is not attached as current.
 
     ``start_as_current_span`` / ``@tracer.llm`` on an async generator attach a
@@ -86,24 +91,52 @@ async def llm_byte_stream(name: str, chunks: AsyncIterator[bytes]) -> AsyncItera
     closes. Chat peeks that generator inside ``chain_span``, then Starlette
     finishes it after the span manager has exited — OpenTelemetry then logs
     ``Failed to detach context``. ``start_span`` + ``span.end()`` records the
-    same LLM span without touching the context stack.
+    same LLM span without touching the context stack. Input/output and status
+    OK are set explicitly so Phoenix does not show an empty UNSET span.
     """
     if tracer is None:
         async for chunk in chunks:
             yield chunk
         return
+    from openinference.instrumentation._attributes import (
+        get_input_attributes,
+        get_llm_attributes,
+    )
     from openinference.semconv.trace import OpenInferenceSpanKindValues
+    from opentelemetry.trace import Status, StatusCode
 
+    attributes: dict[str, Any] = {}
+    if input_payload is not None:
+        attributes.update(get_input_attributes(input_payload))
+        attributes.update(
+            get_llm_attributes(
+                model_name=str(input_payload.get("model") or "") or None,
+                input_messages=(
+                    input_payload.get("messages")
+                    if isinstance(input_payload.get("messages"), list)
+                    else None
+                ),
+            )
+        )
     span = tracer.start_span(
         name,
         openinference_span_kind=OpenInferenceSpanKindValues.LLM,
+        attributes=attributes or None,
     )
+    collected = bytearray()
     try:
         async for chunk in chunks:
+            collected.extend(chunk)
             yield chunk
     except Exception as exc:
         span.record_exception(exc)
+        span.set_status(Status(StatusCode.ERROR, str(exc)))
         raise
+    else:
+        output = _sse_output_text(bytes(collected))
+        if output:
+            span.set_output(value=output)
+        span.set_status(Status(StatusCode.OK))
     finally:
         close = getattr(chunks, "aclose", None)
         if close is not None:
@@ -112,6 +145,38 @@ async def llm_byte_stream(name: str, chunks: AsyncIterator[bytes]) -> AsyncItera
             except Exception:
                 logger.debug("llm stream aclose failed", exc_info=True)
         span.end()
+
+
+def _sse_output_text(raw: bytes) -> str:
+    """Collect assistant text (and tool-call names) from an OpenAI-style SSE body."""
+    texts: list[str] = []
+    tool_bits: list[str] = []
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+        content = delta.get("content")
+        if isinstance(content, str) and content:
+            texts.append(content)
+        for call in delta.get("tool_calls") or []:
+            if not isinstance(call, dict):
+                continue
+            fn = call.get("function") or {}
+            if fn.get("name"):
+                tool_bits.append(str(fn["name"]))
+            if fn.get("arguments"):
+                tool_bits.append(str(fn["arguments"]))
+    if texts:
+        return "".join(texts)
+    return "".join(tool_bits)
 
 
 def llm_instrument(name: str) -> Callable[[F], F]:
@@ -153,6 +218,9 @@ def chain_span(name: str) -> Iterator[Any]:
         openinference_span_kind=OpenInferenceSpanKindValues.CHAIN,
     ) as span:
         yield span
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.OK))
 
 
 @contextmanager
@@ -182,6 +250,9 @@ def tool_span(name: str, arguments: str) -> Iterator[Any]:
         attributes=attributes,
     ) as span:
         yield span
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.OK))
 
 
 def tool_output(span: Any, value: str) -> None:

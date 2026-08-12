@@ -1151,20 +1151,33 @@ def test_llm_byte_stream_survives_parent_span_exit(monkeypatch, caplog):
     monkeypatch.setattr(telemetry_mod, "tracer", tracer)
 
     async def raw():
-        yield b"a"
-        yield b"b"
+        yield b'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
+        yield b"data: [DONE]\n\n"
 
     async def main():
-        gen = telemetry_mod.llm_byte_stream("test.llm", raw())
+        gen = telemetry_mod.llm_byte_stream(
+            "test.llm",
+            raw(),
+            input_payload={
+                "model": "openrouter/free",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
         with tracer.start_as_current_span("parent", openinference_span_kind="chain"):
-            assert await gen.__anext__() == b"a"
+            assert await gen.__anext__() == b'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
         rest = [chunk async for chunk in gen]
-        assert rest == [b"b"]
+        assert rest == [b"data: [DONE]\n\n"]
 
     with caplog.at_level(logging.ERROR):
         asyncio.run(main())
     provider.force_flush()
     assert "Failed to detach context" not in caplog.text
-    names = {span.name for span in exporter.get_finished_spans()}
-    assert "test.llm" in names
-    assert "parent" in names
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    assert "test.llm" in spans
+    assert "parent" in spans
+    llm = spans["test.llm"]
+    from opentelemetry.trace import StatusCode
+
+    assert llm.status.status_code == StatusCode.OK
+    assert llm.attributes["output.value"] == "Hi"
+    assert "hi" in str(llm.attributes.get("input.value", ""))
