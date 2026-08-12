@@ -1,4 +1,8 @@
-import type { ChatModelAdapter, ThreadMessage } from "@assistant-ui/react";
+import type {
+  ChatModelAdapter,
+  ThreadAssistantMessagePart,
+  ThreadMessage,
+} from "@assistant-ui/react";
 import { fetchSettings } from "@/lib/api";
 
 type Location = { lat: number; lon: number };
@@ -103,9 +107,28 @@ type PostOptions = {
   location?: Location | null;
 };
 
+function errorMessage(raw: unknown): string {
+  if (typeof raw === "string") return raw;
+  if (raw && typeof raw === "object" && "message" in raw) {
+    return String((raw as { message: unknown }).message);
+  }
+  if (raw && typeof raw === "object") return JSON.stringify(raw);
+  return String(raw);
+}
+
+function buildParts(
+  reasoning: string,
+  text: string,
+): ThreadAssistantMessagePart[] {
+  const content: ThreadAssistantMessagePart[] = [];
+  if (reasoning) content.push({ type: "reasoning" as const, text: reasoning });
+  if (text) content.push({ type: "text" as const, text });
+  return content;
+}
+
 async function* postAndStream(
   options: PostOptions,
-): AsyncGenerator<{ content: { type: "text"; text: string }[] }> {
+): AsyncGenerator<{ content: ThreadAssistantMessagePart[] }> {
   const { model, conversationId, location, history, abortSignal, state } = options;
   const res = await fetch("/api/chat", {
     method: "POST",
@@ -140,6 +163,8 @@ async function* postAndStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let text = "";
+  let reasoning = "";
+  let failed: Error | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -163,16 +188,32 @@ async function* postAndStream(
         state.locationRequest = obj as LocationRequestEvent;
         continue;
       }
-      const delta =
-        (obj?.choices as { delta?: { content?: unknown } }[] | undefined)?.[0]?.delta?.content;
-      if (typeof delta === "string" && delta) {
-        text += delta;
-        yield { content: [{ type: "text" as const, text }] };
+      if (obj?.error != null) {
+        failed = new Error(errorMessage(obj.error));
+        continue;
+      }
+      const delta = (obj?.choices as { delta?: Record<string, unknown> }[] | undefined)?.[0]
+        ?.delta;
+      if (!delta) continue;
+      const contentDelta = delta.content;
+      if (typeof contentDelta === "string" && contentDelta) {
+        text += contentDelta;
+      }
+      const reasoningDelta =
+        typeof delta.reasoning === "string"
+          ? delta.reasoning
+          : typeof delta.reasoning_content === "string"
+            ? delta.reasoning_content
+            : undefined;
+      if (reasoningDelta) reasoning += reasoningDelta;
+      if (text || reasoning) {
+        yield { content: buildParts(reasoning, text) };
       }
     }
   }
 
-  if (!text && !state.locationRequest) {
+  if (failed) throw failed;
+  if (!text && !reasoning && !state.locationRequest) {
     yield { content: [{ type: "text" as const, text: "" }] };
   }
 }

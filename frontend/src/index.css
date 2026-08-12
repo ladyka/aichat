@@ -173,6 +173,60 @@ body,
   border-radius: 10px;
 }
 
+.msg-reasoning {
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--chat-line);
+  border-left: 3px solid var(--chat-muted);
+  border-radius: 10px;
+  background: rgba(20, 32, 26, 0.04);
+}
+
+.msg-reasoning-summary {
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--chat-muted);
+  list-style: none;
+  user-select: none;
+}
+
+.msg-reasoning-summary::-webkit-details-marker {
+  display: none;
+}
+
+.msg-reasoning-summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.4rem;
+  transition: transform 0.15s ease;
+}
+
+.msg-reasoning[open] .msg-reasoning-summary::before {
+  transform: rotate(90deg);
+}
+
+.msg-reasoning-body {
+  padding: 0 0.7rem 0.7rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--chat-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-error {
+  margin-bottom: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--chat-danger) 35%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--chat-danger) 8%, transparent);
+  color: var(--chat-danger);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
 @media (max-width: 768px) {
   /* Prevent iOS Safari auto-zoom on focus */
   .aui-composer-input {
