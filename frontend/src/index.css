@@ -49,7 +49,7 @@ body,
 }
 
 .msg-bubble {
-  max-width: min(720px, 92%);
+  max-width: 100%;
   padding: 0.85rem 1.05rem;
   border-radius: 16px;
   line-height: 1.5;
