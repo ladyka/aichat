@@ -42,6 +42,7 @@ site/
 AGENTS.md
 README.md
 .cursor/
+.coverage
 
 # Frontend source/tooling; upload built assets only
 frontend/node_modules/
