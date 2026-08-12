@@ -18,6 +18,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import Download
+from app.telemetry import tool_output, tool_span
 
 logger = logging.getLogger("aichat.tools")
 
@@ -223,10 +224,17 @@ def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
 async def call_tool(name: str, arguments: str, user: Any = None, db: Any = None) -> str:
     """Исполнить инструмент и вернуть строковый результат для role:tool.
 
-    `get_user_location` исполняется не здесь: он запрашивает данные у браузера,
-    поэтому маршрут обрабатывает его отдельно (см. app/routes/api.py).
-    `download_file` требует идентифицированного пользователя (`user`) и сессии БД (`db`).
+    Исполнение обёрнуто в OpenInference TOOL span (имя, аргументы и результат
+    видны в Phoenix), когда трассировка включена.
     """
+    with tool_span(name, arguments) as span:
+        result = await _call_tool_impl(name, arguments, user=user, db=db)
+        tool_output(span, result)
+        return result
+
+
+async def _call_tool_impl(name: str, arguments: str, user: Any = None, db: Any = None) -> str:
+    """Реализация инструментов; см. :func:`call_tool`."""
     if name == "get_user_location":
         return json.dumps(
             {"error": "Местоположение запрашивается у пользователя на клиенте."},

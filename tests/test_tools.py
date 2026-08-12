@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 
@@ -986,3 +987,134 @@ def test_stream_download_tool_loop(client, mock_models, monkeypatch):
     assert roles == ["user", "assistant", "tool"]
     tool_msg = plan.stream_payloads[1]["messages"][2]
     assert json.loads(tool_msg["content"])["filename"] == "page.txt"
+
+
+def test_call_tool_emits_otel_tool_span(monkeypatch):
+    """call_tool records an OpenInference TOOL span with name/input/output."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+    from app.tools import call_tool
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+    try:
+        result = asyncio.run(call_tool("get_current_datetime", '{"timezone": null}'))
+    finally:
+        monkeypatch.setattr(telemetry_mod, "tracer", None)
+    provider.force_flush()
+
+    assert json.loads(result)["date"]
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    attrs = span.attributes
+    assert span.name == "get_current_datetime"
+    assert attrs["openinference.span.kind"] == "TOOL"
+    assert attrs["tool.name"] == "get_current_datetime"
+    assert '"arguments": "{\\"timezone\\": null}"' in attrs["input.value"]
+    assert attrs["input.mime_type"] == "application/json"
+    assert json.loads(attrs["output.value"])["date"]
+    assert attrs["output.mime_type"] == "text/plain"
+
+
+def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
+    """The /api/chat tool loop nests tool spans under a CHAIN span."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    _auth(client)
+    plan = StreamPlan(
+        stream_responses=[
+            _sse_tool_call("get_current_datetime", "{}", "call_dt"),
+            _sse_text("Готово"),
+        ],
+    )
+    _patch(monkeypatch, plan, _fake_weather)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "model": "default",
+            "stream": True,
+            "conversation_id": "conv-sess-1",
+            "messages": [{"role": "user", "content": "Который час?"}],
+        },
+    )
+    provider.force_flush()
+
+    assert response.status_code == 200
+    assert "Готово" in response.text
+
+    spans = exporter.get_finished_spans()
+    by_kind: dict[str, list] = {}
+    for s in spans:
+        by_kind.setdefault(s.attributes.get("openinference.span.kind"), []).append(s)
+    assert set(by_kind) == {"CHAIN", "TOOL"}
+    (chain,) = by_kind["CHAIN"]
+    (tool,) = by_kind["TOOL"]
+    assert chain.name == "chat.tool_loop"
+    assert chain.context.trace_id == tool.context.trace_id
+    assert tool.parent.span_id == chain.context.span_id
+    assert tool.attributes["session.id"] == "conv-sess-1"
+    assert chain.attributes["session.id"] == "conv-sess-1"
+    assert chain.attributes["user.id"] == _USER_ID
+
+
+def test_stream_in_session_stamps_llm_span(monkeypatch):
+    """Async streamed spans (created after the handler returns) carry session.id."""
+    import asyncio
+
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    sentinel = 0
+    _ot = []
+
+    async def traced_chunks():
+        nonlocal sentinel
+        with tracer.start_as_current_span(
+            "streamed.llm",
+            openinference_span_kind="LLM",
+        ):
+            sentinel += 1
+            yield b"data: x\n\n"
+
+    async def main():
+        async for _ in telemetry_mod.stream_in_session("sess-9", traced_chunks()):
+            pass
+
+    asyncio.run(main())
+    provider.force_flush()
+
+    assert sentinel == 1
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["session.id"] == "sess-9"
