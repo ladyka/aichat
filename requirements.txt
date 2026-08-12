@@ -1,22 +1,36 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-jinja2>=3.1.4
-python-multipart>=0.0.12
-httpx2>=2.0.0
-sqlalchemy>=2.0.36
-pymysql>=1.1.1
-cryptography>=43.0.0
-passlib[bcrypt]>=1.7.4
-bcrypt>=4.0.1,<4.1
-python-dotenv>=1.0.1
-itsdangerous>=2.2.0
-PyJWT[crypto]>=2.8.0
-arize-otel>=0.13.0
-openinference-instrumentation>=0.1.57
-newrelic>=13.0.0
-markdown>=3.6
-newrelic>=13.4.0
+# --- Веб-фреймворк и сервер ---
+fastapi>=0.115.0                 # web-фреймворк: API-роуты (/api/*, /v1/*), Jinja-страницы, static
+uvicorn[standard]>=0.32.0        # ASGI-сервер (entrypoint server.py, `make run`)
 
-# Tests
-pytest>=8.0.0
-pytest-cov>=5.0.0
+# --- Шаблоны и формы ---
+jinja2>=3.1.4                    # шаблоны лендинга / auth / tokens / settings (templates/)
+python-multipart>=0.0.12         # парсинг form-data (логин/регистрация/tokens)
+
+# --- HTTP-клиент ---
+httpx2>=2.0.0                    # асинхронный HTTP-клиент: прокси к OpenRouter + download_file (app/tools.py)
+
+# --- База данных ---
+sqlalchemy>=2.0.36               # ORM: модели User/Conversation/Message/Download и т.д. (app/db.py)
+pymysql>=1.1.1                   # MySQL-драйвер для продакшена (mysql+pymysql:// в app/config.py)
+cryptography>=43.0.0             # подпись JWT (Apple private key) и auth MySQL 8 (caching_sha2_password)
+
+# --- Аутентификация ---
+passlib[bcrypt]>=1.7.4           # хеширование паролей (app/auth.py)
+bcrypt>=4.0.1,<4.1               # bcrypt-бэкенд для passlib (4.1+ ломает его детект)
+itsdangerous>=2.2.0              # подпись cookie-сессий (резерв; сессии пока на своих токенах в БД)
+PyJWT[crypto]>=2.8.0             # проверка id_token OAuth2/OIDC (Google, Apple) в app/oauth.py
+
+# --- Конфиг ---
+python-dotenv>=1.0.1             # загрузка секретов из .env (app/config.py, server.py)
+
+# --- Наблюдаемость ---
+arize-otel>=0.13.0               # Arize/Phoenix: OTLP-экспорт трассировок (app/telemetry.py)
+openinference-instrumentation>=0.1.57  # OITracer: инструментация LLM-вызовов (спаны модели)
+newrelic>=13.4.0                 # APM + авто-форвардинг логов (app/newrelic_telemetry.py)
+
+# --- Прочее ---
+markdown>=3.6                    # рендер markdown в шарах (app/routes/share.py)
+
+# --- Тесты ---
+pytest>=8.0.0                    # тест-раннер
+pytest-cov>=5.0.0                # замер покрытия (`make test-coverage`)

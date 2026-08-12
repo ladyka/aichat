@@ -146,3 +146,75 @@ describe("ChatModelAdapter Geolocation Flow", () => {
     expect(secondBody.location).toEqual({ lat: 40.7, lon: -74.0 });
   });
 });
+
+describe("ChatModelAdapter reasoning and errors", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    invalidateModelCache();
+    localStorage.clear();
+
+    fetchMock = vi.fn();
+    global.fetch = fetchMock as never;
+  });
+
+  const partsOf = async (
+    adapter: ReturnType<typeof createChatModelAdapter>,
+    messages: unknown[],
+  ): Promise<{ type: string; text: string }[][]> => {
+    const parts: { type: string; text: string }[][] = [];
+    for await (const res of adapter.run(runOptions(messages))) {
+      parts.push(res.content as never);
+    }
+    return parts;
+  };
+
+  it("should stream reasoning parts alongside text", async () => {
+    const adapter = createChatModelAdapter(() => "conv_123");
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(
+        sseResponse(
+          `data: ${JSON.stringify({ choices: [{ delta: { reasoning: "Сначала подумаю…" } }] })}`,
+          `data: ${JSON.stringify({ choices: [{ delta: { content: "Вот ответ" } }] })}`,
+        ),
+      );
+
+    const parts = await partsOf(adapter, [userMessage("hi")]);
+    const last = parts[parts.length - 1];
+
+    expect(last).toEqual([
+      { type: "reasoning", text: "Сначала подумаю…" },
+      { type: "text", text: "Вот ответ" },
+    ]);
+  });
+
+  it("should surface stream errors to the chat", async () => {
+    const adapter = createChatModelAdapter(() => "conv_123");
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(
+        sseResponse(`data: ${JSON.stringify({ error: { message: "upstream boom" } })}`),
+      );
+
+    await expect(collect(adapter, [userMessage("hi")])).rejects.toThrow(
+      "upstream boom",
+    );
+  });
+
+  it("should surface HTTP errors to the chat", async () => {
+    const adapter = createChatModelAdapter(() => "conv_123");
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: "Дневной лимит исчерпан" }), {
+          status: 429,
+        }),
+      );
+
+    await expect(collect(adapter, [userMessage("hi")])).rejects.toThrow(
+      "Дневной лимит исчерпан",
+    );
+  });
+});

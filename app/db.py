@@ -43,6 +43,7 @@ class User(Base):
     api_tokens: Mapped[list["ApiToken"]] = relationship(back_populates="user")
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
     oauth_identities: Mapped[list["OAuthIdentity"]] = relationship(back_populates="user")
+    downloads: Mapped[list["Download"]] = relationship(back_populates="user")
 
 
 class OAuthIdentity(Base):
@@ -179,6 +180,26 @@ class ShareAccess(Base):
     )
 
     share: Mapped[ShareLink] = relationship(back_populates="accesses")
+
+
+class Download(Base):
+    """A URL downloaded by the download_file tool for a user (dedup per user+url)."""
+
+    __tablename__ = "downloads"
+    __table_args__ = (UniqueConstraint("user_id", "url_hash", name="uq_download_user_url"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    url_hash: Mapped[str] = mapped_column(String(64))
+    filename: Mapped[str] = mapped_column(String(255))
+    file_path: Mapped[str] = mapped_column(String(1024))
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship(back_populates="downloads")
 
 
 class UsageLog(Base):

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import contextmanager, nullcontext
 from typing import Any, TypeVar
 
 from app.config import get_settings
@@ -96,3 +98,96 @@ def chain_instrument(name: str) -> Callable[[F], F]:
         return tracer.chain(name=name)(fn)  # type: ignore[no-any-return]
 
     return decorator
+
+
+@contextmanager
+def chain_span(name: str) -> Iterator[Any]:
+    """Open an OpenInference CHAIN span bound to the current context (or no-op).
+
+    Yields the span, or ``None`` when tracing is disabled. Child spans created
+    while it is active (llm/tool spans) are nested under it.
+    """
+    if tracer is None:
+        yield None
+        return
+    from openinference.semconv.trace import OpenInferenceSpanKindValues
+
+    with tracer.start_as_current_span(
+        name,
+        openinference_span_kind=OpenInferenceSpanKindValues.CHAIN,
+    ) as span:
+        yield span
+
+
+@contextmanager
+def tool_span(name: str, arguments: str) -> Iterator[Any]:
+    """Open an OpenInference TOOL span for one tool call (or no-op).
+
+    Yields the span, or ``None`` when tracing is disabled. Records the tool
+    name and its JSON arguments as span attributes; the caller reports the
+    result via :func:`tool_output`.
+    """
+    if tracer is None:
+        yield None
+        return
+    from openinference.semconv.trace import OpenInferenceSpanKindValues, SpanAttributes
+
+    attributes = {
+        SpanAttributes.TOOL_NAME: name,
+        SpanAttributes.INPUT_MIME_TYPE: "application/json",
+        SpanAttributes.INPUT_VALUE: json.dumps(
+            {"name": name, "arguments": arguments},
+            ensure_ascii=False,
+        ),
+    }
+    with tracer.start_as_current_span(
+        name,
+        openinference_span_kind=OpenInferenceSpanKindValues.TOOL,
+        attributes=attributes,
+    ) as span:
+        yield span
+
+
+def tool_output(span: Any, value: str) -> None:
+    """Attach the tool result to a TOOL span opened by :func:`tool_span`."""
+    if span is None:
+        return
+    from openinference.semconv.trace import SpanAttributes
+
+    span.set_attribute(SpanAttributes.OUTPUT_VALUE, value)
+    span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "text/plain")
+
+
+def request_context(user_id: str, session_id: str) -> Any:
+    """OpenInference context that stamps ``user.id`` and ``session.id`` onto spans.
+
+    Open it at the request boundary: every span created while it is active
+    (llm/tool/chain) carries the attributes, which groups all turns of one
+    conversation into a single session in Arize AX. No-op when tracing is off.
+    """
+    if tracer is None:
+        return nullcontext()
+    from openinference.instrumentation import using_attributes
+
+    return using_attributes(user_id=user_id, session_id=session_id)
+
+
+async def stream_in_session(
+    session_id: str,
+    chunks: AsyncIterator[bytes],
+) -> AsyncIterator[bytes]:
+    """Iterate an SSE byte stream with ``session.id`` active in the context.
+
+    Async spans are created when a generator is first advanced, which happens
+    after the request handler returns (during response streaming). Keeping the
+    session context across the stream ensures those spans carry ``session.id``.
+    """
+    if tracer is None:
+        async for chunk in chunks:
+            yield chunk
+        return
+    from openinference.instrumentation import using_session
+
+    with using_session(session_id):
+        async for chunk in chunks:
+            yield chunk

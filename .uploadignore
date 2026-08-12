@@ -22,6 +22,7 @@ __pycache__/
 *.pyc
 aichat.db
 *.db
+data/
 
 # OS / editor junk
 .DS_Store
@@ -41,6 +42,7 @@ site/
 AGENTS.md
 README.md
 .cursor/
+.coverage
 
 # Frontend source/tooling; upload built assets only
 frontend/node_modules/

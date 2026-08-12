@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
@@ -33,12 +34,10 @@ logger = logging.getLogger("aichat.completions")
 MAX_TOOL_STEPS = 5
 
 
-def _trace_user(user: User):
+def _trace_user(user: User, session_id: str):
     if telemetry_mod.tracer is None:
         return nullcontext()
-    from openinference.instrumentation import using_attributes
-
-    return using_attributes(user_id=str(user.id))
+    return telemetry_mod.request_context(str(user.id), session_id)
 
 
 def _normalize_public_model(model: str | None) -> str:
@@ -239,7 +238,10 @@ async def _tool_chat_response(
                     result = json.dumps(location, ensure_ascii=False)
                 else:
                     result = await call_tool(
-                        call["function"]["name"], call["function"]["arguments"]
+                        call["function"]["name"],
+                        call["function"]["arguments"],
+                        user=user,
+                        db=db,
                     )
                 messages.append(
                     {
@@ -296,7 +298,7 @@ async def _tool_chat_response(
             if call["name"] == "get_user_location":
                 result = json.dumps(location, ensure_ascii=False)
             else:
-                result = await call_tool(call["name"], call["arguments"])
+                result = await call_tool(call["name"], call["arguments"], user=user, db=db)
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
         payload = {**payload, "messages": messages, "stream": True}
@@ -427,11 +429,23 @@ async def api_models(request: Request, db: Session = Depends(get_db)):
 
 
 async def _proxy(user: User, body: dict[str, Any], source: str, db: Session):
-    with _trace_user(user):
-        return await _proxy_inner(user, body, source, db)
+    conversation_id = body.get("conversation_id")
+    session_id = (
+        conversation_id.strip()
+        if isinstance(conversation_id, str) and conversation_id.strip()
+        else uuid4().hex
+    )
+    with _trace_user(user, session_id):
+        return await _proxy_inner(user, body, source, db, session_id)
 
 
-async def _proxy_inner(user: User, body: dict[str, Any], source: str, db: Session):
+async def _proxy_inner(
+    user: User,
+    body: dict[str, Any],
+    source: str,
+    db: Session,
+    session_id: str,
+):
     # Prefer explicit model; UI chat falls back to user preference.
     if source == "chat" and not (body.get("model") or "").strip():
         preferred = (getattr(user, "preferred_model", None) or "").strip()
@@ -459,11 +473,16 @@ async def _proxy_inner(user: User, body: dict[str, Any], source: str, db: Sessio
 
     # Internal chat: run the tool loop server-side, hand back the final text.
     if source == "chat" and payload.get("tools"):
-        return await _tool_chat_response(public_model, payload, source, db, user, known_location)
+        with telemetry_mod.chain_span("chat.tool_loop"):
+            return await _tool_chat_response(
+                public_model, payload, source, db, user, known_location
+            )
 
     if payload.get("stream"):
         return StreamingResponse(
-            _public_event_stream(payload, public_model),
+            telemetry_mod.stream_in_session(
+                session_id, _public_event_stream(payload, public_model)
+            ),
             media_type="text/event-stream",
         )
 

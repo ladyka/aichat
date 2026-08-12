@@ -3,6 +3,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAuiState,
+  type ReasoningMessagePartProps,
   type TextMessagePartProps,
 } from "@assistant-ui/react";
 import ReactMarkdown from "react-markdown";
@@ -26,11 +27,43 @@ function MarkdownText({ text }: TextMessagePartProps) {
   );
 }
 
+function ReasoningText({ text }: ReasoningMessagePartProps) {
+  return (
+    <details className="msg-reasoning">
+      <summary className="msg-reasoning-summary">Рассуждение</summary>
+      <div className="msg-reasoning-body">{text}</div>
+    </details>
+  );
+}
+
+function MessageErrorText() {
+  const error = useAuiState((s) => {
+    const status = s.message.status;
+    if (status?.type === "incomplete" && status.reason === "error") {
+      return status.error;
+    }
+    return null;
+  });
+  if (!error) return null;
+  const message =
+    typeof error === "string"
+      ? error
+      : error && typeof error === "object" && "message" in error
+        ? String((error as { message: unknown }).message)
+        : "Произошла неизвестная ошибка";
+  return <div className="msg-error">Не удалось получить ответ: {message}</div>;
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="flex w-full justify-start">
       <div className="msg-bubble assistant">
-        <MessagePrimitive.Content components={{ Text: MarkdownText }} />
+        <MessagePrimitive.Error>
+          <MessageErrorText />
+        </MessagePrimitive.Error>
+        <MessagePrimitive.Content
+          components={{ Text: MarkdownText, Reasoning: ReasoningText }}
+        />
       </div>
     </MessagePrimitive.Root>
   );

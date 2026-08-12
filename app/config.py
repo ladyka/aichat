@@ -46,6 +46,10 @@ class Settings:
         self.pzz_enabled = _flag(_env("PZZ_ENABLED", "1"), default=True)
         self.pzz_orders_enabled = _flag(_env("PZZ_ORDERS_ENABLED", "1"), default=True)
 
+        # Download tool (see app/tools.py): per-user storage + hard size cap.
+        self.downloads_root = ROOT / "data" / "customers"
+        self.downloads_max_bytes = int(_env("DOWNLOADS_MAX_BYTES", "2097152") or "2097152")
+
         # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
         # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com
         self.public_base_url = (_env("PUBLIC_BASE_URL", "") or "").rstrip("/")

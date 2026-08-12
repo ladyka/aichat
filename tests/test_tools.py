@@ -1,5 +1,8 @@
+import asyncio
 import json
 import uuid
+
+import pytest
 
 from app.config import get_settings
 from app.tools import call_tool, enabled_tools, extract_tool_calls
@@ -103,8 +106,14 @@ def _tool_message(name="get_weather", arguments='{"city": "Minsk"}', call_id="ca
 def test_enabled_tools_without_key(monkeypatch):
     settings = get_settings()
     settings.openweather_api_key = ""
-    monkeypatch.setattr(settings, "pzz_enabled", False)
-    assert enabled_tools() == []
+    monkeypatch.setattr(settings, "pzz_enabled", True)
+    assert [t["function"]["name"] for t in enabled_tools()] == [
+        "get_current_datetime",
+        "download_file",
+        "pzz_search_menu",
+        "pzz_lookup_address",
+        "pzz_place_order",
+    ]
 
 
 def test_enabled_tools_with_key(monkeypatch):
@@ -113,6 +122,8 @@ def test_enabled_tools_with_key(monkeypatch):
     monkeypatch.setattr(settings, "pzz_enabled", True)
     tools = enabled_tools()
     assert [t["function"]["name"] for t in tools] == [
+        "get_current_datetime",
+        "download_file",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",
@@ -145,6 +156,46 @@ def test_call_tool_unknown():
 
     result = json.loads(asyncio.run(call_tool("bogus", "{}")))
     assert result["error"]
+
+
+def test_call_tool_current_datetime():
+    import asyncio
+
+    result = json.loads(asyncio.run(call_tool("get_current_datetime", "{}")))
+    assert result["date"]
+    assert result["time"]
+    assert result["weekday"]
+    assert result["timezone"]
+    assert len(result["date"]) == 10
+    assert len(result["time"]) == 8
+
+
+def test_call_tool_current_datetime_with_timezone():
+    import asyncio
+
+    result = json.loads(
+        asyncio.run(call_tool("get_current_datetime", '{"timezone": "Europe/Minsk"}'))
+    )
+    assert result["timezone"] == "Europe/Minsk"
+    assert result["date"]
+    assert result["time"]
+
+
+def test_call_tool_current_datetime_bad_timezone():
+    import asyncio
+
+    result = json.loads(
+        asyncio.run(call_tool("get_current_datetime", '{"timezone": "No/SuchZone"}'))
+    )
+    assert "часовой пояс" in result["error"]
+
+
+def test_call_tool_current_datetime_invalid_json():
+    import asyncio
+
+    result = json.loads(asyncio.run(call_tool("get_current_datetime", "not-json")))
+    assert result["date"]
+    assert result["time"]
 
 
 class FakeWeatherResponse:
@@ -428,9 +479,15 @@ def test_stream_plain_text_no_extra_call(client, mock_models, monkeypatch):
     assert "Привет" in response.text
     assert plan.stream_calls == 1
     assert plan.chat_calls == 0
-    assert plan.stream_payloads[0]["tools"][0]["function"]["name"] == "pzz_search_menu"
-    names = [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]]
-    assert "get_weather" in names
+    assert [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]] == [
+        "get_current_datetime",
+        "download_file",
+        "pzz_search_menu",
+        "pzz_lookup_address",
+        "pzz_place_order",
+        "get_weather",
+        "get_user_location",
+    ]
 
 
 def test_stream_tool_loop(client, mock_models, monkeypatch):
@@ -497,8 +554,8 @@ def test_non_stream_tool_loop(client, mock_models, monkeypatch):
     assert roles == ["user", "assistant", "tool"]
 
 
-def test_no_tools_without_key(client, mock_models, monkeypatch):
-    """Without weather key and with pzz off, no tools are advertised."""
+def test_datetime_advertised_without_weather_key(client, mock_models, monkeypatch):
+    """Without OPENWEATHER_API_KEY the datetime tool is still advertised, weather is not."""
     _auth(client)
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "")
@@ -515,7 +572,9 @@ def test_no_tools_without_key(client, mock_models, monkeypatch):
         },
     )
     assert response.status_code == 200
-    assert "tools" not in plan.stream_payloads[0]
+    tools = [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]]
+    assert "get_current_datetime" in tools
+    assert "get_weather" not in tools
 
 
 def test_v1_proxies_tools(client, mock_models, monkeypatch, api_key):
@@ -542,3 +601,531 @@ def test_v1_proxies_tools(client, mock_models, monkeypatch, api_key):
     )
     assert response.status_code == 200
     assert plan.chat_payloads[0]["tools"][0]["function"]["name"] == "x"
+
+
+# --- download_file tool -------------------------------------------------------
+
+
+class FakeUrl:
+    def __init__(self, url):
+        self._url = url
+
+    def join(self, other):
+        from urllib.parse import urljoin
+
+        return urljoin(self._url, other)
+
+    def __str__(self):
+        return self._url
+
+
+class FakeDownloadResponse:
+    """Response-like object for app.tools.httpx.AsyncClient().stream(...)."""
+
+    def __init__(self, url, status_code=200, headers=None, body=b""):
+        self.url = FakeUrl(url)
+        self.status_code = status_code
+        self.headers = headers or {}
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+        self._body = body
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def aiter_bytes(self):
+        yield self._body
+
+
+class FakeDownloadClient:
+    def __init__(self, plan):
+        self.plan = list(plan)
+        self.gets = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    def stream(self, method, url):
+        self.gets.append((method, url))
+        return self.plan.pop(0)
+
+
+def _resolve_fake(mapping, default=("93.184.216.34",)):
+    def fake_resolve(host):
+        return list(mapping.get(host, default))
+
+    return fake_resolve
+
+
+def _make_user(db):
+    from datetime import datetime, timezone
+
+    from app.db import User
+
+    user = User(
+        email=f"dl-{uuid.uuid4().hex[:8]}@example.com",
+        password_hash="x",
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _download_ctx(monkeypatch, tmp_path, resolve, plan=()):
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "downloads_root", tmp_path)
+    monkeypatch.setattr("app.tools._resolve_host", resolve)
+    client = FakeDownloadClient(plan)
+    monkeypatch.setattr("app.tools.httpx.AsyncClient", lambda *a, **kw: client)
+    return client
+
+
+def _run_download(arguments, user, db):
+    import asyncio
+
+    return json.loads(asyncio.run(call_tool("download_file", arguments, user=user, db=db)))
+
+
+def _downloaded_files(root):
+    return [p for p in root.rglob("*") if p.is_file()]
+
+
+def test_download_success(monkeypatch, db, tmp_path):
+    client = _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/page.txt",
+                headers={"content-type": "text/plain; charset=utf-8"},
+                body="Привет, мир!",
+            )
+        ],
+    )
+    user = _make_user(db)
+
+    result = _run_download('{"url": "https://example.com/page.txt"}', user, db)
+    assert result["content"] == "Привет, мир!"
+    assert result["filename"] == "page.txt"
+    assert result["content_type"] == "text/plain"
+    assert result["size_bytes"] == len("Привет, мир!".encode("utf-8"))
+    assert result["truncated"] is False
+    assert client.gets == [("GET", "https://example.com/page.txt")]
+
+    files = _downloaded_files(tmp_path)
+    assert len(files) == 1
+    assert files[0].read_bytes() == "Привет, мир!".encode("utf-8")
+    assert ".." not in str(files[0].relative_to(tmp_path))
+
+
+def test_download_missing_url(monkeypatch, db, tmp_path):
+    _download_ctx(monkeypatch, tmp_path, _resolve_fake({}))
+    user = _make_user(db)
+    result = _run_download("{}", user, db)
+    assert "url" in result["error"]
+
+
+def test_download_without_user_or_db(monkeypatch, tmp_path):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "downloads_root", tmp_path)
+    result = _run_download('{"url": "https://example.com/x"}', None, None)
+    assert "недоступно" in result["error"]
+
+
+def test_download_dedup_no_second_fetch(monkeypatch, db, tmp_path):
+    client = _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/page.txt",
+                headers={"content-type": "text/plain"},
+                body="hello",
+            )
+        ],
+    )
+    user = _make_user(db)
+
+    first = _run_download('{"url": "https://example.com/page.txt"}', user, db)
+    assert first["content"] == "hello"
+
+    monkeypatch.setattr(
+        "app.tools.httpx.AsyncClient",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("cached URL must not refetch")),
+    )
+    second = _run_download('{"url": "https://example.com/page.txt"}', user, db)
+    assert second["cached"] is True
+    assert second["content"] == "hello"
+    assert second["filename"] == "page.txt"
+    assert client.gets == [("GET", "https://example.com/page.txt")]
+
+
+def test_download_non_text_rejected(monkeypatch, db, tmp_path):
+    _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/image.png",
+                headers={"content-type": "image/png"},
+                body=b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
+            )
+        ],
+    )
+    user = _make_user(db)
+
+    result = _run_download('{"url": "https://example.com/image.png"}', user, db)
+    assert "не поддерживается" in result["error"]
+    assert _downloaded_files(tmp_path) == []
+
+
+def test_download_octet_stream_sniffed_as_text(monkeypatch, db, tmp_path):
+    _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/raw",
+                headers={"content-type": "application/octet-stream"},
+                body="just some text",
+            )
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/raw"}', user, db)
+    assert result["content"] == "just some text"
+    assert _downloaded_files(tmp_path)
+
+
+def test_download_size_limit_content_length(monkeypatch, db, tmp_path):
+    _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/big.bin",
+                headers={"content-type": "text/plain", "content-length": "99999999"},
+                body="small",
+            )
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/big.bin"}', user, db)
+    assert "превышает лимит" in result["error"]
+    assert _downloaded_files(tmp_path) == []
+
+
+def test_download_size_limit_stream(monkeypatch, db, tmp_path):
+    limit = get_settings().downloads_max_bytes
+    _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/stream",
+                headers={"content-type": "text/plain"},
+                body=b"x" * (limit + 1),
+            )
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/stream"}', user, db)
+    assert "превышает лимит" in result["error"]
+    assert _downloaded_files(tmp_path) == []
+
+
+def test_download_truncated_for_model(monkeypatch, db, tmp_path):
+    from app.tools import _MAX_CONTENT_CHARS
+
+    _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/long.txt",
+                headers={"content-type": "text/plain"},
+                body="a" * (_MAX_CONTENT_CHARS * 2),
+            )
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/long.txt"}', user, db)
+    assert result["truncated"] is True
+    assert len(result["content"]) == _MAX_CONTENT_CHARS
+
+
+def test_download_filename_sanitized(monkeypatch, db, tmp_path):
+    _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/..%2F..%2Fetc%2Fpasswd",
+                headers={"content-type": "text/plain"},
+                body="root:x:0:0",
+            )
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/..%2F..%2Fetc%2Fpasswd"}', user, db)
+    assert result["filename"] == "passwd.txt"
+    files = _downloaded_files(tmp_path)
+    assert len(files) == 1
+    assert files[0].name == "passwd.txt"
+
+
+def test_download_follows_public_redirect(monkeypatch, db, tmp_path):
+    client = _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/start",
+                status_code=302,
+                headers={"location": "https://example.com/real.txt"},
+            ),
+            FakeDownloadResponse(
+                "https://example.com/real.txt",
+                headers={"content-type": "text/plain"},
+                body="redirected",
+            ),
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/start"}', user, db)
+    assert result["content"] == "redirected"
+    assert result["url"] == "https://example.com/real.txt"
+    assert len(client.gets) == 2
+
+
+@pytest.mark.parametrize(
+    "ip_addr",
+    ["10.0.0.5", "127.0.0.1", "192.168.1.1", "169.254.0.1", "172.16.3.3", "::1"],
+)
+def test_download_ssrf_private_ip_blocked(monkeypatch, db, tmp_path, ip_addr):
+    client = _download_ctx(monkeypatch, tmp_path, _resolve_fake({"target.test": [ip_addr]}))
+    user = _make_user(db)
+    result = _run_download('{"url": "http://target.test/secret"}', user, db)
+    assert "запрещён" in result["error"]
+    assert client.gets == []
+
+
+def test_download_ssrf_ipv4_mapped_blocked(monkeypatch, db, tmp_path):
+    client = _download_ctx(
+        monkeypatch, tmp_path, _resolve_fake({"target.test": ["::ffff:10.0.0.1"]})
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "http://target.test/secret"}', user, db)
+    assert "запрещён" in result["error"]
+    assert client.gets == []
+
+
+def test_download_redirect_to_local_blocked(monkeypatch, db, tmp_path):
+    client = _download_ctx(
+        monkeypatch,
+        tmp_path,
+        _resolve_fake({"example.com": ["93.184.216.34"], "10.0.0.1": ["10.0.0.1"]}),
+        plan=[
+            FakeDownloadResponse(
+                "https://example.com/start",
+                status_code=302,
+                headers={"location": "http://10.0.0.1/secret"},
+            )
+        ],
+    )
+    user = _make_user(db)
+    result = _run_download('{"url": "https://example.com/start"}', user, db)
+    assert "запрещён" in result["error"]
+    assert len(client.gets) == 1
+
+
+def test_download_bad_scheme(monkeypatch, db, tmp_path):
+    _download_ctx(monkeypatch, tmp_path, _resolve_fake({}))
+    user = _make_user(db)
+    result = _run_download('{"url": "file:///etc/passwd"}', user, db)
+    assert "http/https" in result["error"]
+
+
+async def _fake_download(arguments, user=None, db=None):
+    return json.dumps(
+        {"filename": "page.txt", "content": "текст страницы", "size_bytes": 10},
+        ensure_ascii=False,
+    )
+
+
+def test_stream_download_tool_loop(client, mock_models, monkeypatch):
+    """download_file runs server-side through /api/chat and final text streams back."""
+    _auth(client)
+    plan = StreamPlan(
+        stream_responses=[
+            _sse_tool_call("download_file", '{"url": "https://example.com/x"}', "call_dl"),
+            _sse_text("Скачал страницу: текст страницы"),
+        ],
+    )
+    _patch(monkeypatch, plan, _fake_weather)
+    monkeypatch.setattr("app.tools._download_file", _fake_download)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "model": "default",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Что на этой странице?"}],
+        },
+    )
+    assert response.status_code == 200
+    assert "Скачал страницу" in response.text
+    assert plan.stream_calls == 2
+    roles = [m["role"] for m in plan.stream_payloads[1]["messages"]]
+    assert roles == ["user", "assistant", "tool"]
+    tool_msg = plan.stream_payloads[1]["messages"][2]
+    assert json.loads(tool_msg["content"])["filename"] == "page.txt"
+
+
+def test_call_tool_emits_otel_tool_span(monkeypatch):
+    """call_tool records an OpenInference TOOL span with name/input/output."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+    from app.tools import call_tool
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+    try:
+        result = asyncio.run(call_tool("get_current_datetime", '{"timezone": null}'))
+    finally:
+        monkeypatch.setattr(telemetry_mod, "tracer", None)
+    provider.force_flush()
+
+    assert json.loads(result)["date"]
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    span = spans[0]
+    attrs = span.attributes
+    assert span.name == "get_current_datetime"
+    assert attrs["openinference.span.kind"] == "TOOL"
+    assert attrs["tool.name"] == "get_current_datetime"
+    assert '"arguments": "{\\"timezone\\": null}"' in attrs["input.value"]
+    assert attrs["input.mime_type"] == "application/json"
+    assert json.loads(attrs["output.value"])["date"]
+    assert attrs["output.mime_type"] == "text/plain"
+
+
+def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
+    """The /api/chat tool loop nests tool spans under a CHAIN span."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    _auth(client)
+    plan = StreamPlan(
+        stream_responses=[
+            _sse_tool_call("get_current_datetime", "{}", "call_dt"),
+            _sse_text("Готово"),
+        ],
+    )
+    _patch(monkeypatch, plan, _fake_weather)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "model": "default",
+            "stream": True,
+            "conversation_id": "conv-sess-1",
+            "messages": [{"role": "user", "content": "Который час?"}],
+        },
+    )
+    provider.force_flush()
+
+    assert response.status_code == 200
+    assert "Готово" in response.text
+
+    spans = exporter.get_finished_spans()
+    by_kind: dict[str, list] = {}
+    for s in spans:
+        by_kind.setdefault(s.attributes.get("openinference.span.kind"), []).append(s)
+    assert set(by_kind) == {"CHAIN", "TOOL"}
+    (chain,) = by_kind["CHAIN"]
+    (tool,) = by_kind["TOOL"]
+    assert chain.name == "chat.tool_loop"
+    assert chain.context.trace_id == tool.context.trace_id
+    assert tool.parent.span_id == chain.context.span_id
+    assert tool.attributes["session.id"] == "conv-sess-1"
+    assert chain.attributes["session.id"] == "conv-sess-1"
+    assert chain.attributes["user.id"]
+
+
+def test_stream_in_session_stamps_llm_span(monkeypatch):
+    """Async streamed spans (created after the handler returns) carry session.id."""
+    import asyncio
+
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    sentinel = 0
+
+    async def traced_chunks():
+        nonlocal sentinel
+        with tracer.start_as_current_span(
+            "streamed.llm",
+            openinference_span_kind="llm",
+        ):
+            sentinel += 1
+            yield b"data: x\n\n"
+
+    async def main():
+        async for _ in telemetry_mod.stream_in_session("sess-9", traced_chunks()):
+            pass
+
+    asyncio.run(main())
+    provider.force_flush()
+
+    assert sentinel == 1
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].attributes["session.id"] == "sess-9"

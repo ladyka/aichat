@@ -1,5 +1,7 @@
+import logging
 import uuid
 
+from opentelemetry.context import attach, detach, get_current, set_value
 from sqlalchemy import select
 
 from app.db import ApiToken, ApiTokenUsage
@@ -33,6 +35,26 @@ async def fake_stream_completions(payload):
     ).encode("utf-8")
     yield chunk
     yield b"data: [DONE]\n\n"
+
+
+_OTEL_TEST_KEY = "test.aichat.otel"
+
+
+async def fake_stream_completions_with_otel_context(payload):
+    """Emulate the OpenInference llm wrapper: attach the OTel context token on
+    the first advance and detach it when the stream is exhausted."""
+    token = None
+    try:
+        chunk = (
+            'data: {"choices":[{"delta":{"content":"Привет"}}],"model":"openrouter/free"}\n\n'
+        ).encode("utf-8")
+        for _ in range(2):
+            if token is None:
+                token = attach(set_value(_OTEL_TEST_KEY, "v", get_current()))
+            yield chunk
+    finally:
+        if token is not None:
+            detach(token)
 
 
 def _patch_completions(monkeypatch):
@@ -78,6 +100,30 @@ def test_ui_chat_streams(client, mock_models, monkeypatch):
     )
     assert response.status_code == 200
     assert "Привет" in response.text
+
+
+def test_ui_chat_streaming_does_not_leak_otel_context(client, mock_models, monkeypatch, caplog):
+    """A stream generator whose OTel token is attached on the first advance (in
+    the request task, during the tool-loop peek) must be exhausted in the same
+    task. Starlette only keeps the stream in the request task when the ASGI spec
+    version is >= 2.4; otherwise it streams via an anyio task group in a
+    different context and detach() logs "Failed to detach context"."""
+    register(client, email())
+    monkeypatch.setattr(
+        "app.routes.api.stream_chat_completions",
+        fake_stream_completions_with_otel_context,
+    )
+    with caplog.at_level(logging.ERROR):
+        response = client.post(
+            "/api/chat",
+            json={
+                "model": "default",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        )
+    assert response.status_code == 200
+    assert "Failed to detach context" not in caplog.text
 
 
 def test_v1_completions_auth(client, mock_models):
