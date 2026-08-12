@@ -1034,7 +1034,7 @@ def test_call_tool_emits_otel_tool_span(monkeypatch):
     assert '"arguments": "{\\"timezone\\": null}"' in attrs["input.value"]
     assert attrs["input.mime_type"] == "application/json"
     assert json.loads(attrs["output.value"])["date"]
-    assert attrs["output.mime_type"] == "text/plain"
+    assert attrs["output.mime_type"] == "application/json"
 
 
 def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
@@ -1181,3 +1181,76 @@ def test_llm_byte_stream_survives_parent_span_exit(monkeypatch, caplog):
     assert llm.status.status_code == StatusCode.OK
     assert llm.attributes["output.value"] == "Hi"
     assert "hi" in str(llm.attributes.get("input.value", ""))
+
+
+def test_compact_tool_content_summarizes_pzz_menu():
+    from app.telemetry import compact_tool_content
+
+    raw = json.dumps(
+        {
+            "source": "pzz.by",
+            "query": "пепперони",
+            "count": 2,
+            "items": [
+                {
+                    "id": 1,
+                    "title": "Пепперони",
+                    "photo": "https://example.com/huge.jpg",
+                    "offers": [{"size": "big", "price_byn": 40.5}],
+                },
+                {"id": 2, "title": "Пепперони острая", "photo": "https://example.com/2.jpg"},
+            ],
+        },
+        ensure_ascii=False,
+    )
+    compact = json.loads(compact_tool_content(raw))
+    assert compact["source"] == "pzz.by"
+    assert compact["titles"] == ["Пепперони", "Пепперони острая"]
+    assert compact["count"] == 2
+    assert "photo" not in json.dumps(compact)
+
+
+def test_llm_byte_stream_records_tool_calls(monkeypatch):
+    import asyncio
+
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    chunks = _sse_tool_call("pzz_search_menu", '{"query": "пицца"}', "call_menu")
+
+    async def raw():
+        for chunk in chunks:
+            yield chunk
+
+    asyncio.run(
+        _aiter_all(
+            telemetry_mod.llm_byte_stream(
+                "test.llm",
+                raw(),
+                input_payload={"model": "x", "messages": [{"role": "user", "content": "меню"}]},
+            )
+        )
+    )
+    provider.force_flush()
+    llm = next(span for span in exporter.get_finished_spans() if span.name == "test.llm")
+    assert "pzz_search_menu" in llm.attributes["output.value"]
+    assert any(
+        value == "pzz_search_menu"
+        for key, value in llm.attributes.items()
+        if "tool_call" in key and "name" in key
+    )
+
+
+async def _aiter_all(gen):
+    async for _ in gen:
+        pass

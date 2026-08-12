@@ -107,14 +107,13 @@ async def llm_byte_stream(
 
     attributes: dict[str, Any] = {}
     if input_payload is not None:
-        attributes.update(get_input_attributes(input_payload))
+        traced = payload_for_trace(input_payload)
+        attributes.update(get_input_attributes(traced))
         attributes.update(
             get_llm_attributes(
-                model_name=str(input_payload.get("model") or "") or None,
+                model_name=str(traced.get("model") or "") or None,
                 input_messages=(
-                    input_payload.get("messages")
-                    if isinstance(input_payload.get("messages"), list)
-                    else None
+                    traced.get("messages") if isinstance(traced.get("messages"), list) else None
                 ),
             )
         )
@@ -133,9 +132,7 @@ async def llm_byte_stream(
         span.set_status(Status(StatusCode.ERROR, str(exc)))
         raise
     else:
-        output = _sse_output_text(bytes(collected))
-        if output:
-            span.set_output(value=output)
+        _record_llm_stream_output(span, bytes(collected))
         span.set_status(Status(StatusCode.OK))
     finally:
         close = getattr(chunks, "aclose", None)
@@ -148,9 +145,8 @@ async def llm_byte_stream(
 
 
 def _sse_output_text(raw: bytes) -> str:
-    """Collect assistant text (and tool-call names) from an OpenAI-style SSE body."""
+    """Collect assistant text from an OpenAI-style SSE body."""
     texts: list[str] = []
-    tool_bits: list[str] = []
     for line in raw.split(b"\n"):
         stripped = line.strip()
         if not stripped.startswith(b"data:"):
@@ -166,17 +162,125 @@ def _sse_output_text(raw: bytes) -> str:
         content = delta.get("content")
         if isinstance(content, str) and content:
             texts.append(content)
-        for call in delta.get("tool_calls") or []:
-            if not isinstance(call, dict):
+    return "".join(texts)
+
+
+def _sse_tool_calls(raw: bytes) -> list[dict[str, str]]:
+    """Assemble streamed tool_calls the same way as app.tools.extract_tool_calls."""
+    calls: dict[int, dict[str, str]] = {}
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        deltas = ((obj.get("choices") or [{}])[0].get("delta") or {}).get("tool_calls")
+        if not deltas:
+            continue
+        for delta in deltas:
+            if not isinstance(delta, dict):
                 continue
-            fn = call.get("function") or {}
+            index = int(delta.get("index", 0))
+            entry = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+            if delta.get("id"):
+                entry["id"] = str(delta["id"])
+            fn = delta.get("function") or {}
             if fn.get("name"):
-                tool_bits.append(str(fn["name"]))
+                entry["name"] += str(fn["name"])
             if fn.get("arguments"):
-                tool_bits.append(str(fn["arguments"]))
-    if texts:
-        return "".join(texts)
-    return "".join(tool_bits)
+                entry["arguments"] += str(fn["arguments"])
+    return [calls[index] for index in sorted(calls)]
+
+
+def _record_llm_stream_output(span: Any, raw: bytes) -> None:
+    """Write assistant text and/or tool_calls onto an LLM span for Phoenix."""
+    from openinference.instrumentation._attributes import get_llm_attributes
+
+    text = _sse_output_text(raw)
+    calls = _sse_tool_calls(raw)
+    if calls:
+        rendered = json.dumps(
+            [{"name": call["name"], "arguments": call["arguments"]} for call in calls],
+            ensure_ascii=False,
+        )
+        span.set_output(value=f"{text}\n{rendered}".strip() if text else rendered)
+        span.set_attributes(
+            get_llm_attributes(
+                output_messages=[
+                    {
+                        "role": "assistant",
+                        "content": text or None,
+                        "tool_calls": [
+                            {
+                                "id": call["id"],
+                                "function": {
+                                    "name": call["name"],
+                                    "arguments": call["arguments"],
+                                },
+                            }
+                            for call in calls
+                        ],
+                    }
+                ]
+            )
+        )
+        return
+    if text:
+        span.set_output(value=text)
+
+
+_TRACE_JSON_MAX = 8000
+
+
+def payload_for_trace(payload: dict[str, Any]) -> dict[str, Any]:
+    """Copy a chat payload, compacting tool results so OTLP attributes stay small."""
+    messages = []
+    for message in payload.get("messages") or []:
+        if not isinstance(message, dict):
+            continue
+        item: dict[str, Any] = {}
+        for key in ("role", "content", "tool_call_id", "tool_calls"):
+            if key in message:
+                item[key] = message[key]
+        if item.get("role") == "tool":
+            item["content"] = compact_tool_content(str(item.get("content") or ""))
+        messages.append(item)
+    return {"model": payload.get("model"), "messages": messages}
+
+
+def compact_tool_content(content: str) -> str:
+    """Keep pzz.by menu traces readable: titles + count, not photo URLs."""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return content[:_TRACE_JSON_MAX]
+    if not isinstance(data, dict):
+        dumped = json.dumps(data, ensure_ascii=False)
+        return dumped[:_TRACE_JSON_MAX]
+    items = data.get("items")
+    if data.get("source") == "pzz.by" and isinstance(items, list):
+        titles = [
+            str(item.get("title")) for item in items if isinstance(item, dict) and item.get("title")
+        ]
+        compact = {
+            "source": data.get("source"),
+            "query": data.get("query"),
+            "count": data.get("count", len(titles)),
+            "titles": titles,
+        }
+        if data.get("error"):
+            compact["error"] = data["error"]
+        if data.get("order_num"):
+            compact["order_num"] = data["order_num"]
+            compact["submitted"] = data.get("submitted")
+        return json.dumps(compact, ensure_ascii=False)
+    dumped = json.dumps(data, ensure_ascii=False)
+    return dumped[:_TRACE_JSON_MAX]
 
 
 def llm_instrument(name: str) -> Callable[[F], F]:
@@ -261,8 +365,8 @@ def tool_output(span: Any, value: str) -> None:
         return
     from openinference.semconv.trace import SpanAttributes
 
-    span.set_attribute(SpanAttributes.OUTPUT_VALUE, value)
-    span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "text/plain")
+    span.set_attribute(SpanAttributes.OUTPUT_VALUE, compact_tool_content(value))
+    span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "application/json")
 
 
 def request_context(user_id: str, session_id: str) -> Any:
