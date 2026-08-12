@@ -17,6 +17,12 @@ def _env(key: str, default: str | None = None) -> str | None:
     return value
 
 
+def _flag(value: str | None, default: bool = False) -> bool:
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @lru_cache
 def get_settings() -> "Settings":
     return Settings()
@@ -36,6 +42,9 @@ class Settings:
         self.max_tokens_per_user = int(_env("MAX_TOKENS_PER_USER", "10") or "10")
         self.share_ttl_days = int(_env("SHARE_TTL_DAYS", "30") or "30")
         self.openweather_api_key = _env("OPENWEATHER_API_KEY", "") or ""
+        # Пицца Лисицца (pzz.by): публичный каталог в чате. Заказы — через их SPA API.
+        self.pzz_enabled = _flag(_env("PZZ_ENABLED", "1"), default=True)
+        self.pzz_orders_enabled = _flag(_env("PZZ_ORDERS_ENABLED", "1"), default=True)
 
         # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
         # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com

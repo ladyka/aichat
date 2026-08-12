@@ -100,17 +100,25 @@ def _tool_message(name="get_weather", arguments='{"city": "Minsk"}', call_id="ca
     }
 
 
-def test_enabled_tools_without_key():
+def test_enabled_tools_without_key(monkeypatch):
     settings = get_settings()
     settings.openweather_api_key = ""
+    monkeypatch.setattr(settings, "pzz_enabled", False)
     assert enabled_tools() == []
 
 
 def test_enabled_tools_with_key(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "ow-test")
+    monkeypatch.setattr(settings, "pzz_enabled", True)
     tools = enabled_tools()
-    assert [t["function"]["name"] for t in tools] == ["get_weather", "get_user_location"]
+    assert [t["function"]["name"] for t in tools] == [
+        "pzz_search_menu",
+        "pzz_lookup_address",
+        "pzz_place_order",
+        "get_weather",
+        "get_user_location",
+    ]
 
 
 def test_extract_tool_calls_aggregates():
@@ -420,7 +428,9 @@ def test_stream_plain_text_no_extra_call(client, mock_models, monkeypatch):
     assert "Привет" in response.text
     assert plan.stream_calls == 1
     assert plan.chat_calls == 0
-    assert plan.stream_payloads[0]["tools"][0]["function"]["name"] == "get_weather"
+    assert plan.stream_payloads[0]["tools"][0]["function"]["name"] == "pzz_search_menu"
+    names = [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]]
+    assert "get_weather" in names
 
 
 def test_stream_tool_loop(client, mock_models, monkeypatch):
@@ -488,10 +498,11 @@ def test_non_stream_tool_loop(client, mock_models, monkeypatch):
 
 
 def test_no_tools_without_key(client, mock_models, monkeypatch):
-    """Without OPENWEATHER_API_KEY no tools are advertised to the model."""
+    """Without weather key and with pzz off, no tools are advertised."""
     _auth(client)
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "")
+    monkeypatch.setattr(settings, "pzz_enabled", False)
     plan = StreamPlan(stream_responses=[_sse_text("Привет")])
     _patch(monkeypatch, plan, _fake_weather)
 
