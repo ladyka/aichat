@@ -1129,3 +1129,42 @@ def test_stream_in_session_stamps_llm_span(monkeypatch):
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
     assert spans[0].attributes["session.id"] == "sess-9"
+
+
+def test_llm_byte_stream_survives_parent_span_exit(monkeypatch, caplog):
+    """Tool-loop peek starts the LLM stream under chain_span; finishing it after
+    that span exits must not log Failed to detach context."""
+    import asyncio
+    import logging
+
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    async def raw():
+        yield b"a"
+        yield b"b"
+
+    async def main():
+        gen = telemetry_mod.llm_byte_stream("test.llm", raw())
+        with tracer.start_as_current_span("parent", openinference_span_kind="chain"):
+            assert await gen.__anext__() == b"a"
+        rest = [chunk async for chunk in gen]
+        assert rest == [b"b"]
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(main())
+    provider.force_flush()
+    assert "Failed to detach context" not in caplog.text
+    names = {span.name for span in exporter.get_finished_spans()}
+    assert "test.llm" in names
+    assert "parent" in names

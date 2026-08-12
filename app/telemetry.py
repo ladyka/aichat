@@ -78,6 +78,42 @@ def shutdown_telemetry() -> None:
     tracer = None
 
 
+async def llm_byte_stream(name: str, chunks: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
+    """Yield SSE/HTTP chunks under an LLM span that is not attached as current.
+
+    ``start_as_current_span`` / ``@tracer.llm`` on an async generator attach a
+    ContextVar token on first ``__anext__`` and detach it when the generator
+    closes. Chat peeks that generator inside ``chain_span``, then Starlette
+    finishes it after the span manager has exited — OpenTelemetry then logs
+    ``Failed to detach context``. ``start_span`` + ``span.end()`` records the
+    same LLM span without touching the context stack.
+    """
+    if tracer is None:
+        async for chunk in chunks:
+            yield chunk
+        return
+    from openinference.semconv.trace import OpenInferenceSpanKindValues
+
+    span = tracer.start_span(
+        name,
+        openinference_span_kind=OpenInferenceSpanKindValues.LLM,
+    )
+    try:
+        async for chunk in chunks:
+            yield chunk
+    except Exception as exc:
+        span.record_exception(exc)
+        raise
+    finally:
+        close = getattr(chunks, "aclose", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                logger.debug("llm stream aclose failed", exc_info=True)
+        span.end()
+
+
 def llm_instrument(name: str) -> Callable[[F], F]:
     """Apply OITracer.llm when tracing is enabled; otherwise leave fn unchanged."""
 
@@ -181,6 +217,11 @@ async def stream_in_session(
     Async spans are created when a generator is first advanced, which happens
     after the request handler returns (during response streaming). Keeping the
     session context across the stream ensures those spans carry ``session.id``.
+
+    The inner iterator is closed *before* ``using_session`` exits so nested
+    span tokens detach in LIFO order. ``ValueError`` from a token created in
+    another asyncio task (uvicorn/New Relic body streaming) is swallowed —
+    the request already finished successfully.
     """
     if tracer is None:
         async for chunk in chunks:
@@ -188,6 +229,22 @@ async def stream_in_session(
         return
     from openinference.instrumentation import using_session
 
-    with using_session(session_id):
+    cm = using_session(session_id)
+    cm.__enter__()
+    try:
         async for chunk in chunks:
             yield chunk
+    finally:
+        close = getattr(chunks, "aclose", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                logger.debug("stream_in_session aclose failed", exc_info=True)
+        try:
+            cm.__exit__(None, None, None)
+        except ValueError:
+            logger.debug(
+                "opentelemetry context detach skipped (token from another task)",
+                exc_info=True,
+            )
