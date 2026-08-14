@@ -9,10 +9,55 @@ def email():
     return f"page-{uuid.uuid4().hex[:8]}@example.com"
 
 
-def test_landing(client):
+def test_privacy_and_terms_have_og_description(client):
+    privacy = client.get("/privacy")
+    assert privacy.status_code == 200
+    assert "Как aichat обрабатывает данные" in privacy.text
+    terms = client.get("/terms")
+    assert terms.status_code == 200
+    assert "Условия использования сервиса aichat" in terms.text
+
+
+def test_og_uses_public_base_url(client, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "public_base_url", "https://aichat.example.com")
+    response = client.get("/")
+    assert "https://aichat.example.com/static/og/share.png" in response.text
+    assert 'content="https://aichat.example.com/"' in response.text
     response = client.get("/")
     assert response.status_code == 200
     assert "aichat" in response.text
+    assert 'property="og:title"' in response.text
+    assert "Общайтесь с ИИ в приватном чате" in response.text
+    assert "/static/og/share.png" in response.text
+    assert 'property="og:type" content="website"' in response.text
+    assert 'property="og:url" content="http://testserver/"' in response.text
+
+
+def test_og_image_is_served(client):
+    response = client.get("/static/og/share.png")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/png")
+    assert len(response.content) > 1000
+
+
+def test_privacy_and_terms_have_og_description(client):
+    privacy = client.get("/privacy")
+    assert privacy.status_code == 200
+    assert "Как aichat обрабатывает данные" in privacy.text
+    terms = client.get("/terms")
+    assert terms.status_code == 200
+    assert "Условия использования сервиса aichat" in terms.text
+
+
+def test_og_uses_public_base_url(client, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "public_base_url", "https://aichat.example.com")
+    response = client.get("/")
+    assert "https://aichat.example.com/static/og/share.png" in response.text
+    assert 'content="https://aichat.example.com/"' in response.text
 
 
 def test_login_page(client):

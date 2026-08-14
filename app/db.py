@@ -175,6 +175,11 @@ class ShareAccess(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     share_id: Mapped[int] = mapped_column(ForeignKey("share_links.id"), index=True)
     ip: Mapped[str] = mapped_column(String(64))
+    visitor_kind: Mapped[str] = mapped_column(
+        String(16), default="human", server_default="human", index=True
+    )
+    visitor_label: Mapped[str] = mapped_column(String(40), default="", server_default="")
+    user_agent: Mapped[str] = mapped_column(String(512), default="", server_default="")
     accessed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -223,25 +228,50 @@ engine = create_engine(_settings.database_url, pool_pre_ping=True, connect_args=
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-def _ensure_user_preferred_model_column() -> None:
-    """Add preferred_model to existing DBs (create_all does not alter columns)."""
+def _ensure_column(table: str, name: str, ddl: str) -> None:
+    """Add a column to an existing table (create_all does not alter columns)."""
     from sqlalchemy import inspect, text
 
     insp = inspect(engine)
-    if "users" not in insp.get_table_names():
+    if table not in insp.get_table_names():
         return
-    cols = {c["name"] for c in insp.get_columns("users")}
-    if "preferred_model" in cols:
+    cols = {c["name"] for c in insp.get_columns(table)}
+    if name in cols:
         return
     with engine.begin() as conn:
-        conn.execute(
-            text("ALTER TABLE users ADD COLUMN preferred_model VARCHAR(120) DEFAULT 'default'")
-        )
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+
+
+def _ensure_user_preferred_model_column() -> None:
+    _ensure_column(
+        "users",
+        "preferred_model",
+        "preferred_model VARCHAR(120) DEFAULT 'default'",
+    )
+
+
+def _ensure_share_access_visitor_columns() -> None:
+    _ensure_column(
+        "share_accesses",
+        "visitor_kind",
+        "visitor_kind VARCHAR(16) DEFAULT 'human'",
+    )
+    _ensure_column(
+        "share_accesses",
+        "visitor_label",
+        "visitor_label VARCHAR(40) DEFAULT ''",
+    )
+    _ensure_column(
+        "share_accesses",
+        "user_agent",
+        "user_agent VARCHAR(512) DEFAULT ''",
+    )
 
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_user_preferred_model_column()
+    _ensure_share_access_visitor_columns()
 
 
 def get_db() -> Session:

@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 from app.auth import hash_token
 from app.config import get_settings
 from app.db import Conversation, Message, ShareAccess, ShareLink, get_db
+from app.og import canonical_url, plain_snippet
 from app.routes.conversations import _require_user
+from app.visitors import classify_visitor, truncate_user_agent
 
 router = APIRouter()
 
@@ -82,6 +84,34 @@ def _client_ip(request: Request) -> str:
     if forwarded:
         return forwarded.split(",")[0].strip()
     return (request.client.host if request.client else "") or ""
+
+
+def _share_description(messages: list[Message]) -> str:
+    for message in messages:
+        if message.role == "user":
+            snippet = plain_snippet(message.content)
+            if snippet:
+                return snippet
+    for message in messages:
+        snippet = plain_snippet(message.content)
+        if snippet:
+            return snippet
+    return "Публичный просмотр чата в aichat"
+
+
+def _record_share_access(request: Request, db: Session, share_id: int) -> None:
+    ua = request.headers.get("user-agent") or ""
+    kind, label = classify_visitor(ua)
+    db.add(
+        ShareAccess(
+            share_id=share_id,
+            ip=_client_ip(request),
+            visitor_kind=kind,
+            visitor_label=label,
+            user_agent=truncate_user_agent(ua),
+        )
+    )
+    db.commit()
 
 
 @router.get("/api/conversations/{conversation_id}/share")
@@ -171,45 +201,50 @@ def revoke_share(
     return {"revoked": True}
 
 
+def _share_missing(request: Request, render):
+    return render(
+        request,
+        "share.html",
+        None,
+        status_code=404,
+        not_found=True,
+        og_type="article",
+        og_url=canonical_url(request),
+        og_description="Эта ссылка отозвана, истекла или не существует.",
+        robots="noindex",
+    )
+
+
 @router.get("/s/{key}")
 def share_page(key: str, request: Request, db: Session = Depends(get_db)):
     from app.routes.pages import render
 
     share = db.scalar(select(ShareLink).where(ShareLink.token_hash == hash_token(key)))
     if not share or share.revoked_at is not None or _is_expired(share):
-        return render(
-            request,
-            "share.html",
-            None,
-            status_code=404,
-            not_found=True,
-        )
+        return _share_missing(request, render)
 
     conversation = db.scalar(select(Conversation).where(Conversation.id == share.conversation_id))
     if not conversation:
-        return render(
-            request,
-            "share.html",
-            None,
-            status_code=404,
-            not_found=True,
-        )
+        return _share_missing(request, render)
 
-    db.add(ShareAccess(share_id=share.id, ip=_client_ip(request)))
-    db.commit()
+    _record_share_access(request, db, share.id)
 
     messages = db.scalars(
         select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id)
     ).all()
     rendered = [{"role": m.role, "html": _render_md(m.content)} for m in messages]
+    title = conversation.title or "Без названия"
 
     return render(
         request,
         "share.html",
         None,
-        title=conversation.title,
+        title=title,
         created_at=_iso(conversation.created_at),
         updated_at=_iso(conversation.updated_at),
         messages=rendered,
         not_found=False,
+        og_type="article",
+        og_url=canonical_url(request),
+        og_description=_share_description(messages),
     )

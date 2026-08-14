@@ -39,6 +39,8 @@
 | `app/routes/oauth.py` | `/auth/google`, `/auth/apple` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |
+| `app/og.py` | Open Graph: абсолютные URL превью, сниппет описания |
+| `app/visitors.py` | классификация User-Agent: human / crawler / bot |
 | `frontend/` | React + assistant-ui (чат) |
 | `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация) |
 | `templates/`, `static/` | Jinja лендинг/auth/tokens/settings |
