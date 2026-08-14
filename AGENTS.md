@@ -30,7 +30,8 @@
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream |
 | `app/openrouter.py` | HTTP-прокси к OpenRouter |
-| `app/tools.py` | инструменты чата: `get_weather` / `get_user_location` (OpenWeatherMap), `get_current_datetime`, `download_file` (скачивание URL в `data/customers/<hash(user_id)>/`, SSRF-защита, лимит `DOWNLOADS_MAX_BYTES` = 2 МБ) |
+| `app/tools.py` | инструменты чата: погода (OpenWeatherMap), дата/время, `download_file`, заказ с pzz.by |
+| `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |

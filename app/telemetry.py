@@ -78,6 +78,211 @@ def shutdown_telemetry() -> None:
     tracer = None
 
 
+async def llm_byte_stream(
+    name: str,
+    chunks: AsyncIterator[bytes],
+    *,
+    input_payload: dict[str, Any] | None = None,
+) -> AsyncIterator[bytes]:
+    """Yield SSE/HTTP chunks under an LLM span that is not attached as current.
+
+    ``start_as_current_span`` / ``@tracer.llm`` on an async generator attach a
+    ContextVar token on first ``__anext__`` and detach it when the generator
+    closes. Chat peeks that generator inside ``chain_span``, then Starlette
+    finishes it after the span manager has exited — OpenTelemetry then logs
+    ``Failed to detach context``. ``start_span`` + ``span.end()`` records the
+    same LLM span without touching the context stack. Input/output and status
+    OK are set explicitly so Phoenix does not show an empty UNSET span.
+    """
+    if tracer is None:
+        async for chunk in chunks:
+            yield chunk
+        return
+    from openinference.instrumentation._attributes import (
+        get_input_attributes,
+        get_llm_attributes,
+    )
+    from openinference.semconv.trace import OpenInferenceSpanKindValues
+    from opentelemetry.trace import Status, StatusCode
+
+    attributes: dict[str, Any] = {}
+    if input_payload is not None:
+        traced = payload_for_trace(input_payload)
+        attributes.update(get_input_attributes(traced))
+        attributes.update(
+            get_llm_attributes(
+                model_name=str(traced.get("model") or "") or None,
+                input_messages=(
+                    traced.get("messages") if isinstance(traced.get("messages"), list) else None
+                ),
+            )
+        )
+    span = tracer.start_span(
+        name,
+        openinference_span_kind=OpenInferenceSpanKindValues.LLM,
+        attributes=attributes or None,
+    )
+    collected = bytearray()
+    try:
+        async for chunk in chunks:
+            collected.extend(chunk)
+            yield chunk
+    except Exception as exc:
+        span.record_exception(exc)
+        span.set_status(Status(StatusCode.ERROR, str(exc)))
+        raise
+    else:
+        _record_llm_stream_output(span, bytes(collected))
+        span.set_status(Status(StatusCode.OK))
+    finally:
+        close = getattr(chunks, "aclose", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                logger.debug("llm stream aclose failed", exc_info=True)
+        span.end()
+
+
+def _sse_output_text(raw: bytes) -> str:
+    """Collect assistant text from an OpenAI-style SSE body."""
+    texts: list[str] = []
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+        content = delta.get("content")
+        if isinstance(content, str) and content:
+            texts.append(content)
+    return "".join(texts)
+
+
+def _sse_tool_calls(raw: bytes) -> list[dict[str, str]]:
+    """Assemble streamed tool_calls the same way as app.tools.extract_tool_calls."""
+    calls: dict[int, dict[str, str]] = {}
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        deltas = ((obj.get("choices") or [{}])[0].get("delta") or {}).get("tool_calls")
+        if not deltas:
+            continue
+        for delta in deltas:
+            if not isinstance(delta, dict):
+                continue
+            index = int(delta.get("index", 0))
+            entry = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+            if delta.get("id"):
+                entry["id"] = str(delta["id"])
+            fn = delta.get("function") or {}
+            if fn.get("name"):
+                entry["name"] += str(fn["name"])
+            if fn.get("arguments"):
+                entry["arguments"] += str(fn["arguments"])
+    return [calls[index] for index in sorted(calls)]
+
+
+def _record_llm_stream_output(span: Any, raw: bytes) -> None:
+    """Write assistant text and/or tool_calls onto an LLM span for Phoenix."""
+    from openinference.instrumentation._attributes import get_llm_attributes
+
+    text = _sse_output_text(raw)
+    calls = _sse_tool_calls(raw)
+    if calls:
+        rendered = json.dumps(
+            [{"name": call["name"], "arguments": call["arguments"]} for call in calls],
+            ensure_ascii=False,
+        )
+        span.set_output(value=f"{text}\n{rendered}".strip() if text else rendered)
+        span.set_attributes(
+            get_llm_attributes(
+                output_messages=[
+                    {
+                        "role": "assistant",
+                        "content": text or None,
+                        "tool_calls": [
+                            {
+                                "id": call["id"],
+                                "function": {
+                                    "name": call["name"],
+                                    "arguments": call["arguments"],
+                                },
+                            }
+                            for call in calls
+                        ],
+                    }
+                ]
+            )
+        )
+        return
+    if text:
+        span.set_output(value=text)
+
+
+_TRACE_JSON_MAX = 8000
+
+
+def payload_for_trace(payload: dict[str, Any]) -> dict[str, Any]:
+    """Copy a chat payload, compacting tool results so OTLP attributes stay small."""
+    messages = []
+    for message in payload.get("messages") or []:
+        if not isinstance(message, dict):
+            continue
+        item: dict[str, Any] = {}
+        for key in ("role", "content", "tool_call_id", "tool_calls"):
+            if key in message:
+                item[key] = message[key]
+        if item.get("role") == "tool":
+            item["content"] = compact_tool_content(str(item.get("content") or ""))
+        messages.append(item)
+    return {"model": payload.get("model"), "messages": messages}
+
+
+def compact_tool_content(content: str) -> str:
+    """Keep pzz.by menu traces readable: titles + count, not photo URLs."""
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        return content[:_TRACE_JSON_MAX]
+    if not isinstance(data, dict):
+        dumped = json.dumps(data, ensure_ascii=False)
+        return dumped[:_TRACE_JSON_MAX]
+    items = data.get("items")
+    if data.get("source") == "pzz.by" and isinstance(items, list):
+        titles = [
+            str(item.get("title")) for item in items if isinstance(item, dict) and item.get("title")
+        ]
+        compact = {
+            "source": data.get("source"),
+            "query": data.get("query"),
+            "count": data.get("count", len(titles)),
+            "titles": titles,
+        }
+        if data.get("error"):
+            compact["error"] = data["error"]
+        if data.get("order_num"):
+            compact["order_num"] = data["order_num"]
+            compact["submitted"] = data.get("submitted")
+        return json.dumps(compact, ensure_ascii=False)
+    dumped = json.dumps(data, ensure_ascii=False)
+    return dumped[:_TRACE_JSON_MAX]
+
+
 def llm_instrument(name: str) -> Callable[[F], F]:
     """Apply OITracer.llm when tracing is enabled; otherwise leave fn unchanged."""
 
@@ -117,6 +322,9 @@ def chain_span(name: str) -> Iterator[Any]:
         openinference_span_kind=OpenInferenceSpanKindValues.CHAIN,
     ) as span:
         yield span
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.OK))
 
 
 @contextmanager
@@ -146,6 +354,9 @@ def tool_span(name: str, arguments: str) -> Iterator[Any]:
         attributes=attributes,
     ) as span:
         yield span
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.OK))
 
 
 def tool_output(span: Any, value: str) -> None:
@@ -154,8 +365,8 @@ def tool_output(span: Any, value: str) -> None:
         return
     from openinference.semconv.trace import SpanAttributes
 
-    span.set_attribute(SpanAttributes.OUTPUT_VALUE, value)
-    span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "text/plain")
+    span.set_attribute(SpanAttributes.OUTPUT_VALUE, compact_tool_content(value))
+    span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "application/json")
 
 
 def request_context(user_id: str, session_id: str) -> Any:
@@ -181,6 +392,11 @@ async def stream_in_session(
     Async spans are created when a generator is first advanced, which happens
     after the request handler returns (during response streaming). Keeping the
     session context across the stream ensures those spans carry ``session.id``.
+
+    The inner iterator is closed *before* ``using_session`` exits so nested
+    span tokens detach in LIFO order. ``ValueError`` from a token created in
+    another asyncio task (uvicorn/New Relic body streaming) is swallowed —
+    the request already finished successfully.
     """
     if tracer is None:
         async for chunk in chunks:
@@ -188,6 +404,22 @@ async def stream_in_session(
         return
     from openinference.instrumentation import using_session
 
-    with using_session(session_id):
+    cm = using_session(session_id)
+    cm.__enter__()
+    try:
         async for chunk in chunks:
             yield chunk
+    finally:
+        close = getattr(chunks, "aclose", None)
+        if close is not None:
+            try:
+                await close()
+            except Exception:
+                logger.debug("stream_in_session aclose failed", exc_info=True)
+        try:
+            cm.__exit__(None, None, None)
+        except ValueError:
+            logger.debug(
+                "opentelemetry context detach skipped (token from another task)",
+                exc_info=True,
+            )

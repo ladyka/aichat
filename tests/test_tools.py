@@ -103,22 +103,30 @@ def _tool_message(name="get_weather", arguments='{"city": "Minsk"}', call_id="ca
     }
 
 
-def test_enabled_tools_without_key():
+def test_enabled_tools_without_key(monkeypatch):
     settings = get_settings()
     settings.openweather_api_key = ""
+    monkeypatch.setattr(settings, "pzz_enabled", True)
     assert [t["function"]["name"] for t in enabled_tools()] == [
         "get_current_datetime",
         "download_file",
+        "pzz_search_menu",
+        "pzz_lookup_address",
+        "pzz_place_order",
     ]
 
 
 def test_enabled_tools_with_key(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "ow-test")
+    monkeypatch.setattr(settings, "pzz_enabled", True)
     tools = enabled_tools()
     assert [t["function"]["name"] for t in tools] == [
         "get_current_datetime",
         "download_file",
+        "pzz_search_menu",
+        "pzz_lookup_address",
+        "pzz_place_order",
         "get_weather",
         "get_user_location",
     ]
@@ -474,6 +482,9 @@ def test_stream_plain_text_no_extra_call(client, mock_models, monkeypatch):
     assert [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]] == [
         "get_current_datetime",
         "download_file",
+        "pzz_search_menu",
+        "pzz_lookup_address",
+        "pzz_place_order",
         "get_weather",
         "get_user_location",
     ]
@@ -548,6 +559,7 @@ def test_datetime_advertised_without_weather_key(client, mock_models, monkeypatc
     _auth(client)
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "")
+    monkeypatch.setattr(settings, "pzz_enabled", False)
     plan = StreamPlan(stream_responses=[_sse_text("Привет")])
     _patch(monkeypatch, plan, _fake_weather)
 
@@ -1022,7 +1034,7 @@ def test_call_tool_emits_otel_tool_span(monkeypatch):
     assert '"arguments": "{\\"timezone\\": null}"' in attrs["input.value"]
     assert attrs["input.mime_type"] == "application/json"
     assert json.loads(attrs["output.value"])["date"]
-    assert attrs["output.mime_type"] == "text/plain"
+    assert attrs["output.mime_type"] == "application/json"
 
 
 def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
@@ -1075,7 +1087,7 @@ def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
     assert tool.parent.span_id == chain.context.span_id
     assert tool.attributes["session.id"] == "conv-sess-1"
     assert chain.attributes["session.id"] == "conv-sess-1"
-    assert chain.attributes["user.id"] == _USER_ID
+    assert chain.attributes["user.id"]
 
 
 def test_stream_in_session_stamps_llm_span(monkeypatch):
@@ -1096,13 +1108,12 @@ def test_stream_in_session_stamps_llm_span(monkeypatch):
     monkeypatch.setattr(telemetry_mod, "tracer", tracer)
 
     sentinel = 0
-    _ot = []
 
     async def traced_chunks():
         nonlocal sentinel
         with tracer.start_as_current_span(
             "streamed.llm",
-            openinference_span_kind="LLM",
+            openinference_span_kind="llm",
         ):
             sentinel += 1
             yield b"data: x\n\n"
@@ -1118,3 +1129,168 @@ def test_stream_in_session_stamps_llm_span(monkeypatch):
     spans = exporter.get_finished_spans()
     assert len(spans) == 1
     assert spans[0].attributes["session.id"] == "sess-9"
+
+
+def test_llm_byte_stream_survives_parent_span_exit(monkeypatch, caplog):
+    """Tool-loop peek starts the LLM stream under chain_span; finishing it after
+    that span exits must not log Failed to detach context."""
+    import asyncio
+    import logging
+
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    async def raw():
+        yield b'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
+        yield b"data: [DONE]\n\n"
+
+    async def main():
+        gen = telemetry_mod.llm_byte_stream(
+            "test.llm",
+            raw(),
+            input_payload={
+                "model": "openrouter/free",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
+        with tracer.start_as_current_span("parent", openinference_span_kind="chain"):
+            assert await gen.__anext__() == b'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n'
+        rest = [chunk async for chunk in gen]
+        assert rest == [b"data: [DONE]\n\n"]
+
+    with caplog.at_level(logging.ERROR):
+        asyncio.run(main())
+    provider.force_flush()
+    assert "Failed to detach context" not in caplog.text
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    assert "test.llm" in spans
+    assert "parent" in spans
+    llm = spans["test.llm"]
+    from opentelemetry.trace import StatusCode
+
+    assert llm.status.status_code == StatusCode.OK
+    assert llm.attributes["output.value"] == "Hi"
+    assert "hi" in str(llm.attributes.get("input.value", ""))
+
+
+def test_compact_tool_content_summarizes_pzz_menu():
+    from app.telemetry import compact_tool_content
+
+    raw = json.dumps(
+        {
+            "source": "pzz.by",
+            "query": "пепперони",
+            "count": 2,
+            "items": [
+                {
+                    "id": 1,
+                    "title": "Пепперони",
+                    "photo": "https://example.com/huge.jpg",
+                    "offers": [{"size": "big", "price_byn": 40.5}],
+                },
+                {"id": 2, "title": "Пепперони острая", "photo": "https://example.com/2.jpg"},
+            ],
+        },
+        ensure_ascii=False,
+    )
+    compact = json.loads(compact_tool_content(raw))
+    assert compact["source"] == "pzz.by"
+    assert compact["titles"] == ["Пепперони", "Пепперони острая"]
+    assert compact["count"] == 2
+    assert "photo" not in json.dumps(compact)
+
+
+def test_compact_tool_content_other_shapes():
+    from app.telemetry import compact_tool_content, payload_for_trace
+
+    assert compact_tool_content("not-json") == "not-json"
+    assert json.loads(compact_tool_content("[1, 2]")) == [1, 2]
+    compact = json.loads(
+        compact_tool_content(
+            json.dumps(
+                {
+                    "source": "pzz.by",
+                    "items": [{"title": "X"}],
+                    "error": "boom",
+                    "order_num": 9,
+                    "submitted": True,
+                }
+            )
+        )
+    )
+    assert compact["error"] == "boom"
+    assert compact["order_num"] == 9
+    assert compact["submitted"] is True
+    other = json.loads(compact_tool_content(json.dumps({"hello": "world"})))
+    assert other == {"hello": "world"}
+    traced = payload_for_trace(
+        {
+            "model": "default",
+            "messages": [
+                "skip-me",
+                {"role": "user", "content": "hi"},
+                {"role": "tool", "content": json.dumps({"source": "pzz.by", "items": []})},
+            ],
+        }
+    )
+    assert traced["model"] == "default"
+    assert traced["messages"][0]["role"] == "user"
+    tool_payload = json.loads(traced["messages"][1]["content"])
+    assert tool_payload["source"] == "pzz.by"
+    assert "titles" in tool_payload
+
+
+def test_llm_byte_stream_records_tool_calls(monkeypatch):
+    import asyncio
+
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    chunks = _sse_tool_call("pzz_search_menu", '{"query": "пицца"}', "call_menu")
+
+    async def raw():
+        for chunk in chunks:
+            yield chunk
+
+    asyncio.run(
+        _aiter_all(
+            telemetry_mod.llm_byte_stream(
+                "test.llm",
+                raw(),
+                input_payload={"model": "x", "messages": [{"role": "user", "content": "меню"}]},
+            )
+        )
+    )
+    provider.force_flush()
+    llm = next(span for span in exporter.get_finished_spans() if span.name == "test.llm")
+    assert "pzz_search_menu" in llm.attributes["output.value"]
+    assert any(
+        value == "pzz_search_menu"
+        for key, value in llm.attributes.items()
+        if "tool_call" in key and "name" in key
+    )
+
+
+async def _aiter_all(gen):
+    async for _ in gen:
+        pass

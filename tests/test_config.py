@@ -87,3 +87,11 @@ def test_settings_custom_values(monkeypatch):
     assert settings.session_days == 7
     assert settings.default_model == "my-model"
     assert settings.models_cache_ttl == 60
+
+
+def test_settings_pzz_flags(monkeypatch):
+    monkeypatch.setenv("PZZ_ENABLED", "0")
+    monkeypatch.setenv("PZZ_ORDERS_ENABLED", "false")
+    settings = Settings()
+    assert not settings.pzz_enabled
+    assert not settings.pzz_orders_enabled

@@ -8,7 +8,7 @@ import httpx2 as httpx
 from fastapi import HTTPException
 
 from app.config import get_settings
-from app.telemetry import llm_instrument
+from app.telemetry import llm_byte_stream, llm_instrument
 
 
 def _headers() -> dict[str, str]:
@@ -33,8 +33,24 @@ async def chat_completions(payload: dict[str, Any]) -> httpx.Response:
     return response
 
 
-@llm_instrument("openrouter.chat.completions.stream")
 async def stream_chat_completions(payload: dict[str, Any]) -> AsyncIterator[bytes]:
+    """Stream OpenRouter SSE bytes.
+
+    LLM span is opened with ``start_span`` (not as current). The OpenInference
+    ``@llm`` decorator attaches a context token on first ``__anext__`` and
+    detaches on generator close — that breaks when the tool loop peeks the
+    stream under ``chain_span`` / ``using_attributes`` and Starlette continues
+    it after those managers have exited.
+    """
+    async for chunk in llm_byte_stream(
+        "openrouter.chat.completions.stream",
+        _stream_chat_completions_raw(payload),
+        input_payload=payload,
+    ):
+        yield chunk
+
+
+async def _stream_chat_completions_raw(payload: dict[str, Any]) -> AsyncIterator[bytes]:
     settings = get_settings()
     url = f"{settings.openrouter_base_url.rstrip('/')}/chat/completions"
     body = {**payload, "stream": True}
