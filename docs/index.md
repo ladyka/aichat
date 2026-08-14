@@ -28,3 +28,6 @@ make docs-build
 ```
 
 Нужен Docker; образ — `squidfunk/mkdocs-material` (как в zdymak).
+
+## Ccылки
+Phoenix : https://app.ca-central-1a.arize.com/organizations/QWNjb3VudE9yZ2FuaXphdGlvbjoyMDc6eVdIVQ==/spaces/U3BhY2U6MjYyOk1oMGk=/projects/TW9kZWw6MTQwNzk3NjM6OWlaaw==?timeRangeKeyA=1h
