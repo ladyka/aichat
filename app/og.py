@@ -44,8 +44,14 @@ def og_context(request: Request, **overrides) -> dict:
 
 
 def plain_snippet(text: str, limit: int = SNIPPET_LIMIT) -> str:
-    cleaned = re.sub(r"[#*_`>~\[\]()]", " ", text or "")
+    cleaned = text or ""
+    cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
+    cleaned = re.sub(r"\*\*(.+?)\*\*", r"\1", cleaned)
+    cleaned = re.sub(r"\*(.+?)\*", r"\1", cleaned)
+    cleaned = re.sub(r"`(.+?)`", r"\1", cleaned)
+    cleaned = re.sub(r"[#*_`>~]", " ", cleaned)
     cleaned = " ".join(cleaned.split())
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
     if not cleaned:
         return ""
     if len(cleaned) <= limit:

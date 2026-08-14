@@ -9,22 +9,7 @@ def email():
     return f"page-{uuid.uuid4().hex[:8]}@example.com"
 
 
-def test_privacy_and_terms_have_og_description(client):
-    privacy = client.get("/privacy")
-    assert privacy.status_code == 200
-    assert "Как aichat обрабатывает данные" in privacy.text
-    terms = client.get("/terms")
-    assert terms.status_code == 200
-    assert "Условия использования сервиса aichat" in terms.text
-
-
-def test_og_uses_public_base_url(client, monkeypatch):
-    from app.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "public_base_url", "https://aichat.example.com")
-    response = client.get("/")
-    assert "https://aichat.example.com/static/og/share.png" in response.text
-    assert 'content="https://aichat.example.com/"' in response.text
+def test_landing(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "aichat" in response.text

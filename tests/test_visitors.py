@@ -51,6 +51,7 @@ def test_truncate_user_agent():
 
 
 def test_plain_snippet_strips_markdown_and_truncates():
+    assert plain_snippet("   ") == ""
     assert plain_snippet("  **Привет**, [мир](https://x)  ") == "Привет, мир"
     assert DEFAULT_OG_DESCRIPTION
     assert OG_IMAGE_PATH.endswith(".png")
