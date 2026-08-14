@@ -1210,6 +1210,46 @@ def test_compact_tool_content_summarizes_pzz_menu():
     assert "photo" not in json.dumps(compact)
 
 
+def test_compact_tool_content_other_shapes():
+    from app.telemetry import compact_tool_content, payload_for_trace
+
+    assert compact_tool_content("not-json") == "not-json"
+    assert json.loads(compact_tool_content("[1, 2]")) == [1, 2]
+    compact = json.loads(
+        compact_tool_content(
+            json.dumps(
+                {
+                    "source": "pzz.by",
+                    "items": [{"title": "X"}],
+                    "error": "boom",
+                    "order_num": 9,
+                    "submitted": True,
+                }
+            )
+        )
+    )
+    assert compact["error"] == "boom"
+    assert compact["order_num"] == 9
+    assert compact["submitted"] is True
+    other = json.loads(compact_tool_content(json.dumps({"hello": "world"})))
+    assert other == {"hello": "world"}
+    traced = payload_for_trace(
+        {
+            "model": "default",
+            "messages": [
+                "skip-me",
+                {"role": "user", "content": "hi"},
+                {"role": "tool", "content": json.dumps({"source": "pzz.by", "items": []})},
+            ],
+        }
+    )
+    assert traced["model"] == "default"
+    assert traced["messages"][0]["role"] == "user"
+    tool_payload = json.loads(traced["messages"][1]["content"])
+    assert tool_payload["source"] == "pzz.by"
+    assert "titles" in tool_payload
+
+
 def test_llm_byte_stream_records_tool_calls(monkeypatch):
     import asyncio
 
