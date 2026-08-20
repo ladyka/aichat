@@ -46,6 +46,7 @@ class User(Base):
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
     oauth_identities: Mapped[list["OAuthIdentity"]] = relationship(back_populates="user")
     downloads: Mapped[list["Download"]] = relationship(back_populates="user")
+    generated_images: Mapped[list["GeneratedImage"]] = relationship(back_populates="user")
 
 
 class OAuthIdentity(Base):
@@ -207,6 +208,28 @@ class Download(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="downloads")
+
+
+class GeneratedImage(Base):
+    """An image produced by generate_image and stored in S3."""
+
+    __tablename__ = "generated_images"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    object_key: Mapped[str] = mapped_column(String(512))
+    public_url: Mapped[str] = mapped_column(String(1024))
+    prompt: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(120))
+    mime: Mapped[str] = mapped_column(String(64), default="image/png")
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    aspect_ratio: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    cost_usd: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    user: Mapped[User] = relationship(back_populates="generated_images")
 
 
 class UsageLog(Base):

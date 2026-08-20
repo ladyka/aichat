@@ -13,6 +13,10 @@ def test_settings_defaults(monkeypatch):
         "NEW_RELIC_USER_KEY",
         "E7_BY_BASE_URL",
         "E7_BY_API_KEY",
+        "S3_ENDPOINT",
+        "S3_BUCKET",
+        "S3_SA_KEY_ID",
+        "S3_SA_KEY_SECRET",
     ):
         monkeypatch.delenv(key, raising=False)
     settings = Settings()
@@ -27,6 +31,10 @@ def test_settings_defaults(monkeypatch):
     assert not settings.new_relic_enabled
     assert not settings.e7_by_enabled
     assert settings.e7_by_base_url == ""
+    assert not settings.s3_enabled
+    assert not settings.image_generation_enabled
+    assert settings.image_generation_daily_limit == 5
+    assert settings.image_generation_model == "black-forest-labs/flux.2-klein-4b"
 
 
 def test_settings_database_url_explicit(monkeypatch):
@@ -113,3 +121,19 @@ def test_settings_e7_by_base_url(monkeypatch):
 
     monkeypatch.setenv("E7_BY_BASE_URL", "http://host.example/v1/")
     assert Settings().e7_by_base_url == "http://host.example/v1"
+
+
+def test_settings_s3_and_image_generation(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk")
+    monkeypatch.setenv("S3_ENDPOINT", "https://s3.cloud.ru")
+    monkeypatch.setenv("S3_BUCKET", "aichat")
+    monkeypatch.setenv("S3_SA_KEY_ID", "id")
+    monkeypatch.setenv("S3_SA_KEY_SECRET", "secret")
+    monkeypatch.setenv("S3_PUBLIC_BASE_URL", "https://aichat.s3.cloud.ru")
+    monkeypatch.setenv("IMAGE_GENERATION_DAILY_LIMIT", "3")
+    settings = Settings()
+    assert settings.s3_enabled
+    assert settings.image_generation_enabled
+    assert settings.s3_path_style
+    assert settings.s3_region == "ru-central-1"
+    assert settings.image_generation_daily_limit == 3

@@ -13,6 +13,7 @@
 - `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, плюс модели e7 как `e7/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
+- Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
 - Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
@@ -105,6 +106,14 @@ cd frontend && npm run dev   # :5173
 | `PZZ_ENABLED` | Инструменты pzz.by в `/api/chat` (`pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order`). По умолчанию включены (`1`) |
 | `PZZ_ORDERS_ENABLED` | Разрешить реальную отправку заказа на pzz.by (`confirm=true`). `0` — только черновик и ссылка на сайт |
 | `DOWNLOADS_MAX_BYTES` | Лимит размера файла для `download_file` (по умолчанию `2097152` = 2 МБ) |
+| `S3_ENDPOINT` | S3 API, прод Cloud.ru: `https://s3.cloud.ru`. Вместе с bucket и ключами включает `generate_image` |
+| `S3_REGION` | Регион SigV4 (по умолчанию `ru-central-1`) |
+| `S3_BUCKET` | Имя bucket (создать заранее) |
+| `S3_PATH_STYLE` | `1` — path-style (`{endpoint}/{bucket}/{key}`), как у Cloud.ru |
+| `S3_PUBLIC_BASE_URL` | Префикс публичных URL (без повторного имени bucket), например `https://<bucket>.s3.cloud.ru` |
+| `S3_SA_KEY_ID` / `S3_SA_KEY_SECRET` | Ключи Cloud.ru как есть (не `AWS_ACCESS_KEY_*`) |
+| `IMAGE_GENERATION_MODEL` | Модель OpenRouter Images (по умолчанию `black-forest-labs/flux.2-klein-4b`) |
+| `IMAGE_GENERATION_DAILY_LIMIT` | Картинок на пользователя в сутки UTC (по умолчанию `5`) |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
 | `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); redirect URI OAuth и абсолютные URL превью ссылок (`og:image`, `og:url`) |
@@ -132,6 +141,8 @@ cd frontend && npm run dev   # :5173
 Погода в чате (`/api/chat`): модель может запросить `get_weather` по городу или координатам. Если локация не указана — модель вызывает `get_user_location`, и фронтенд запрашивает доступ к геолокации браузера (`navigator.geolocation`); координаты после разрешения передаются в чат и кешируются на 2 часа. **Геолокация работает только по HTTPS** (или `localhost`) — иначе браузер не даст доступ, и модель попросит назвать город текстом.
 
 Пицца Лисицца (`pzz.by`) в том же `/api/chat`: модель ищет меню (`pzz_search_menu`), проверяет улицу/дом в их справочнике (`pzz_lookup_address`) и может отправить заказ (`pzz_place_order`). Официального партнёрского API нет — используется тот же JSON, что и у сайта (каталог `GET /api/v1/{pizzas|snacks|…}`, заказ через cookie-сессию, корзину и `POST /api/v1/basket/save`). Через чат уходит только оплата **наличными курьеру**; онлайн-оплата bePaid в боте не проводится. Отправка на кухню — только после явного согласия пользователя (`confirm=true`). Имя, телефон и адрес передаются на pzz.by. Выключить меню: `PZZ_ENABLED=0`; запретить отправку, оставив подбор состава: `PZZ_ORDERS_ENABLED=0`.
+
+Картинки (`generate_image`) только в `/api/chat`: модель вызывает tool, бэкенд ходит в OpenRouter `POST /api/v1/images` (`black-forest-labs/flux.2-klein-4b`) и кладёт PNG в S3. В ответ пользователю — markdown с публичным URL. Без S3 tool не рекламируется. Биллинга нет; есть суточный лимит. API-токены (`/v1/chat/completions`) этот tool не получают.
 
 ## API (кратко)
 

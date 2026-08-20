@@ -169,7 +169,10 @@ body,
 }
 
 .msg-bubble.assistant .md img {
+  display: block;
   max-width: 100%;
+  height: auto;
+  max-height: 28rem;
   border-radius: 10px;
 }
 

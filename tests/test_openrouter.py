@@ -3,7 +3,12 @@ import asyncio
 import pytest
 from fastapi import HTTPException
 
-from app.model_providers.openrouter import _headers, chat_completions, stream_chat_completions
+from app.model_providers.openrouter import (
+    _headers,
+    chat_completions,
+    generate_image,
+    stream_chat_completions,
+)
 
 
 class FakeResponse:
@@ -126,3 +131,42 @@ def test_stream_chat_completions_error(monkeypatch, api_key):
         asyncio.run(_collect(stream_chat_completions({"model": "default"})))
     assert exc.value.status_code == 502
     assert exc.value.detail == {"error": "boom"}
+
+
+def test_generate_image_success(monkeypatch, api_key):
+    captured = {}
+
+    class ImageClient(FakeAsyncClient):
+        async def post(self, url, *a, **kw):
+            captured["url"] = url
+            captured["json"] = kw.get("json")
+            return FakeResponse(
+                status_code=200,
+                data={
+                    "data": [{"b64_json": "aGVsbG8=", "media_type": "image/png"}],
+                    "usage": {"cost": 0.014},
+                },
+            )
+
+    monkeypatch.setattr("app.model_providers.openrouter.httpx.AsyncClient", ImageClient)
+    result = asyncio.run(generate_image("a cat", aspect_ratio="1:1"))
+    assert result["bytes"] == b"hello"
+    assert result["cost"] == 0.014
+    assert result["model"] == "black-forest-labs/flux.2-klein-4b"
+    assert captured["url"].endswith("/images")
+    assert captured["json"]["prompt"] == "a cat"
+    assert captured["json"]["aspect_ratio"] == "1:1"
+
+
+def test_generate_image_http_error(monkeypatch, api_key):
+    class ImageClient(FakeAsyncClient):
+        async def post(self, url, *a, **kw):
+            return FakeResponse(
+                status_code=402,
+                data={"error": {"message": "Insufficient credits"}},
+            )
+
+    monkeypatch.setattr("app.model_providers.openrouter.httpx.AsyncClient", ImageClient)
+    result = asyncio.run(generate_image("a cat"))
+    assert result["error"] == "Insufficient credits"
+    assert result["status"] == 402

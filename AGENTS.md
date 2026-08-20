@@ -19,7 +19,7 @@
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
-- Биллинга и лимитов в MVP нет.
+- Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`TODO.md`).
 
 ### Where things live
 
@@ -31,8 +31,9 @@
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
-| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama) |
-| `app/tools.py` | инструменты чата: погода (OpenWeatherMap), дата/время, `download_file`, заказ с pzz.by |
+| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
+| `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, pzz.by, `generate_image` |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |

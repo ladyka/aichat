@@ -8,16 +8,18 @@ import os
 import re
 import socket
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx2 as httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from app import storage
 from app.config import get_settings
-from app.db import Download
+from app.db import Download, GeneratedImage
+from app.model_providers.openrouter import generate_image as openrouter_generate_image
 from app.pzz import lookup_address, place_order, search_menu
 from app.telemetry import tool_output, tool_span
 
@@ -119,6 +121,47 @@ _DOWNLOAD_TOOL: dict[str, Any] = {
                 },
             },
             "required": ["url"],
+        },
+    },
+}
+
+_IMAGE_ASPECT_RATIOS = frozenset(
+    {"1:1", "4:3", "3:4", "3:2", "2:3", "16:9", "9:16", "21:9", "auto"}
+)
+_IMAGE_MAX_BYTES = 10 * 1024 * 1024
+_IMAGE_MAX_PROMPT = 4000
+
+_GENERATE_IMAGE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "generate_image",
+        "description": (
+            "Сгенерировать изображение по текстовому описанию и вернуть публичный URL. "
+            "Вызывай только когда пользователь явно просит нарисовать, сгенерировать "
+            "картинку, иллюстрацию, обложку или фото. Не вызывай для метафор "
+            "(«представь картину», «опиши образ») и если запрос двусмысленный — "
+            "тогда сначала переспроси текстом, без этого инструмента. "
+            "В ответе пользователю вставь markdown из поля markdown как есть."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "prompt": {
+                    "type": "string",
+                    "description": (
+                        "Подробное описание картинки на языке пользователя: сцена, стиль, "
+                        "свет, композиция."
+                    ),
+                },
+                "aspect_ratio": {
+                    "type": "string",
+                    "description": (
+                        "Соотношение сторон, если пользователь его указал. "
+                        "Допустимо: 1:1, 4:3, 3:4, 3:2, 2:3, 16:9, 9:16, 21:9, auto."
+                    ),
+                },
+            },
+            "required": ["prompt"],
         },
     },
 }
@@ -277,13 +320,15 @@ _PRIVATE_NETWORKS = [
 
 
 def enabled_tools() -> list[dict[str, Any]]:
-    """Tools, доступные боту. Дата/время и скачивание — всегда; pzz и погода — по настройкам."""
+    """Tools бота: дата и скачивание всегда; pzz, погода, картинки — по настройкам."""
     settings = get_settings()
     tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL]
     if settings.pzz_enabled:
         tools.extend([_PZZ_SEARCH_TOOL, _PZZ_ADDRESS_TOOL, _PZZ_ORDER_TOOL])
     if settings.openweather_api_key:
         tools.extend([_WEATHER_TOOL, _USER_LOCATION_TOOL])
+    if settings.image_generation_enabled:
+        tools.append(_GENERATE_IMAGE_TOOL)
     return tools
 
 
@@ -371,6 +416,8 @@ async def _call_tool_impl(name: str, arguments: str, user: Any = None, db: Any =
         args = {}
     if not isinstance(args, dict):
         args = {}
+    if name == "generate_image":
+        return await _generate_image(args, user=user, db=db)
     if name in {"pzz_search_menu", "pzz_lookup_address", "pzz_place_order"}:
         return await _pzz_tool(name, args)
     if name != "get_weather":
@@ -389,6 +436,133 @@ async def _call_tool_impl(name: str, arguments: str, user: Any = None, db: Any =
             ensure_ascii=False,
         )
     return await _weather(city, lat, lon)
+
+
+def _mime_extension(media_type: str) -> str:
+    mime = (media_type or "").split(";")[0].strip().lower()
+    if mime in {"image/jpeg", "image/jpg"}:
+        return "jpg"
+    if mime == "image/webp":
+        return "webp"
+    return "png"
+
+
+def _prompt_alt(prompt: str) -> str:
+    text = " ".join(prompt.split())
+    if len(text) > 80:
+        text = text[:77].rstrip() + "…"
+    return text.replace("[", "(").replace("]", ")") or "image"
+
+
+async def _generate_image(args: dict[str, Any], user: Any = None, db: Any = None) -> str:
+    settings = get_settings()
+    if not settings.image_generation_enabled:
+        return json.dumps(
+            {"error": "Генерация изображений не настроена (нужны OpenRouter и S3)."},
+            ensure_ascii=False,
+        )
+    if user is None or db is None:
+        return json.dumps({"error": "Нет контекста пользователя."}, ensure_ascii=False)
+
+    prompt = str(args.get("prompt") or "").strip()
+    if not prompt:
+        return json.dumps({"error": "Нужен prompt — описание картинки."}, ensure_ascii=False)
+    if len(prompt) > _IMAGE_MAX_PROMPT:
+        return json.dumps(
+            {"error": f"Слишком длинный prompt (максимум {_IMAGE_MAX_PROMPT} символов)."},
+            ensure_ascii=False,
+        )
+
+    aspect_raw = str(args.get("aspect_ratio") or "").strip()
+    aspect_ratio = aspect_raw or None
+    if aspect_ratio and aspect_ratio not in _IMAGE_ASPECT_RATIOS:
+        return json.dumps(
+            {
+                "error": (
+                    "Недопустимый aspect_ratio. Используй одно из: "
+                    + ", ".join(sorted(_IMAGE_ASPECT_RATIOS))
+                )
+            },
+            ensure_ascii=False,
+        )
+
+    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    used = db.scalar(
+        select(func.count())
+        .select_from(GeneratedImage)
+        .where(
+            GeneratedImage.user_id == user.id,
+            GeneratedImage.created_at >= start,
+        )
+    )
+    if int(used or 0) >= settings.image_generation_daily_limit:
+        return json.dumps(
+            {
+                "error": (
+                    f"Дневной лимит генерации изображений исчерпан: "
+                    f"{settings.image_generation_daily_limit} в сутки."
+                )
+            },
+            ensure_ascii=False,
+        )
+
+    result = await openrouter_generate_image(prompt, aspect_ratio=aspect_ratio)
+    if result.get("error"):
+        return json.dumps(
+            {"error": result["error"], "status": result.get("status")},
+            ensure_ascii=False,
+        )
+
+    image_bytes: bytes = result["bytes"]
+    if len(image_bytes) > _IMAGE_MAX_BYTES:
+        return json.dumps(
+            {"error": f"Изображение слишком большое ({len(image_bytes)} байт)."},
+            ensure_ascii=False,
+        )
+
+    media_type = str(result.get("media_type") or "image/png")
+    model = str(result.get("model") or settings.image_generation_model)
+    key = storage.object_key(user.id, _mime_extension(media_type))
+    try:
+        url = storage.put_bytes(key, image_bytes, media_type)
+    except Exception as exc:
+        logger.warning("s3 put failed: %s", exc)
+        return json.dumps({"error": f"Не удалось сохранить изображение: {exc}"}, ensure_ascii=False)
+
+    cost = result.get("cost")
+    cost_usd = None if cost is None else str(cost)
+    row = GeneratedImage(
+        user_id=user.id,
+        object_key=key,
+        public_url=url,
+        prompt=prompt,
+        model=model,
+        mime=media_type.split(";")[0].strip() or "image/png",
+        size_bytes=len(image_bytes),
+        aspect_ratio=aspect_ratio,
+        cost_usd=cost_usd,
+    )
+    db.add(row)
+    db.commit()
+    logger.info(
+        "generate_image user_id=%s model=%s cost_usd=%s url=%s",
+        user.id,
+        model,
+        cost_usd,
+        url,
+    )
+    alt = _prompt_alt(prompt)
+    markdown = f"![{alt}]({url})"
+    return json.dumps(
+        {
+            "url": url,
+            "markdown": markdown,
+            "model": model,
+            "aspect_ratio": aspect_ratio,
+            "cost_usd": cost_usd,
+        },
+        ensure_ascii=False,
+    )
 
 
 def _current_datetime(arguments: str) -> str:
