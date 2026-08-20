@@ -31,8 +31,8 @@ def _enable_image_gen(monkeypatch, *, daily_limit=5):
     monkeypatch.setattr(settings, "s3_bucket", "aichat")
     monkeypatch.setattr(settings, "s3_path_style", True)
     monkeypatch.setattr(settings, "s3_public_base_url", "https://aichat.s3.cloud.ru")
-    monkeypatch.setattr(settings, "sa_key_id", "key")
-    monkeypatch.setattr(settings, "sa_key_secret", "secret")
+    monkeypatch.setattr(settings, "s3_sa_key_id", "key")
+    monkeypatch.setattr(settings, "s3_sa_key_secret", "secret")
     monkeypatch.setattr(settings, "image_generation_daily_limit", daily_limit)
     monkeypatch.setattr(settings, "image_generation_model", "black-forest-labs/flux.2-klein-4b")
 
@@ -41,7 +41,7 @@ def test_generate_image_not_advertised_without_s3(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "openrouter_api_key", "sk-test")
     monkeypatch.setattr(settings, "s3_bucket", "")
-    monkeypatch.setattr(settings, "sa_key_id", "")
+    monkeypatch.setattr(settings, "s3_sa_key_id", "")
     names = [t["function"]["name"] for t in enabled_tools()]
     assert "generate_image" not in names
 

@@ -15,8 +15,8 @@ def test_settings_defaults(monkeypatch):
         "E7_BY_API_KEY",
         "S3_ENDPOINT",
         "S3_BUCKET",
-        "SA_KEY_ID",
-        "SA_KEY_SECRET",
+        "S3_SA_KEY_ID",
+        "S3_SA_KEY_SECRET",
     ):
         monkeypatch.delenv(key, raising=False)
     settings = Settings()
@@ -127,8 +127,8 @@ def test_settings_s3_and_image_generation(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk")
     monkeypatch.setenv("S3_ENDPOINT", "https://s3.cloud.ru")
     monkeypatch.setenv("S3_BUCKET", "aichat")
-    monkeypatch.setenv("SA_KEY_ID", "id")
-    monkeypatch.setenv("SA_KEY_SECRET", "secret")
+    monkeypatch.setenv("S3_SA_KEY_ID", "id")
+    monkeypatch.setenv("S3_SA_KEY_SECRET", "secret")
     monkeypatch.setenv("S3_PUBLIC_BASE_URL", "https://aichat.s3.cloud.ru")
     monkeypatch.setenv("IMAGE_GENERATION_DAILY_LIMIT", "3")
     settings = Settings()

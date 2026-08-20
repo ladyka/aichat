@@ -62,8 +62,8 @@ class Settings:
         self.s3_bucket = _env("S3_BUCKET", "") or ""
         self.s3_path_style = _flag(_env("S3_PATH_STYLE", "1"), default=True)
         self.s3_public_base_url = (_env("S3_PUBLIC_BASE_URL", "") or "").rstrip("/")
-        self.sa_key_id = _env("SA_KEY_ID", "") or ""
-        self.sa_key_secret = _env("SA_KEY_SECRET", "") or ""
+        self.s3_sa_key_id = _env("S3_SA_KEY_ID", "") or ""
+        self.s3_sa_key_secret = _env("S3_SA_KEY_SECRET", "") or ""
 
         self.image_generation_model = (
             _env("IMAGE_GENERATION_MODEL", "black-forest-labs/flux.2-klein-4b")
@@ -130,7 +130,9 @@ class Settings:
 
     @property
     def s3_enabled(self) -> bool:
-        return bool(self.s3_endpoint and self.s3_bucket and self.sa_key_id and self.sa_key_secret)
+        return bool(
+            self.s3_endpoint and self.s3_bucket and self.s3_sa_key_id and self.s3_sa_key_secret
+        )
 
     @property
     def image_generation_enabled(self) -> bool:

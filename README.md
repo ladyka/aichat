@@ -110,7 +110,7 @@ cd frontend && npm run dev   # :5173
 | `S3_BUCKET` | Имя bucket (создать заранее) |
 | `S3_PATH_STYLE` | `1` — path-style (`{endpoint}/{bucket}/{key}`), как у Cloud.ru |
 | `S3_PUBLIC_BASE_URL` | Префикс публичных URL (без повторного имени bucket), например `https://<bucket>.s3.cloud.ru` |
-| `SA_KEY_ID` / `SA_KEY_SECRET` | Ключи Cloud.ru как есть (не `AWS_ACCESS_KEY_*`) |
+| `S3_SA_KEY_ID` / `S3_SA_KEY_SECRET` | Ключи Cloud.ru как есть (не `AWS_ACCESS_KEY_*`) |
 | `IMAGE_GENERATION_MODEL` | Модель OpenRouter Images (по умолчанию `black-forest-labs/flux.2-klein-4b`) |
 | `IMAGE_GENERATION_DAILY_LIMIT` | Картинок на пользователя в сутки UTC (по умолчанию `5`) |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |

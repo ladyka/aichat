@@ -45,8 +45,8 @@ def _client() -> Any:
         "s3",
         endpoint_url=settings.s3_endpoint,
         region_name=settings.s3_region,
-        aws_access_key_id=settings.sa_key_id,
-        aws_secret_access_key=settings.sa_key_secret,
+        aws_access_key_id=settings.s3_sa_key_id,
+        aws_secret_access_key=settings.s3_sa_key_secret,
         config=Config(s3={"addressing_style": addressing}),
     )
 
