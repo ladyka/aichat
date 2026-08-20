@@ -142,6 +142,8 @@ cd frontend && npm run dev   # :5173
 
 Пицца Лисицца (`pzz.by`) в том же `/api/chat`: модель ищет меню (`pzz_search_menu`), проверяет улицу/дом в их справочнике (`pzz_lookup_address`) и может отправить заказ (`pzz_place_order`). Официального партнёрского API нет — используется тот же JSON, что и у сайта (каталог `GET /api/v1/{pizzas|snacks|…}`, заказ через cookie-сессию, корзину и `POST /api/v1/basket/save`). Через чат уходит только оплата **наличными курьеру**; онлайн-оплата bePaid в боте не проводится. Отправка на кухню — только после явного согласия пользователя (`confirm=true`). Имя, телефон и адрес передаются на pzz.by. Выключить меню: `PZZ_ENABLED=0`; запретить отправку, оставив подбор состава: `PZZ_ORDERS_ENABLED=0`.
 
+Заметка чата: на ПК экран делится (чат слева, markdown справа: исходник / просмотр, скачивание `.md`). Модель в `/api/chat` может читать и писать заметку текущего диалога (`read_chat_note`, `write_chat_note`); в публичный `/v1` эти tools не попадают.
+
 Картинки (`generate_image`) только в `/api/chat`: модель вызывает tool, бэкенд ходит в OpenRouter `POST /api/v1/images` (`black-forest-labs/flux.2-klein-4b`) и кладёт PNG в S3. В ответ пользователю — markdown с публичным URL. Без S3 tool не рекламируется. Биллинга нет; есть суточный лимит. API-токены (`/v1/chat/completions`) этот tool не получают.
 
 ## API (кратко)
@@ -156,6 +158,8 @@ cd frontend && npm run dev   # :5173
 | `GET` | `/api/models` | cookie-сессия (UI) |
 | `GET/PUT` | `/api/settings` | cookie-сессия |
 | `*` | `/api/conversations…` | cookie-сессия |
+| `GET/PUT` | `/api/conversations/{id}/note` | cookie-сессия |
+| `GET` | `/api/conversations/{id}/note/download` | cookie-сессия (файл `.md`) |
 | `GET/POST` | `/api/conversations/{id}/share` | cookie-сессия |
 | `POST` | `/api/conversations/{id}/share/revoke` | cookie-сессия |
 | `GET` | `/s/{key}` | нет (публичная страница чтения; Open Graph для превью в мессенджерах; заходы пишутся в `share_accesses` с `visitor_kind`: human / crawler / bot) |

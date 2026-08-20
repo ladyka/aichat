@@ -20,6 +20,13 @@ from app import storage
 from app.config import get_settings
 from app.db import Download, GeneratedImage
 from app.model_providers.openrouter import generate_image as openrouter_generate_image
+from app.notes import (
+    NOTE_TOO_LARGE,
+    latest_note_for_conversation,
+    owned_conversation,
+    parse_conversation_id,
+    upsert_conversation_note,
+)
 from app.pzz import lookup_address, place_order, search_menu
 from app.telemetry import tool_output, tool_span
 
@@ -98,6 +105,53 @@ _USER_LOCATION_TOOL: dict[str, Any] = {
         "parameters": {
             "type": "object",
             "properties": {},
+        },
+    },
+}
+
+_READ_NOTE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "read_chat_note",
+        "description": (
+            "Прочитать markdown-заметку текущего чата (заголовок и тело). "
+            "Вызывай, когда нужно опереться на конспект, план или черновик, который "
+            "пользователь ведёт в панели заметки. Не выдумывай содержимое — сначала прочитай."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
+_WRITE_NOTE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "write_chat_note",
+        "description": (
+            "Записать markdown в заметку текущего чата. "
+            "mode=replace полностью заменяет тело; mode=append дописывает в конец. "
+            "Вызывай, когда пользователь просит сохранить конспект, план, чеклист "
+            "или правку в заметку."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string",
+                    "description": "Markdown-текст заметки.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Заголовок заметки (необязательно).",
+                },
+                "mode": {
+                    "type": "string",
+                    "enum": ["replace", "append"],
+                    "description": (
+                        "replace — заменить тело, append — дописать. По умолчанию replace."
+                    ),
+                },
+            },
+            "required": ["body"],
         },
     },
 }
@@ -320,9 +374,9 @@ _PRIVATE_NETWORKS = [
 
 
 def enabled_tools() -> list[dict[str, Any]]:
-    """Tools бота: дата и скачивание всегда; pzz, погода, картинки — по настройкам."""
+    """Tools бота: дата, скачивание и заметка чата всегда; pzz, погода, картинки — по настройкам."""
     settings = get_settings()
-    tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL]
+    tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL, _READ_NOTE_TOOL, _WRITE_NOTE_TOOL]
     if settings.pzz_enabled:
         tools.extend([_PZZ_SEARCH_TOOL, _PZZ_ADDRESS_TOOL, _PZZ_ORDER_TOOL])
     if settings.openweather_api_key:
@@ -368,6 +422,60 @@ def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
     return [calls[index] for index in sorted(calls)]
 
 
+def _chat_note_tool(
+    name: str,
+    arguments: str,
+    user: Any = None,
+    db: Any = None,
+    conversation_id: Any = None,
+) -> str:
+    conv_id = parse_conversation_id(conversation_id)
+    if conv_id is None or user is None or db is None:
+        return json.dumps(
+            {"error": "Заметка доступна только внутри сохранённого чата."},
+            ensure_ascii=False,
+        )
+    conv = owned_conversation(db, user, conv_id)
+    if conv is None:
+        return json.dumps({"error": "Чат не найден."}, ensure_ascii=False)
+    if name == "read_chat_note":
+        note = latest_note_for_conversation(db, conv.id)
+        if note is None:
+            return json.dumps({"exists": False, "title": "", "body": ""}, ensure_ascii=False)
+        return json.dumps(
+            {"exists": True, "title": note.title, "body": note.body},
+            ensure_ascii=False,
+        )
+    try:
+        args = json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+    body = args.get("body")
+    if body is None:
+        return json.dumps({"error": "Нужен параметр body."}, ensure_ascii=False)
+    title = args.get("title")
+    note, err = upsert_conversation_note(
+        db,
+        user,
+        conv,
+        title=str(title) if title is not None else None,
+        body=str(body),
+        mode=str(args.get("mode") or "replace"),
+    )
+    if err == NOTE_TOO_LARGE:
+        return json.dumps({"error": err}, ensure_ascii=False)
+    if err or note is None:
+        return json.dumps({"error": err or "Не удалось сохранить заметку."}, ensure_ascii=False)
+    db.commit()
+    db.refresh(note)
+    return json.dumps(
+        {"ok": True, "title": note.title, "body": note.body},
+        ensure_ascii=False,
+    )
+
+
 async def _pzz_tool(name: str, args: dict[str, Any]) -> str:
     settings = get_settings()
     if not settings.pzz_enabled:
@@ -387,19 +495,33 @@ async def _pzz_tool(name: str, args: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-async def call_tool(name: str, arguments: str, user: Any = None, db: Any = None) -> str:
+async def call_tool(
+    name: str,
+    arguments: str,
+    user: Any = None,
+    db: Any = None,
+    conversation_id: Any = None,
+) -> str:
     """Исполнить инструмент и вернуть строковый результат для role:tool.
 
     Исполнение обёрнуто в OpenInference TOOL span (имя, аргументы и результат
     видны в Phoenix), когда трассировка включена.
     """
     with tool_span(name, arguments) as span:
-        result = await _call_tool_impl(name, arguments, user=user, db=db)
+        result = await _call_tool_impl(
+            name, arguments, user=user, db=db, conversation_id=conversation_id
+        )
         tool_output(span, result)
         return result
 
 
-async def _call_tool_impl(name: str, arguments: str, user: Any = None, db: Any = None) -> str:
+async def _call_tool_impl(
+    name: str,
+    arguments: str,
+    user: Any = None,
+    db: Any = None,
+    conversation_id: Any = None,
+) -> str:
     """Реализация инструментов; см. :func:`call_tool`."""
     if name == "get_user_location":
         return json.dumps(
@@ -410,6 +532,8 @@ async def _call_tool_impl(name: str, arguments: str, user: Any = None, db: Any =
         return _current_datetime(arguments)
     if name == "download_file":
         return await _download_file(arguments, user=user, db=db)
+    if name in {"read_chat_note", "write_chat_note"}:
+        return _chat_note_tool(name, arguments, user=user, db=db, conversation_id=conversation_id)
     try:
         args = json.loads(arguments or "{}")
     except json.JSONDecodeError:

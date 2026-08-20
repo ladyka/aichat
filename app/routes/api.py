@@ -203,6 +203,7 @@ async def _tool_chat_response(
     db: Session,
     user: User,
     known_location: dict[str, float] | None = None,
+    conversation_id: Any = None,
 ) -> Response:
     """Internal chat only: loop model <-> tool execution.
 
@@ -259,6 +260,7 @@ async def _tool_chat_response(
                         call["function"]["arguments"],
                         user=user,
                         db=db,
+                        conversation_id=conversation_id,
                     )
                 messages.append(
                     {
@@ -315,7 +317,13 @@ async def _tool_chat_response(
             if call["name"] == "get_user_location":
                 result = json.dumps(location, ensure_ascii=False)
             else:
-                result = await call_tool(call["name"], call["arguments"], user=user, db=db)
+                result = await call_tool(
+                    call["name"],
+                    call["arguments"],
+                    user=user,
+                    db=db,
+                    conversation_id=conversation_id,
+                )
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
         payload = {**payload, "messages": messages, "stream": True}
@@ -491,7 +499,15 @@ async def _proxy_inner(
     # Internal chat: run the tool loop server-side, hand back the final text.
     if source == "chat" and payload.get("tools"):
         with telemetry_mod.chain_span("chat.tool_loop"):
-            return await _tool_chat_response(route, payload, source, db, user, known_location)
+            return await _tool_chat_response(
+                route,
+                payload,
+                source,
+                db,
+                user,
+                known_location,
+                conversation_id=body.get("conversation_id"),
+            )
 
     if payload.get("stream"):
         return StreamingResponse(

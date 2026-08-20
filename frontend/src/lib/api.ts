@@ -132,3 +132,40 @@ export async function revokeShare(id: string): Promise<void> {
   });
   if (!res.ok) throw new Error(await parseError(res));
 }
+
+export type ConversationNote = {
+  id: string;
+  title: string;
+  body: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function getConversationNote(
+  id: string,
+): Promise<ConversationNote | null> {
+  const res = await fetch(`/api/conversations/${id}/note`, {
+    credentials: "include",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function putConversationNote(
+  id: string,
+  body: { title?: string; body?: string },
+): Promise<ConversationNote> {
+  const res = await fetch(`/api/conversations/${id}/note`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export function conversationNoteDownloadUrl(id: string): string {
+  return `/api/conversations/${id}/note/download`;
+}

@@ -24,6 +24,8 @@ EXPECTED_TABLES = {
     "messages",
     "share_links",
     "share_accesses",
+    "notes",
+    "conversation_notes",
     "alembic_version",
 }
 
@@ -100,6 +102,8 @@ def test_upgrade_adds_columns_on_legacy_create_all_db(tmp_path):
     share_cols = {c["name"] for c in insp.get_columns("share_accesses")}
     assert {"visitor_kind", "visitor_label", "user_agent"} <= share_cols
     assert "conversations" in insp.get_table_names()
+    assert "notes" in insp.get_table_names()
+    assert "conversation_notes" in insp.get_table_names()
 
     with engine.connect() as conn:
         model = conn.execute(text("SELECT preferred_model FROM users WHERE id = 1")).scalar()
