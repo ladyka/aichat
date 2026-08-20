@@ -4,13 +4,14 @@ PORT ?= 20000
 INSTANCE_HOST ?= 0.0.0.0
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
+PYTHON_BIN ?= python3.13
 DOCKER ?= docker
 MKDOCS_IMAGE ?= squidfunk/mkdocs-material
 NPM ?= npm
 PY_FILES := app tests scripts server.py api_check.py migrations/env.py migrations/versions
 
 venv:
-	python3 -m venv $(VENV)
+	$(PYTHON_BIN) -m venv $(VENV)
 	$(PYTHON) -m pip install --upgrade pip
 	@if [ -s requirements.txt ]; then $(PYTHON) -m pip install -r requirements.txt; fi
 	@if [ -s requirements-dev.txt ]; then $(PYTHON) -m pip install -r requirements-dev.txt; fi

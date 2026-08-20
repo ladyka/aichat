@@ -21,8 +21,8 @@
 
 ### Prerequisites
 
-- Python 3.11+ (локально проверено на 3.13/3.14)
-- Node.js 20+ (сборка чата)
+- Python **3.13+** (pin: `.python-version`, `make venv` → `python3.13`)
+- Node.js **24+** (pin: `.nvmrc`, `engines` в `frontend/package.json`)
 - Ключ OpenRouter (`OPENROUTER_API_KEY`)
 - Для моделей e7 — `E7_BY_BASE_URL` (Ollama)
 
@@ -33,7 +33,8 @@ cp .env.example .env
 # заполните OPENROUTER_API_KEY
 # при необходимости: E7_BY_BASE_URL (Ollama e7)
 
-make venv
+# nvm use   # Node 24 из .nvmrc
+make venv                 # python3.13 -m venv .venv
 make frontend-install
 make frontend-build
 make run
@@ -171,14 +172,16 @@ migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
 templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
 static/        # CSS
-docs/          # MkDocs (продукт / видение)
+docs/          # MkDocs: стек/runtime + продукт / видение
 tests/         # pytest + integration_weather.py (интеграционный тест погоды)
 server.py      # entrypoint (uvicorn, port или SOCKET)
 scripts/       # FTP deploy
 api_check.py   # smoke-тест API
 mkdocs.yml     # конфиг документации
 .flake8        # flake8 (100 символов; E203/W503 выключены — конфликт с black)
-pyproject.toml # конфиг black + isort
+pyproject.toml # requires-python 3.13+, конфиг black + isort
+.python-version # pin CPython 3.13 (pyenv / uv)
+.nvmrc         # pin Node.js 24 (nvm / fnm)
 requirements-dev.txt # инструменты разработки (линтеры)
 ```
 
@@ -188,7 +191,7 @@ requirements-dev.txt # инструменты разработки (линтер
 make update-prod   # собирает frontend, затем FTP
 ```
 
-На сервере: зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
+Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
 
 ## Для агентов
 
