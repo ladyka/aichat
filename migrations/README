@@ -1,0 +1,10 @@
+"""Alembic migrations for aichat.
+
+URL comes from the app (``DATABASE_URL`` / ``MYSQL_*`` / SQLite), see ``env.py``.
+
+Typical flow after changing models in ``app/db.py``:
+
+1. ``make migrate-rev m="add foo to users"``  — autogenerate a revision
+2. Review ``migrations/versions/*.py`` (autogenerate is not always complete)
+3. ``make migrate`` or restart the app (``init_db()`` runs ``upgrade head``)
+"""

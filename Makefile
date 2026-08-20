@@ -1,4 +1,4 @@
-.PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format
+.PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format migrate migrate-rev
 
 PORT ?= 20000
 INSTANCE_HOST ?= 0.0.0.0
@@ -7,7 +7,7 @@ PYTHON := $(VENV)/bin/python
 DOCKER ?= docker
 MKDOCS_IMAGE ?= squidfunk/mkdocs-material
 NPM ?= npm
-PY_FILES := app tests scripts server.py api_check.py
+PY_FILES := app tests scripts server.py api_check.py migrations/env.py migrations/versions
 
 venv:
 	python3 -m venv $(VENV)
@@ -26,6 +26,13 @@ frontend-install:
 
 frontend-build:
 	cd frontend && $(NPM) run build
+
+migrate: $(VENV)/bin/python
+	$(PYTHON) -m alembic upgrade head
+
+migrate-rev: $(VENV)/bin/python
+	@if [ -z "$(m)" ]; then echo 'usage: make migrate-rev m="add column"'; exit 1; fi
+	$(PYTHON) -m alembic revision --autogenerate -m "$(m)"
 
 update-prod: $(VENV)/bin/python frontend-build
 	@echo "Checking production FTP upload access…"

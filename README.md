@@ -43,6 +43,15 @@ make run
 
 Локально по умолчанию используется SQLite (`aichat.db`). MySQL включается, если заданы `MYSQL_HOST` и `MYSQL_PASSWORD`.
 
+Схема БД версионируется **Alembic** (`alembic.ini`, `migrations/`). При старте приложения `init_db()` выполняет `alembic upgrade head`. Новые таблицы и колонки не появляются из `create_all`.
+
+После изменения моделей в `app/db.py`:
+
+```bash
+make migrate-rev m="add preferred_model to users"  # черновик ревизии; просмотреть migrations/versions/
+make migrate                                       # применить к текущей DATABASE_URL
+```
+
 Тесты (pytest + coverage, падает при покрытии < 80 %):
 
 ```bash
@@ -158,6 +167,7 @@ make docs-build   # strict build в ./site/
 
 ```
 app/           # FastAPI: auth, DB, model_providers, tools, routes
+migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
 templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
 static/        # CSS
@@ -178,7 +188,7 @@ requirements-dev.txt # инструменты разработки (линтер
 make update-prod   # собирает frontend, затем FTP
 ```
 
-На сервере: зависимости в `.venv`, `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга.
+На сервере: зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
 
 ## Для агентов
 
