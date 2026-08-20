@@ -54,6 +54,7 @@ _CODE_LINK_RE = re.compile(
 _GENERIC_CODE_TOKENS = frozenset(
     {"кодекс", "кодекса", "кодексу", "закон", "закона", "указ", "указа", "акт", "акта"}
 )
+_SKIP_TAGS = frozenset({"script", "style", "noscript", "svg", "head"})
 
 _codes_cache: tuple[float, list[dict[str, str]]] | None = None
 

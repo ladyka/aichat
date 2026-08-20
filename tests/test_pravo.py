@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+from app.config import get_settings
 from app.pravo import (
     clear_caches,
     extract_visible_text,
@@ -23,7 +24,8 @@ SEARCH_HTML = """
       (22.01.2014)
     </dt>
     <dd>
-      <a href="/document/?guid=3961&amp;p0=H11400131" target="_blank">О внесении изменений в Трудовой кодекс</a>.
+      <a href="/document/?guid=3961&amp;p0=H11400131" target="_blank"
+        >О внесении изменений в Трудовой кодекс</a>.
       <br/>
       <i>Закон Республики Беларусь от 8 января 2014 г. № 131-З</i>
     </dd>
@@ -37,7 +39,8 @@ SEARCH_HTML = """
       (22.11.2010)
     </dt>
     <dd>
-      <a href="/document/?guid=3961&amp;p0=H11000190" target="_blank">О наименованиях географических объектов</a>.
+      <a href="/document/?guid=3961&amp;p0=H11000190" target="_blank"
+        >О наименованиях географических объектов</a>.
       <br/>
       <i>Закон Республики Беларусь от 16 ноября 2010 г. № 190-З</i>
     </dd>
@@ -52,12 +55,14 @@ SEARCH_HTML = """
 CODES_HTML = """
 <div class="s-block-link">
   <div class="s-block-link-innertext-wrapper">
-    <a target="_blank" href="/document/?guid=3871&p0=HK9900296">Трудовой кодекс Республики Беларусь</a>
+    <a target="_blank" href="/document/?guid=3871&p0=HK9900296"
+      >Трудовой кодекс Республики Беларусь</a>
   </div>
 </div>
 <div class="s-block-link">
   <div class="s-block-link-innertext-wrapper">
-    <a href="https://etalonline.by/document/?regnum=hk2400359" target="_blank">Кодекс гражданского судопроизводства Республики Беларусь</a>
+    <a href="https://etalonline.by/document/?regnum=hk2400359" target="_blank"
+      >Кодекс гражданского судопроизводства Республики Беларусь</a>
   </div>
 </div>
 """
