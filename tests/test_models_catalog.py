@@ -44,6 +44,16 @@ def test_build_models_response_filters_and_dedupes():
     assert "openrouter/free" not in ids
 
 
+def test_build_models_response_includes_e7_ids():
+    raw = [{"id": "vendor/paid-model:free", "created": 1}]
+    e7 = [{"id": "llama3.2:latest"}]
+    payload = mc._build_models_response(raw, e7)
+    ids = [item["id"] for item in payload["data"]]
+    assert "e7.by/llama3.2:latest" in ids
+    owned = {item["id"]: item["owned_by"] for item in payload["data"]}
+    assert owned["e7.by/llama3.2:latest"] == "e7.by"
+
+
 def test_headers_without_key(monkeypatch):
     from app.config import get_settings
 
@@ -67,6 +77,7 @@ def test_get_models_list_cache_and_refresh(monkeypatch):
     monkeypatch.setattr(mc, "_fetch_openrouter_models", fake_fetch)
     monkeypatch.setattr(mc, "_cache_payload", None)
     monkeypatch.setattr(mc, "_cache_expires_at", 0)
+    monkeypatch.setattr(mc, "_cache_routes", {})
 
     async def run():
         first = await mc.get_models_list()
@@ -111,3 +122,20 @@ def test_resolve_upstream_model(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         mc.resolve_upstream_model("nope/model")
     assert exc.value.status_code == 400
+
+
+def test_resolve_e7_model(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "e7_by_enabled", True)
+    monkeypatch.setattr(mc, "_cache_public_ids", set())
+    monkeypatch.setattr(mc, "_cache_routes", {})
+    route = mc.resolve_model("e7.by/llama3.2:latest")
+    assert route.provider == mc.PROVIDER_E7_BY
+    assert route.upstream_id == "llama3.2:latest"
+    assert mc.to_e7_public_id("llama3.2:latest") == "e7.by/llama3.2:latest"
+
+    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
+    with pytest.raises(HTTPException) as exc:
+        mc.resolve_model("e7.by/llama3.2:latest")
+    assert exc.value.status_code == 503

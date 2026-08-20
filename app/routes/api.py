@@ -18,14 +18,18 @@ from app import telemetry as telemetry_mod
 from app.auth import get_user_from_api_token, get_user_from_session
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, UsageLog, User, get_db
+from app.model_providers import e7by
+from app.model_providers.openrouter import chat_completions, stream_chat_completions
 from app.models_catalog import (
+    PROVIDER_E7_BY,
     PUBLIC_DEFAULT_ID,
     UPSTREAM_DEFAULT_ID,
+    ModelRoute,
     get_models_list,
-    resolve_upstream_model,
+    resolve_model,
+    to_e7_public_id,
     to_public_id,
 )
-from app.openrouter import chat_completions, stream_chat_completions
 from app.tools import call_tool, enabled_tools, extract_tool_calls
 
 router = APIRouter()
@@ -48,18 +52,21 @@ def _normalize_public_model(model: str | None) -> str:
     return value
 
 
-def _response_model_id(requested_public: str, reported: str | None) -> str:
-    if requested_public == PUBLIC_DEFAULT_ID:
+def _response_model_id(route: ModelRoute, reported: str | None) -> str:
+    if route.public_id == PUBLIC_DEFAULT_ID:
         return PUBLIC_DEFAULT_ID
     if reported:
+        if route.provider == PROVIDER_E7_BY:
+            return to_e7_public_id(reported) or route.public_id
         return to_public_id(reported)
-    return requested_public
+    return route.public_id
 
 
-def _payload_from_body(body: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]]:
     public_model = _normalize_public_model(body.get("model"))
+    route = resolve_model(public_model)
     payload: dict[str, Any] = {
-        "model": resolve_upstream_model(public_model),
+        "model": route.upstream_id,
         "messages": list(body.get("messages") or []),
     }
     for key in (
@@ -76,7 +83,19 @@ def _payload_from_body(body: dict[str, Any]) -> tuple[str, dict[str, Any]]:
             payload[key] = body[key]
     if body.get("stream"):
         payload["stream"] = True
-    return public_model, payload
+    return route, payload
+
+
+async def _call_chat(route: ModelRoute, payload: dict[str, Any]):
+    if route.provider == PROVIDER_E7_BY:
+        return await e7by.chat_completions(payload)
+    return await chat_completions(payload)
+
+
+def _stream_completions(route: ModelRoute, payload: dict[str, Any]) -> AsyncIterator[bytes]:
+    if route.provider == PROVIDER_E7_BY:
+        return e7by.stream_chat_completions(payload)
+    return stream_chat_completions(payload)
 
 
 def _log_usage(db: Session, user: User, model: str, source: str, usage: dict | None) -> None:
@@ -144,7 +163,7 @@ def _models_response(payload: dict[str, Any]) -> Response:
     )
 
 
-def _rewrite_sse_line(line: bytes, requested_public: str) -> bytes:
+def _rewrite_sse_line(line: bytes, route: ModelRoute) -> bytes:
     text = line.decode("utf-8", errors="replace")
     stripped = text.strip()
     if not stripped.startswith("data:"):
@@ -159,28 +178,26 @@ def _rewrite_sse_line(line: bytes, requested_public: str) -> bytes:
     if isinstance(obj, dict) and "model" in obj:
         reported = obj.get("model")
         obj["model"] = _response_model_id(
-            requested_public,
+            route,
             reported if isinstance(reported, str) else None,
         )
         return f"data: {json.dumps(obj, ensure_ascii=False)}".encode("utf-8")
     return line
 
 
-async def _public_event_stream(
-    payload: dict[str, Any], requested_public: str
-) -> AsyncIterator[bytes]:
+async def _public_event_stream(payload: dict[str, Any], route: ModelRoute) -> AsyncIterator[bytes]:
     buffer = b""
-    async for chunk in stream_chat_completions(payload):
+    async for chunk in _stream_completions(route, payload):
         buffer += chunk
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
-            yield _rewrite_sse_line(line, requested_public) + b"\n"
+            yield _rewrite_sse_line(line, route) + b"\n"
     if buffer:
-        yield _rewrite_sse_line(buffer, requested_public)
+        yield _rewrite_sse_line(buffer, route)
 
 
 async def _tool_chat_response(
-    public_model: str,
+    route: ModelRoute,
     payload: dict[str, Any],
     source: str,
     db: Session,
@@ -205,21 +222,21 @@ async def _tool_chat_response(
     location = _known_location(messages, known_location)
     if not payload.get("stream"):
         for _ in range(MAX_TOOL_STEPS):
-            response = await chat_completions(payload)
+            response = await _call_chat(route, payload)
             try:
                 data = response.json()
             except Exception:
                 return JSONResponse(
                     status_code=502,
-                    content={"error": "Invalid response from OpenRouter"},
+                    content={"error": "Invalid response from upstream"},
                 )
             if response.status_code >= 400:
                 return JSONResponse(status_code=response.status_code, content=data)
             if isinstance(data, dict) and isinstance(data.get("model"), str):
-                data = {**data, "model": _response_model_id(public_model, data.get("model"))}
+                data = {**data, "model": _response_model_id(route, data.get("model"))}
             message = (data.get("choices") or [{}])[0].get("message") or {}
             if not isinstance(message, dict) or not message.get("tool_calls"):
-                _log_usage(db, user, public_model, source, data.get("usage"))
+                _log_usage(db, user, route.public_id, source, data.get("usage"))
                 return JSONResponse(content=data, status_code=response.status_code)
             requests_location = any(
                 call.get("function", {}).get("name") == "get_user_location"
@@ -258,7 +275,7 @@ async def _tool_chat_response(
         )
 
     for _ in range(MAX_TOOL_STEPS):
-        stream = stream_chat_completions(payload)
+        stream = _stream_completions(route, payload)
         prefix = b""
         classified: str | None = None
         async for chunk in stream:
@@ -272,13 +289,13 @@ async def _tool_chat_response(
         if classified is None:
             # Stream finished with no content and no tool calls.
             return StreamingResponse(
-                _rewrite_chunks(_prefix_then(prefix, stream), public_model),
+                _rewrite_chunks(_prefix_then(prefix, stream), route),
                 media_type="text/event-stream",
             )
         if classified == "text":
             # Plain answer: forward the buffered prefix, stream the rest live.
             return StreamingResponse(
-                _rewrite_chunks(_prefix_then(prefix, stream), public_model),
+                _rewrite_chunks(_prefix_then(prefix, stream), route),
                 media_type="text/event-stream",
             )
 
@@ -315,15 +332,15 @@ async def _prefix_then(prefix: bytes, rest: AsyncIterator[bytes]) -> AsyncIterat
         yield chunk
 
 
-async def _rewrite_chunks(chunks: AsyncIterator[bytes], public_model: str) -> AsyncIterator[bytes]:
+async def _rewrite_chunks(chunks: AsyncIterator[bytes], route: ModelRoute) -> AsyncIterator[bytes]:
     buffer = b""
     async for chunk in chunks:
         buffer += chunk
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
-            yield _rewrite_sse_line(line, public_model) + b"\n"
+            yield _rewrite_sse_line(line, route) + b"\n"
     if buffer:
-        yield _rewrite_sse_line(buffer, public_model)
+        yield _rewrite_sse_line(buffer, route)
 
 
 def _sse_has_content(raw: bytes) -> bool:
@@ -460,39 +477,35 @@ async def _proxy_inner(
             body = {**body, "tools": tools}
         known_location = _body_location(body)
 
-    public_model, payload = _payload_from_body(body)
-    upstream_model = str(payload.get("model"))
+    route, payload = _payload_from_body(body)
 
     logger.info(
-        "completions user_id=%s source=%s aichat_model=%s openrouter_model=%s",
+        "completions user_id=%s source=%s aichat_model=%s provider=%s upstream_model=%s",
         user.id,
         source,
-        public_model,
-        upstream_model,
+        route.public_id,
+        route.provider,
+        route.upstream_id,
     )
 
     # Internal chat: run the tool loop server-side, hand back the final text.
     if source == "chat" and payload.get("tools"):
         with telemetry_mod.chain_span("chat.tool_loop"):
-            return await _tool_chat_response(
-                public_model, payload, source, db, user, known_location
-            )
+            return await _tool_chat_response(route, payload, source, db, user, known_location)
 
     if payload.get("stream"):
         return StreamingResponse(
-            telemetry_mod.stream_in_session(
-                session_id, _public_event_stream(payload, public_model)
-            ),
+            telemetry_mod.stream_in_session(session_id, _public_event_stream(payload, route)),
             media_type="text/event-stream",
         )
 
-    response = await chat_completions(payload)
+    response = await _call_chat(route, payload)
     try:
         data = response.json()
     except Exception:
         return JSONResponse(
             status_code=502,
-            content={"error": "Invalid response from OpenRouter"},
+            content={"error": "Invalid response from upstream"},
         )
     if response.status_code >= 400:
         return JSONResponse(status_code=response.status_code, content=data)
@@ -500,11 +513,11 @@ async def _proxy_inner(
     if isinstance(data, dict) and isinstance(data.get("model"), str):
         data = {
             **data,
-            "model": _response_model_id(public_model, data.get("model")),
+            "model": _response_model_id(route, data.get("model")),
         }
 
     _log_usage(
-        db, user, public_model, source, data.get("usage") if isinstance(data, dict) else None
+        db, user, route.public_id, source, data.get("usage") if isinstance(data, dict) else None
     )
     return JSONResponse(content=data, status_code=response.status_code)
 

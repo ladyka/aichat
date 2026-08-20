@@ -1,6 +1,6 @@
 # aichat
 
-Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси на базе OpenRouter (только free-модели).
+Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели) и опционально **e7.by** (Ollama).
 
 ## Возможности
 
@@ -10,7 +10,7 @@
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
 - Модель чата в **/settings** (не на экране чата)
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
-- `GET /v1/models` — список free-моделей (кеш), публичные id без суффикса `:free`
+- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, плюс модели e7.by как `e7.by/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
@@ -24,12 +24,14 @@
 - Python 3.11+ (локально проверено на 3.13/3.14)
 - Node.js 20+ (сборка чата)
 - Ключ OpenRouter (`OPENROUTER_API_KEY`)
+- Для моделей e7.by — `E7_BY_BASE_URL` (Ollama)
 
 ### Запуск
 
 ```bash
 cp .env.example .env
 # заполните OPENROUTER_API_KEY
+# при необходимости: E7_BY_BASE_URL (Ollama e7.by)
 
 make venv
 make frontend-install
@@ -81,6 +83,9 @@ cd frontend && npm run dev   # :5173
 | Переменная | Назначение |
 |------------|------------|
 | `OPENROUTER_API_KEY` | Серверный ключ OpenRouter |
+| `E7_BY_BASE_URL` | Ollama e7.by: хост или `.../v1`. Пусто — провайдер выключен |
+| `E7_BY_API_KEY` | Опциональный ключ для e7.by |
+| `E7_BY_TIMEOUT` | Таймаут completions e7.by (сек, по умолчанию 300) |
 | `DEFAULT_MODEL` | Публичная модель по умолчанию (`default`) |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |
 | `API_DAILY_LIMIT` | Дневной лимит `/v1/chat/completions` на один API-токен (по умолчанию `10`) |
@@ -152,7 +157,7 @@ make docs-build   # strict build в ./site/
 ## Структура
 
 ```
-app/           # FastAPI: auth, DB, OpenRouter, tools, routes
+app/           # FastAPI: auth, DB, model_providers, tools, routes
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
 templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
 static/        # CSS
