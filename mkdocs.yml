@@ -36,6 +36,8 @@ markdown_extensions:
       permalink: true
 nav:
   - Главная: index.md
+  - Разработка:
+    - Стек и runtime: dev/runtime.md
   - Продукт:
     - Видение (Беларусь): product/vision-belarus.md
     - MVP и следующие шаги: product/mvp-next-steps.md

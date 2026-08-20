@@ -16,6 +16,7 @@ EXPECTED_TABLES = {
     "api_tokens",
     "conversations",
     "downloads",
+    "generated_images",
     "oauth_identities",
     "sessions",
     "usage_logs",

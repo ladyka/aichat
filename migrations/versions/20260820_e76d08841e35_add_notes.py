@@ -1,7 +1,7 @@
 """add notes
 
 Revision ID: e76d08841e35
-Revises: cc2b1969cbe6
+Revises: 7a3c1e9d4b20
 Create Date: 2026-08-20 22:39:38.953184
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import mysql
 
 # revision identifiers, used by Alembic.
 revision: str = "e76d08841e35"
-down_revision: Union[str, Sequence[str], None] = "cc2b1969cbe6"
+down_revision: Union[str, Sequence[str], None] = "7a3c1e9d4b20"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

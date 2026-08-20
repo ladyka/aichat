@@ -8,6 +8,7 @@ python-multipart>=0.0.12         # парсинг form-data (логин/реги
 
 # --- HTTP-клиент ---
 httpx2>=2.0.0                    # асинхронный HTTP-клиент: прокси к OpenRouter + download_file (app/tools.py)
+boto3>=1.35.0                    # S3-совместимое хранилище Cloud.ru (app/storage.py, generate_image)
 
 # --- База данных ---
 sqlalchemy>=2.0.36               # ORM: модели User/Conversation/Message/Download и т.д. (app/db.py)

@@ -20,7 +20,7 @@
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
 - У чата в UI одна markdown-заметка (в БД M2M `notes` ↔ `conversations`); шаринга заметок нет.
-- Биллинга и лимитов в MVP нет.
+- Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`TODO.md`).
 
 ### Where things live
 
@@ -32,8 +32,9 @@
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
-| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama) |
-| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, заказ с pzz.by |
+| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
+| `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image` |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
@@ -53,12 +54,14 @@
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
 | `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды) |
-| `docs/`, `mkdocs.yml` | продуктовая документация (MkDocs Material) |
+| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime + продукт |
+| `.python-version` | pin CPython 3.13 |
+| `.nvmrc` | pin Node.js 24 |
 
 ### Stack
 
-- Python, **FastAPI**, Jinja2 (лендинг / auth / tokens / settings)
-- Чат UI: **React + Vite + @assistant-ui/react** в `frontend/`
+- Python **3.13+**, **FastAPI**, Jinja2 (лендинг / auth / tokens / settings)
+- Чат UI: **React + Vite + @assistant-ui/react** в `frontend/` (Node.js **24+**)
 - SQLAlchemy + Alembic + SQLite (dev) / MySQL (prod при `MYSQL_HOST` + `MYSQL_PASSWORD`)
 - Деплой: FTP на shared hosting (ISPmanager), unix socket возможен через `SOCKET`
 
@@ -75,8 +78,8 @@
 
 ```bash
 cp .env.example .env   # OPENROUTER_API_KEY; опционально E7_BY_BASE_URL
-make venv
-make frontend-install && make frontend-build
+make venv              # python3.13 -m venv .venv
+make frontend-install && make frontend-build   # Node 24+
 make run  # http://127.0.0.1:8080/
 ```
 

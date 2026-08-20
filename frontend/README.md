@@ -1,32 +1,32 @@
-# React + TypeScript + Vite
+# frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Чат UI: React + Vite + [@assistant-ui/react](https://www.assistant-ui.com/). Сборка попадает в `frontend/dist` и отдаётся бэкендом как `/chat-ui/`.
 
-Currently, two official plugins are available:
+## Требования
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Node.js 24+** (pin в корне репозитория: `.nvmrc`, `engines.node` в `package.json`)
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+nvm use                 # из корня репозитория
+cd frontend
+npm install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Из корня:
+
+```bash
+make frontend-install
+make frontend-build
+```
+
+## Скрипты
+
+| Команда | Назначение |
+|---------|------------|
+| `npm run dev` | Vite на `:5173` (прокси к FastAPI `make run` на `:8080`) |
+| `npm run build` | `tsc -b` + production-сборка в `dist/` |
+| `npm run test` | Vitest (адаптер модели, геолокация) |
+| `npm run test:cov` | то же с покрытием |
+| `npm run lint` | oxlint |
+
+Модель чата выбирается в **/settings**, не на странице чата.
