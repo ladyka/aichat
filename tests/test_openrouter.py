@@ -3,7 +3,7 @@ import asyncio
 import pytest
 from fastapi import HTTPException
 
-from app.openrouter import _headers, chat_completions, stream_chat_completions
+from app.model_providers.openrouter import _headers, chat_completions, stream_chat_completions
 
 
 class FakeResponse:
@@ -75,7 +75,7 @@ def test_headers_with_key(api_key):
 
 
 def test_chat_completions(monkeypatch, api_key):
-    monkeypatch.setattr("app.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("app.model_providers.openrouter.httpx.AsyncClient", FakeAsyncClient)
     response = asyncio.run(chat_completions({"model": "default"}))
     assert response.status_code == 200
     assert response.json()["ok"] is True
@@ -94,7 +94,7 @@ async def _collect(agen):
 
 
 def test_stream_chat_completions(monkeypatch, api_key):
-    monkeypatch.setattr("app.openrouter.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("app.model_providers.openrouter.httpx.AsyncClient", FakeAsyncClient)
     chunks = asyncio.run(_collect(stream_chat_completions({"model": "default"})))
     assert len(chunks) == 2
     assert b"[DONE]" in chunks[1]
@@ -121,7 +121,7 @@ def test_stream_chat_completions_error(monkeypatch, api_key):
 
             return ErrorStream()
 
-    monkeypatch.setattr("app.openrouter.httpx.AsyncClient", ErrorClient)
+    monkeypatch.setattr("app.model_providers.openrouter.httpx.AsyncClient", ErrorClient)
     with pytest.raises(HTTPException) as exc:
         asyncio.run(_collect(stream_chat_completions({"model": "default"})))
     assert exc.value.status_code == 502
