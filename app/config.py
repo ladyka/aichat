@@ -51,6 +51,8 @@ class Settings:
         # Пицца Лисицца (pzz.by): публичный каталог в чате. Заказы — через их SPA API.
         self.pzz_enabled = _flag(_env("PZZ_ENABLED", "1"), default=True)
         self.pzz_orders_enabled = _flag(_env("PZZ_ORDERS_ENABLED", "1"), default=True)
+        # pravo.by: HTML-поиск Национального реестра (неофициальный клиент страниц портала).
+        self.pravo_enabled = _flag(_env("PRAVO_ENABLED", "1"), default=True)
 
         # Download tool (see app/tools.py): per-user storage + hard size cap.
         self.downloads_root = ROOT / "data" / "customers"

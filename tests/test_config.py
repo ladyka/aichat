@@ -96,9 +96,11 @@ def test_settings_custom_values(monkeypatch):
 def test_settings_pzz_flags(monkeypatch):
     monkeypatch.setenv("PZZ_ENABLED", "0")
     monkeypatch.setenv("PZZ_ORDERS_ENABLED", "false")
+    monkeypatch.setenv("PRAVO_ENABLED", "0")
     settings = Settings()
     assert not settings.pzz_enabled
     assert not settings.pzz_orders_enabled
+    assert not settings.pravo_enabled
 
 
 def test_settings_e7_by_base_url(monkeypatch):

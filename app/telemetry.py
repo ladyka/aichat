@@ -263,6 +263,34 @@ def compact_tool_content(content: str) -> str:
         dumped = json.dumps(data, ensure_ascii=False)
         return dumped[:_TRACE_JSON_MAX]
     items = data.get("items")
+    documents = data.get("documents")
+    if data.get("source") == "pravo.by" and isinstance(documents, list):
+        titles = [
+            str(item.get("title"))
+            for item in documents
+            if isinstance(item, dict) and item.get("title")
+        ]
+        compact = {
+            "source": data.get("source"),
+            "query": data.get("query"),
+            "registry_number": data.get("registry_number"),
+            "count": data.get("count", len(titles)),
+            "titles": titles,
+        }
+        if data.get("error"):
+            compact["error"] = data["error"]
+        return json.dumps(compact, ensure_ascii=False)
+    if data.get("source") == "pravo.by":
+        compact = {
+            "source": data.get("source"),
+            "kind": data.get("kind"),
+            "title": data.get("title"),
+            "url": data.get("url"),
+            "registry_number": data.get("registry_number"),
+        }
+        if data.get("error"):
+            compact["error"] = data["error"]
+        return json.dumps(compact, ensure_ascii=False)
     if data.get("source") == "pzz.by" and isinstance(items, list):
         titles = [
             str(item.get("title")) for item in items if isinstance(item, dict) and item.get("title")

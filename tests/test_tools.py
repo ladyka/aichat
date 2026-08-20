@@ -110,6 +110,8 @@ def test_enabled_tools_without_key(monkeypatch):
     assert [t["function"]["name"] for t in enabled_tools()] == [
         "get_current_datetime",
         "download_file",
+        "pravo_search",
+        "pravo_get_document",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",
@@ -124,6 +126,8 @@ def test_enabled_tools_with_key(monkeypatch):
     assert [t["function"]["name"] for t in tools] == [
         "get_current_datetime",
         "download_file",
+        "pravo_search",
+        "pravo_get_document",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",
@@ -482,6 +486,8 @@ def test_stream_plain_text_no_extra_call(client, mock_models, monkeypatch):
     assert [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]] == [
         "get_current_datetime",
         "download_file",
+        "pravo_search",
+        "pravo_get_document",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",
@@ -1208,6 +1214,22 @@ def test_compact_tool_content_summarizes_pzz_menu():
     assert compact["titles"] == ["Пепперони", "Пепперони острая"]
     assert compact["count"] == 2
     assert "photo" not in json.dumps(compact)
+
+    pravo = json.loads(
+        compact_tool_content(
+            json.dumps(
+                {
+                    "source": "pravo.by",
+                    "query": "трудовой",
+                    "count": 1,
+                    "documents": [{"title": "Трудовой кодекс", "url": "https://pravo.by/x"}],
+                },
+                ensure_ascii=False,
+            )
+        )
+    )
+    assert pravo["titles"] == ["Трудовой кодекс"]
+    assert "url" not in json.dumps(pravo)
 
 
 def test_compact_tool_content_other_shapes():

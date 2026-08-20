@@ -18,6 +18,8 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import Download
+from app.pravo import get_document as pravo_get_document
+from app.pravo import search_register as pravo_search_register
 from app.pzz import lookup_address, place_order, search_menu
 from app.telemetry import tool_output, tool_span
 
@@ -116,6 +118,68 @@ _DOWNLOAD_TOOL: dict[str, Any] = {
                 "url": {
                     "type": "string",
                     "description": "Полный http/https адрес, например https://example.com/page",
+                },
+            },
+            "required": ["url"],
+        },
+    },
+}
+
+_PRAVO_SEARCH_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pravo_search",
+        "description": (
+            "Поиск правовых актов Республики Беларусь на портале pravo.by "
+            "(Национальный реестр и каталог кодексов). Вызывай при юридических "
+            "вопросах по законодательству РБ: законы, указы, кодексы, постановления. "
+            "query — название или тема; registry_number — номер в реестре вроде 2/1742. "
+            "Это официальное опубликование, не гарантированно сводная действующая редакция "
+            "и не юридическая консультация. В ответе пользователю обязательно начни с "
+            "'По данным pravo.by:' и приложи ссылки. После поиска читай карточку или HTML "
+            "через pravo_get_document (только URL на pravo.by)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Название или тема, например «Трудовой кодекс» или «географических объектов».",
+                },
+                "registry_number": {
+                    "type": "string",
+                    "description": "Регистрационный номер в реестре, например 2/1742 или 6-4/55020.",
+                },
+                "page": {
+                    "type": "integer",
+                    "description": "Страница результатов, с 1. По умолчанию 1.",
+                },
+            },
+        },
+    },
+}
+
+_PRAVO_DOCUMENT_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "pravo_get_document",
+        "description": (
+            "Открыть документ pravo.by по URL из pravo_search: карточка реестра "
+            "(реквизиты, ссылка на PDF) или HTML-текст публикации. "
+            "Не ходи на etalonline.by этим инструментом. "
+            "Необязательный query — найти сниппеты («статья 42», формулировка нормы). "
+            "В ответе пользователю начни с 'По данным pravo.by:'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "Полный https://pravo.by/document/... адрес.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Фрагмент для поиска в тексте HTML-публикации.",
                 },
             },
             "required": ["url"],
@@ -277,9 +341,11 @@ _PRIVATE_NETWORKS = [
 
 
 def enabled_tools() -> list[dict[str, Any]]:
-    """Tools, доступные боту. Дата/время и скачивание — всегда; pzz и погода — по настройкам."""
+    """Tools, доступные боту. Дата/время и скачивание — всегда; pravo/pzz/погода — по настройкам."""
     settings = get_settings()
     tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL]
+    if settings.pravo_enabled:
+        tools.extend([_PRAVO_SEARCH_TOOL, _PRAVO_DOCUMENT_TOOL])
     if settings.pzz_enabled:
         tools.extend([_PZZ_SEARCH_TOOL, _PZZ_ADDRESS_TOOL, _PZZ_ORDER_TOOL])
     if settings.openweather_api_key:
@@ -321,6 +387,29 @@ def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
             if fn.get("arguments"):
                 entry["arguments"] += fn["arguments"]
     return [calls[index] for index in sorted(calls)]
+
+
+async def _pravo_tool(name: str, args: dict[str, Any]) -> str:
+    settings = get_settings()
+    if not settings.pravo_enabled:
+        return json.dumps({"error": "Поиск pravo.by выключен."}, ensure_ascii=False)
+    if name == "pravo_search":
+        page_raw = args.get("page", 1)
+        try:
+            page = int(page_raw)
+        except (TypeError, ValueError):
+            page = 1
+        payload = await pravo_search_register(
+            query=str(args.get("query") or ""),
+            registry_number=str(args.get("registry_number") or ""),
+            page=page,
+        )
+    else:
+        payload = await pravo_get_document(
+            str(args.get("url") or ""),
+            query=str(args.get("query") or ""),
+        )
+    return json.dumps(payload, ensure_ascii=False)
 
 
 async def _pzz_tool(name: str, args: dict[str, Any]) -> str:
@@ -371,6 +460,8 @@ async def _call_tool_impl(name: str, arguments: str, user: Any = None, db: Any =
         args = {}
     if not isinstance(args, dict):
         args = {}
+    if name in {"pravo_search", "pravo_get_document"}:
+        return await _pravo_tool(name, args)
     if name in {"pzz_search_menu", "pzz_lookup_address", "pzz_place_order"}:
         return await _pzz_tool(name, args)
     if name != "get_weather":
