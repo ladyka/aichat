@@ -34,7 +34,9 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    preferred_model: Mapped[str] = mapped_column(String(120), default="default")
+    preferred_model: Mapped[str] = mapped_column(
+        String(120), default="default", server_default="default"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -228,50 +230,20 @@ engine = create_engine(_settings.database_url, pool_pre_ping=True, connect_args=
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
-def _ensure_column(table: str, name: str, ddl: str) -> None:
-    """Add a column to an existing table (create_all does not alter columns)."""
-    from sqlalchemy import inspect, text
+def alembic_config():
+    """Alembic Config rooted at the repo; URL is resolved in alembic/env.py."""
+    from alembic.config import Config
 
-    insp = inspect(engine)
-    if table not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns(table)}
-    if name in cols:
-        return
-    with engine.begin() as conn:
-        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+    from app.config import ROOT
 
-
-def _ensure_user_preferred_model_column() -> None:
-    _ensure_column(
-        "users",
-        "preferred_model",
-        "preferred_model VARCHAR(120) DEFAULT 'default'",
-    )
-
-
-def _ensure_share_access_visitor_columns() -> None:
-    _ensure_column(
-        "share_accesses",
-        "visitor_kind",
-        "visitor_kind VARCHAR(16) DEFAULT 'human'",
-    )
-    _ensure_column(
-        "share_accesses",
-        "visitor_label",
-        "visitor_label VARCHAR(40) DEFAULT ''",
-    )
-    _ensure_column(
-        "share_accesses",
-        "user_agent",
-        "user_agent VARCHAR(512) DEFAULT ''",
-    )
+    return Config(str(ROOT / "alembic.ini"))
 
 
 def init_db() -> None:
-    Base.metadata.create_all(bind=engine)
-    _ensure_user_preferred_model_column()
-    _ensure_share_access_visitor_columns()
+    """Apply Alembic migrations up to head (idempotent)."""
+    from alembic import command
+
+    command.upgrade(alembic_config(), "head")
 
 
 def get_db() -> Session:

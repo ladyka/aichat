@@ -27,7 +27,8 @@
 |------|------------|
 | `app/main.py` | FastAPI app, static + `/chat-ui` mount |
 | `app/config.py` | env / settings |
-| `app/db.py` | SQLAlchemy models, init DB |
+| `app/db.py` | SQLAlchemy models; `init_db()` гоняет Alembic `upgrade head` |
+| `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama) |
@@ -55,7 +56,7 @@
 
 - Python, **FastAPI**, Jinja2 (лендинг / auth / tokens / settings)
 - Чат UI: **React + Vite + @assistant-ui/react** в `frontend/`
-- SQLAlchemy + SQLite (dev) / MySQL (prod при `MYSQL_HOST` + `MYSQL_PASSWORD`)
+- SQLAlchemy + Alembic + SQLite (dev) / MySQL (prod при `MYSQL_HOST` + `MYSQL_PASSWORD`)
 - Деплой: FTP на shared hosting (ISPmanager), unix socket возможен через `SOCKET`
 
 ### Как работать
