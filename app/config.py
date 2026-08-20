@@ -56,6 +56,21 @@ class Settings:
         self.downloads_root = ROOT / "data" / "customers"
         self.downloads_max_bytes = int(_env("DOWNLOADS_MAX_BYTES", "2097152") or "2097152")
 
+        # Cloud.ru (or S3-compatible) object storage. generate_image needs this + OpenRouter.
+        self.s3_endpoint = (_env("S3_ENDPOINT", "") or "").rstrip("/")
+        self.s3_region = _env("S3_REGION", "ru-central-1") or "ru-central-1"
+        self.s3_bucket = _env("S3_BUCKET", "") or ""
+        self.s3_path_style = _flag(_env("S3_PATH_STYLE", "1"), default=True)
+        self.s3_public_base_url = (_env("S3_PUBLIC_BASE_URL", "") or "").rstrip("/")
+        self.sa_key_id = _env("SA_KEY_ID", "") or ""
+        self.sa_key_secret = _env("SA_KEY_SECRET", "") or ""
+
+        self.image_generation_model = (
+            _env("IMAGE_GENERATION_MODEL", "black-forest-labs/flux.2-klein-4b")
+            or "black-forest-labs/flux.2-klein-4b"
+        )
+        self.image_generation_daily_limit = int(_env("IMAGE_GENERATION_DAILY_LIMIT", "5") or "5")
+
         # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
         # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com
         self.public_base_url = (_env("PUBLIC_BASE_URL", "") or "").rstrip("/")
@@ -112,6 +127,14 @@ class Settings:
         if value.endswith("/v1"):
             return value
         return f"{value}/v1"
+
+    @property
+    def s3_enabled(self) -> bool:
+        return bool(self.s3_endpoint and self.s3_bucket and self.sa_key_id and self.sa_key_secret)
+
+    @property
+    def image_generation_enabled(self) -> bool:
+        return bool(self.openrouter_api_key and self.s3_enabled)
 
     @property
     def google_redirect_uri(self) -> str:

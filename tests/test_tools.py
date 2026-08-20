@@ -575,6 +575,7 @@ def test_datetime_advertised_without_weather_key(client, mock_models, monkeypatc
     tools = [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]]
     assert "get_current_datetime" in tools
     assert "get_weather" not in tools
+    assert "generate_image" not in tools
 
 
 def test_v1_proxies_tools(client, mock_models, monkeypatch, api_key):
