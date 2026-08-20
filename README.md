@@ -92,7 +92,7 @@ cd frontend && npm run dev   # :5173
 | `DOWNLOADS_MAX_BYTES` | Лимит размера файла для `download_file` (по умолчанию `2097152` = 2 МБ) |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
-| `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); используется для построения redirect URI OAuth |
+| `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); redirect URI OAuth и абсолютные URL превью ссылок (`og:image`, `og:url`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth-клиент Google (выкл., пока не заполнены оба) |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | «Sign in with Apple» (выкл., пока не заполнены все) |
 | `FTP_*` | Деплой через `make update-prod` |
@@ -132,7 +132,7 @@ cd frontend && npm run dev   # :5173
 | `*` | `/api/conversations…` | cookie-сессия |
 | `GET/POST` | `/api/conversations/{id}/share` | cookie-сессия |
 | `POST` | `/api/conversations/{id}/share/revoke` | cookie-сессия |
-| `GET` | `/s/{key}` | нет (публичная страница чтения) |
+| `GET` | `/s/{key}` | нет (публичная страница чтения; Open Graph для превью в мессенджерах; заходы пишутся в `share_accesses` с `visitor_kind`: human / crawler / bot) |
 
 Проверка токена против хоста:
 

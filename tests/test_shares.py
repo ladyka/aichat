@@ -70,10 +70,20 @@ def test_share_lifecycle(client, db):
         assert "Чатбот" in page.text
         assert "Просмотр" in page.text
         assert email() not in page.text  # автор не показывается
+        assert 'property="og:title"' in page.text
+        assert "og:description" in page.text
+        assert "Первый вопрос" in page.text
+        assert 'property="og:image"' in page.text
+        assert "/static/og/share.png" in page.text
+        assert 'property="og:type" content="article"' in page.text
+        assert f'property="og:url" content="http://testserver/s/{key}"' in page.text
+        assert "twitter:card" in page.text
 
     accesses = db.scalars(select(ShareAccess)).all()
     assert len(accesses) == 1
     assert accesses[0].ip
+    assert accesses[0].visitor_kind == "human"
+    assert accesses[0].visitor_label == "browser"
 
     # owner can revoke
     revoked = client.post(f"/api/conversations/{conv['id']}/share/revoke")
@@ -89,7 +99,42 @@ def test_share_lifecycle(client, db):
 
 
 def test_share_not_found(client):
-    assert client.get("/s/does-not-exist").status_code == 404
+    page = client.get("/s/does-not-exist")
+    assert page.status_code == 404
+    assert "Первый вопрос" not in page.text
+    assert 'content="noindex"' in page.text
+    assert "отозвана, истекла или не существует" in page.text
+
+
+def test_share_access_classifies_crawlers_and_bots(client, db):
+    _auth(client)
+    conv = _seed_conversation(client)
+    key = client.post(f"/api/conversations/{conv['id']}/share").json()["key"]
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as anon:
+        assert anon.get(f"/s/{key}", headers={"User-Agent": "TelegramBot"}).status_code == 200
+        assert anon.get(f"/s/{key}", headers={"User-Agent": "curl/8.5.0"}).status_code == 200
+        assert (
+            anon.get(
+                f"/s/{key}",
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+                    )
+                },
+            ).status_code
+            == 200
+        )
+
+    kinds = {(row.visitor_kind, row.visitor_label) for row in db.scalars(select(ShareAccess)).all()}
+    assert ("crawler", "telegram") in kinds
+    assert ("bot", "curl") in kinds
+    assert ("human", "browser") in kinds
 
 
 def test_share_expired(client, db):

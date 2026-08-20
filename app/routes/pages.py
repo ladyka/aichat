@@ -21,6 +21,7 @@ from app.auth import (
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, User, get_db, get_user_by_email
 from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
+from app.og import og_context
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(get_settings().root / "templates"))
@@ -40,6 +41,7 @@ def _ctx(user: User | None = None, **extra):
 
 
 def render(request: Request, name: str, user: User | None = None, status_code: int = 200, **extra):
+    extra = {**og_context(request), **extra}
     return templates.TemplateResponse(
         request,
         name,
@@ -55,12 +57,22 @@ def landing(request: Request, user: User | None = Depends(get_current_user_optio
 
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(request: Request, user: User | None = Depends(get_current_user_optional)):
-    return render(request, "privacy.html", user)
+    return render(
+        request,
+        "privacy.html",
+        user,
+        og_description="Как aichat обрабатывает данные аккаунта, чатов и техническую информацию.",
+    )
 
 
 @router.get("/terms", response_class=HTMLResponse)
 def terms_page(request: Request, user: User | None = Depends(get_current_user_optional)):
-    return render(request, "terms.html", user)
+    return render(
+        request,
+        "terms.html",
+        user,
+        og_description="Условия использования сервиса aichat: аккаунт, чат, API и ответственность.",
+    )
 
 
 @router.get("/login", response_class=HTMLResponse)
