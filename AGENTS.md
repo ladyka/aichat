@@ -19,6 +19,7 @@
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
+- У чата в UI одна markdown-заметка (в БД M2M `notes` ↔ `conversations`); шаринга заметок нет.
 - Биллинга и лимитов в MVP нет.
 
 ### Where things live
@@ -32,7 +33,8 @@
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama) |
-| `app/tools.py` | инструменты чата: погода (OpenWeatherMap), дата/время, `download_file`, заказ с pzz.by |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, заказ с pzz.by |
+| `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
@@ -41,6 +43,7 @@
 | `app/routes/oauth.py` | `/auth/google`, `/auth/apple` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |
+| `app/routes/notes.py` | `/api/conversations/{id}/note` (GET/PUT) и download |
 | `app/og.py` | Open Graph: абсолютные URL превью, сниппет описания |
 | `app/visitors.py` | классификация User-Agent: human / crawler / bot |
 | `frontend/` | React + assistant-ui (чат) |

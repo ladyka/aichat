@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAui } from "@assistant-ui/react";
 import {
   Archive,
@@ -8,10 +8,12 @@ import {
   Link2,
   PanelLeftClose,
   PanelLeftOpen,
+  StickyNote,
   Trash2,
   UserRound,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { NotePane } from "@/components/NotePane";
 import { RuntimeProvider } from "@/components/RuntimeProvider";
 import { ShareDialog } from "@/components/ShareDialog";
 import { Thread } from "@/components/Thread";
@@ -45,6 +47,22 @@ function ChatLayout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [confirm, setConfirm] = useState<null | "archive" | "delete">(null);
+  const [noteCollapsed, setNoteCollapsed] = useState(false);
+  const [noteForcedOpen, setNoteForcedOpen] = useState(false);
+  const [noteHasBody, setNoteHasBody] = useState(false);
+
+  const onHasBody = useCallback((hasBody: boolean) => {
+    setNoteHasBody(hasBody);
+  }, []);
+
+  useEffect(() => {
+    setNoteCollapsed(false);
+    setNoteForcedOpen(false);
+    setNoteHasBody(false);
+  }, [conversationId]);
+
+  const noteVisible =
+    Boolean(conversationId) && !noteCollapsed && (noteHasBody || noteForcedOpen);
 
   const runConfirm = () => {
     if (confirm === "archive") aui.threadListItem.archive();
@@ -170,6 +188,18 @@ function ChatLayout() {
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => {
+                  setNoteCollapsed(false);
+                  setNoteForcedOpen(true);
+                }}
+                aria-label="Заметка"
+              >
+                <StickyNote className="h-4 w-4" />
+                Заметка
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
                 onClick={() => setConfirm("archive")}
                 aria-label="Архивировать диалог"
               >
@@ -197,8 +227,34 @@ function ChatLayout() {
             </div>
           )}
         </div>
-        <div className="min-h-0 flex-1">
-          <Thread />
+        <div className="relative flex min-h-0 flex-1">
+          <div className="min-w-0 flex-1">
+            <Thread />
+          </div>
+          {conversationId && (
+            <>
+              {noteVisible ? (
+                <div
+                  className="absolute inset-0 z-20 bg-black/25 md:hidden"
+                  onClick={() => setNoteCollapsed(true)}
+                  aria-hidden="true"
+                />
+              ) : null}
+              <div
+                className={
+                  noteVisible
+                    ? "absolute inset-y-0 right-0 z-30 flex h-full w-[min(100%,28rem)] md:static md:z-auto md:w-[min(28rem,42%)]"
+                    : "hidden"
+                }
+              >
+                <NotePane
+                  conversationId={conversationId}
+                  onClose={() => setNoteCollapsed(true)}
+                  onHasBody={onHasBody}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 

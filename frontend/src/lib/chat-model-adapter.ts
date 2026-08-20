@@ -4,6 +4,7 @@ import type {
   ThreadMessage,
 } from "@assistant-ui/react";
 import { fetchSettings } from "@/lib/api";
+import { notifyNoteChanged } from "@/lib/note-events";
 
 type Location = { lat: number; lon: number };
 
@@ -267,6 +268,7 @@ export function createChatModelAdapter(
         if (!yielded) {
           yield { content: [{ type: "text" as const, text: "" }] };
         }
+        notifyNoteChanged();
         return;
       }
 
@@ -301,6 +303,7 @@ export function createChatModelAdapter(
             yield value;
           }
           if (!yielded) yield { content: [{ type: "text" as const, text: "" }] };
+          notifyNoteChanged();
           return;
         }
       }
@@ -333,6 +336,7 @@ export function createChatModelAdapter(
       if (!yielded) {
         yield { content: [{ type: "text" as const, text: "" }] };
       }
+      notifyNoteChanged();
     },
   };
 }

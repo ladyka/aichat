@@ -110,6 +110,8 @@ def test_enabled_tools_without_key(monkeypatch):
     assert [t["function"]["name"] for t in enabled_tools()] == [
         "get_current_datetime",
         "download_file",
+        "read_chat_note",
+        "write_chat_note",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",
@@ -124,6 +126,8 @@ def test_enabled_tools_with_key(monkeypatch):
     assert [t["function"]["name"] for t in tools] == [
         "get_current_datetime",
         "download_file",
+        "read_chat_note",
+        "write_chat_note",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",
@@ -482,6 +486,8 @@ def test_stream_plain_text_no_extra_call(client, mock_models, monkeypatch):
     assert [t["function"]["name"] for t in plan.stream_payloads[0]["tools"]] == [
         "get_current_datetime",
         "download_file",
+        "read_chat_note",
+        "write_chat_note",
         "pzz_search_menu",
         "pzz_lookup_address",
         "pzz_place_order",

@@ -12,6 +12,7 @@ from sqlalchemy import (
     create_engine,
     select,
 )
+from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -46,6 +47,10 @@ class User(Base):
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
     oauth_identities: Mapped[list["OAuthIdentity"]] = relationship(back_populates="user")
     downloads: Mapped[list["Download"]] = relationship(back_populates="user")
+    notes: Mapped[list["Note"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class OAuthIdentity(Base):
@@ -91,6 +96,10 @@ class Conversation(Base):
         back_populates="conversation",
         cascade="all, delete-orphan",
     )
+    note_links: Mapped[list["ConversationNote"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
 
 
 class Message(Base):
@@ -105,6 +114,57 @@ class Message(Base):
     )
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
+
+
+class Note(Base):
+    """Markdown document owned by a user; linked to chats via conversation_notes."""
+
+    __tablename__ = "notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="Заметка", server_default="Заметка")
+    body: Mapped[str] = mapped_column(
+        Text().with_variant(MEDIUMTEXT(), "mysql"),
+        default="",
+        server_default="",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship(back_populates="notes")
+    conversation_links: Mapped[list["ConversationNote"]] = relationship(
+        back_populates="note",
+        cascade="all, delete-orphan",
+    )
+
+
+class ConversationNote(Base):
+    """Many-to-many: a chat may have many notes, a note may appear in many chats."""
+
+    __tablename__ = "conversation_notes"
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    note_id: Mapped[int] = mapped_column(
+        ForeignKey("notes.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    conversation: Mapped[Conversation] = relationship(back_populates="note_links")
+    note: Mapped[Note] = relationship(back_populates="conversation_links")
 
 
 class UserSession(Base):
