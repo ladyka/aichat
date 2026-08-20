@@ -22,7 +22,7 @@
 ### Prerequisites
 
 - Python 3.13+
-- Node.js 20+ (сборка чата)
+- Node.js 24+ (сборка чата; pin в `.nvmrc`)
 - Ключ OpenRouter (`OPENROUTER_API_KEY`)
 - Для моделей e7 — `E7_BY_BASE_URL` (Ollama)
 
@@ -180,6 +180,7 @@ mkdocs.yml     # конфиг документации
 .flake8        # flake8 (100 символов; E203/W503 выключены — конфликт с black)
 pyproject.toml # requires-python 3.13+, конфиг black + isort
 .python-version # pin CPython 3.13 (pyenv / uv)
+.nvmrc         # pin Node.js 24 (nvm / fnm)
 requirements-dev.txt # инструменты разработки (линтеры)
 ```
 

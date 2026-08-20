@@ -55,7 +55,7 @@
 ### Stack
 
 - Python **3.13+**, **FastAPI**, Jinja2 (лендинг / auth / tokens / settings)
-- Чат UI: **React + Vite + @assistant-ui/react** в `frontend/`
+- Чат UI: **React + Vite + @assistant-ui/react** в `frontend/` (Node.js **24+**)
 - SQLAlchemy + Alembic + SQLite (dev) / MySQL (prod при `MYSQL_HOST` + `MYSQL_PASSWORD`)
 - Деплой: FTP на shared hosting (ISPmanager), unix socket возможен через `SOCKET`
 
@@ -73,7 +73,7 @@
 ```bash
 cp .env.example .env   # OPENROUTER_API_KEY; опционально E7_BY_BASE_URL
 make venv              # python3.13 -m venv .venv
-make frontend-install && make frontend-build
+make frontend-install && make frontend-build   # Node 24+
 make run  # http://127.0.0.1:8080/
 ```
 
