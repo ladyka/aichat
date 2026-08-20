@@ -12,10 +12,10 @@
 
 ### Product facts (не ломать без явной просьбы)
 
-- Бэкенд LLM: **OpenRouter** (серверный `OPENROUTER_API_KEY`) и опционально **e7.by** (Ollama, `E7_BY_BASE_URL`).
+- Бэкенд LLM: **OpenRouter** (серверный `OPENROUTER_API_KEY`) и опционально **e7** (Ollama, `E7_BY_BASE_URL`).
 - Пользователям показываем только **free**-модели OpenRouter; в публичных id **нет** суффикса `:free`.
 - Публичная модель `default` → upstream `openrouter/free`.
-- Модели e7.by в публичных id: `e7.by/<ollama-model>` (`owned_by`: `e7.by`).
+- Модели e7 в публичных id: `e7/<ollama-model>` (`owned_by`: `e7`).
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
@@ -30,7 +30,7 @@
 | `app/db.py` | SQLAlchemy models, init DB |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
-| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7.by (Ollama) |
+| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama) |
 | `app/tools.py` | инструменты чата: погода (OpenWeatherMap), дата/время, `download_file`, заказ с pzz.by |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |

@@ -33,7 +33,7 @@ class Settings:
         self.root = ROOT
         self.openrouter_api_key = _env("OPENROUTER_API_KEY", "")
         self.openrouter_base_url = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        # e7.by is an Ollama provider. Empty E7_BY_BASE_URL disables it.
+        # e7 is an Ollama provider. Empty E7_BY_BASE_URL disables it.
         # Accept host (http://host:11434) or OpenAI-compatible base (.../v1).
         self.e7_by_base_url = self._ollama_openai_base(_env("E7_BY_BASE_URL", "") or "")
         self.e7_by_api_key = _env("E7_BY_API_KEY", "") or ""

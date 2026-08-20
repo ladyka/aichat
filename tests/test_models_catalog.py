@@ -49,9 +49,9 @@ def test_build_models_response_includes_e7_ids():
     e7 = [{"id": "llama3.2:latest"}]
     payload = mc._build_models_response(raw, e7)
     ids = [item["id"] for item in payload["data"]]
-    assert "e7.by/llama3.2:latest" in ids
+    assert "e7/llama3.2:latest" in ids
     owned = {item["id"]: item["owned_by"] for item in payload["data"]}
-    assert owned["e7.by/llama3.2:latest"] == "e7.by"
+    assert owned["e7/llama3.2:latest"] == "e7"
 
 
 def test_headers_without_key(monkeypatch):
@@ -130,12 +130,12 @@ def test_resolve_e7_model(monkeypatch):
     monkeypatch.setattr(get_settings(), "e7_by_enabled", True)
     monkeypatch.setattr(mc, "_cache_public_ids", set())
     monkeypatch.setattr(mc, "_cache_routes", {})
-    route = mc.resolve_model("e7.by/llama3.2:latest")
+    route = mc.resolve_model("e7/llama3.2:latest")
     assert route.provider == mc.PROVIDER_E7_BY
     assert route.upstream_id == "llama3.2:latest"
-    assert mc.to_e7_public_id("llama3.2:latest") == "e7.by/llama3.2:latest"
+    assert mc.to_e7_public_id("llama3.2:latest") == "e7/llama3.2:latest"
 
     monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
     with pytest.raises(HTTPException) as exc:
-        mc.resolve_model("e7.by/llama3.2:latest")
+        mc.resolve_model("e7/llama3.2:latest")
     assert exc.value.status_code == 503

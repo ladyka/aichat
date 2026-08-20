@@ -195,7 +195,7 @@ async def _fetch_provider_models() -> tuple[list[dict[str, Any]], list[dict[str,
         openrouter_raw = []
 
     if isinstance(e7_raw, BaseException):
-        logger.warning("e7.by models unavailable: %s", e7_raw)
+        logger.warning("e7 models unavailable: %s", e7_raw)
         e7_raw = []
 
     return openrouter_raw, e7_raw

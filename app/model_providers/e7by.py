@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from app.config import get_settings
 from app.telemetry import llm_byte_stream, llm_instrument
 
-PROVIDER_ID = "e7.by"
+PROVIDER_ID = "e7"
 
 
 def _headers() -> dict[str, str]:
@@ -62,15 +62,15 @@ async def list_models() -> list[dict[str, Any]]:
     if tags_response.status_code >= 400:
         raise HTTPException(
             status_code=502,
-            detail=f"e7.by models error: {response.status_code}",
+            detail=f"e7 models error: {response.status_code}",
         )
     try:
         payload = tags_response.json()
     except Exception:
-        raise HTTPException(status_code=502, detail="Invalid e7.by models response")
+        raise HTTPException(status_code=502, detail="Invalid e7 models response")
     raw_models = payload.get("models")
     if not isinstance(raw_models, list):
-        raise HTTPException(status_code=502, detail="Invalid e7.by models response")
+        raise HTTPException(status_code=502, detail="Invalid e7 models response")
     items: list[dict[str, Any]] = []
     for raw in raw_models:
         if not isinstance(raw, dict):
@@ -81,7 +81,7 @@ async def list_models() -> list[dict[str, Any]]:
     return items
 
 
-@llm_instrument("e7.by.chat.completions")
+@llm_instrument("e7.chat.completions")
 async def chat_completions(payload: dict[str, Any]) -> httpx.Response:
     _require_configured()
     settings = get_settings()
@@ -94,7 +94,7 @@ async def chat_completions(payload: dict[str, Any]) -> httpx.Response:
 
 async def stream_chat_completions(payload: dict[str, Any]) -> AsyncIterator[bytes]:
     async for chunk in llm_byte_stream(
-        "e7.by.chat.completions.stream",
+        "e7.chat.completions.stream",
         _stream_chat_completions_raw(payload),
         input_payload=payload,
     ):
