@@ -29,6 +29,12 @@ class Settings:
         self.openrouter_base_url = _env(
             "OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"
         )
+        # e7.by is an Ollama provider. Empty E7_BY_BASE_URL disables it.
+        # Accept host (http://host:11434) or OpenAI-compatible base (.../v1).
+        self.e7_by_base_url = self._ollama_openai_base(_env("E7_BY_BASE_URL", "") or "")
+        self.e7_by_api_key = _env("E7_BY_API_KEY", "") or ""
+        self.e7_by_timeout = float(_env("E7_BY_TIMEOUT", "300") or "300")
+        self.e7_by_enabled = bool(self.e7_by_base_url)
         self.session_cookie = _env("SESSION_COOKIE", "aichat_session")
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()
@@ -46,6 +52,15 @@ class Settings:
             or ""
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
+
+    @staticmethod
+    def _ollama_openai_base(raw: str) -> str:
+        value = raw.strip().rstrip("/")
+        if not value:
+            return ""
+        if value.endswith("/v1"):
+            return value
+        return f"{value}/v1"
 
     def _database_url(self) -> str:
         explicit = _env("DATABASE_URL")

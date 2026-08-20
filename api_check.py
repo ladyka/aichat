@@ -47,7 +47,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Check aichat API on a remote host")
     parser.add_argument(
         "--host",
-        default=os.environ.get("AICHAT_HOST", "http://127.0.0.1:8080"),
+        default=os.environ.get("AICHAT_HOST", "http://127.0.0.1:20000"),
         help="Base URL, e.g. https://aichat.example.com (or AICHAT_HOST)",
     )
     parser.add_argument(

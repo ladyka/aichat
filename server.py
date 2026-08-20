@@ -45,7 +45,7 @@ def main() -> None:
         return
 
     host = os.environ.get("INSTANCE_HOST", "127.0.0.1")
-    port = int(os.environ.get("PORT", "8080"))
+    port = int(os.environ.get("PORT", "20000"))
     print(f"Listening http://{host}:{port}/")
     uvicorn.run("app.main:app", host=host, port=port, log_level="info")
 

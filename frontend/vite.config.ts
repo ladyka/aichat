@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+const apiOrigin = process.env.AICHAT_API_ORIGIN ?? "http://127.0.0.1:20000";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -29,13 +30,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": "http://127.0.0.1:8080",
-      "/v1": "http://127.0.0.1:8080",
-      "/login": "http://127.0.0.1:8080",
-      "/logout": "http://127.0.0.1:8080",
-      "/settings": "http://127.0.0.1:8080",
-      "/tokens": "http://127.0.0.1:8080",
-      "/static": "http://127.0.0.1:8080",
+      "/api": apiOrigin,
+      "/v1": apiOrigin,
+      "/login": apiOrigin,
+      "/logout": apiOrigin,
+      "/settings": apiOrigin,
+      "/tokens": apiOrigin,
+      "/static": apiOrigin,
     },
   },
 });

@@ -1,6 +1,6 @@
 .PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build
 
-PORT ?= 8080
+PORT ?= 20000
 INSTANCE_HOST ?= 127.0.0.1
 VENV ?= .venv
 PYTHON := $(VENV)/bin/python
