@@ -11,6 +11,7 @@ httpx2>=2.0.0                    # асинхронный HTTP-клиент: п�
 
 # --- База данных ---
 sqlalchemy>=2.0.36               # ORM: модели User/Conversation/Message/Download и т.д. (app/db.py)
+alembic>=1.14.0                  # миграции схемы (alembic/, `init_db()` → upgrade head)
 pymysql>=1.1.1                   # MySQL-драйвер для продакшена (mysql+pymysql:// в app/config.py)
 cryptography>=43.0.0             # подпись JWT (Apple private key) и auth MySQL 8 (caching_sha2_password)
 
