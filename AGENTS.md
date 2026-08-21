@@ -29,6 +29,7 @@
 | `app/main.py` | FastAPI app, static + `/chat-ui` mount |
 | `app/config.py` | env / settings |
 | `app/db.py` | SQLAlchemy models; `init_db()` гоняет Alembic `upgrade head` |
+| `skills` / `user_skill_defaults` / `conversation_skills` / `skill_shares` | Skills: свой markdown, копия с `parent_id`, дефолты новых чатов, набор чата (можно менять), шаринг в каталог |
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |

@@ -51,6 +51,13 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    skills: Mapped[list["Skill"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    skill_defaults: Mapped[list["UserSkillDefault"]] = relationship(
+        back_populates="user",
+    )
     generated_images: Mapped[list["GeneratedImage"]] = relationship(back_populates="user")
 
 
@@ -98,6 +105,10 @@ class Conversation(Base):
         cascade="all, delete-orphan",
     )
     note_links: Mapped[list["ConversationNote"]] = relationship(
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+    skill_links: Mapped[list["ConversationSkill"]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
     )
@@ -166,6 +177,122 @@ class ConversationNote(Base):
 
     conversation: Mapped[Conversation] = relationship(back_populates="note_links")
     note: Mapped[Note] = relationship(back_populates="conversation_links")
+
+
+class Skill(Base):
+    """Markdown skill owned by a user. Copies store parent_id (snapshot, not a live link)."""
+
+    __tablename__ = "skills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("skills.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(200), default="Навык", server_default="Навык")
+    description: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    body: Mapped[str] = mapped_column(
+        Text().with_variant(MEDIUMTEXT(), "mysql"),
+        default="",
+        server_default="",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship(back_populates="skills")
+    parent: Mapped["Skill | None"] = relationship(
+        remote_side=[id],
+        back_populates="copies",
+    )
+    copies: Mapped[list["Skill"]] = relationship(
+        back_populates="parent",
+        passive_deletes=True,
+    )
+    conversation_links: Mapped[list["ConversationSkill"]] = relationship(
+        back_populates="skill",
+        cascade="all, delete-orphan",
+    )
+    default_links: Mapped[list["UserSkillDefault"]] = relationship(
+        back_populates="skill",
+        cascade="all, delete-orphan",
+    )
+    shares: Mapped[list["SkillShare"]] = relationship(
+        back_populates="skill",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserSkillDefault(Base):
+    """Skills copied onto a new chat (variant 2: editable after create, also mid-chat)."""
+
+    __tablename__ = "user_skill_defaults"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id: Mapped[int] = mapped_column(
+        ForeignKey("skills.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    user: Mapped[User] = relationship(back_populates="skill_defaults")
+    skill: Mapped[Skill] = relationship(back_populates="default_links")
+
+
+class ConversationSkill(Base):
+    """Current skill set of a chat; rows can be added/removed at any time."""
+
+    __tablename__ = "conversation_skills"
+
+    conversation_id: Mapped[int] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    skill_id: Mapped[int] = mapped_column(
+        ForeignKey("skills.id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    conversation: Mapped[Conversation] = relationship(back_populates="skill_links")
+    skill: Mapped[Skill] = relationship(back_populates="conversation_links")
+
+
+class SkillShare(Base):
+    """Catalog link for a skill. Active (not revoked/expired) share = listed in the catalog."""
+
+    __tablename__ = "skill_shares"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    skill_id: Mapped[int] = mapped_column(
+        ForeignKey("skills.id", ondelete="CASCADE"),
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    prefix: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    skill: Mapped[Skill] = relationship(back_populates="shares")
 
 
 class UserSession(Base):
