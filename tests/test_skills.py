@@ -38,11 +38,12 @@ def test_skill_copy_defaults_chat_and_share(client, db):
         body="Помоги заказать пиццу.",
     )
     db.add(copy)
+    db.commit()
+    db.refresh(copy)
     db.add(UserSkillDefault(user_id=owner.id, skill_id=copy.id))
     conv = Conversation(user_id=owner.id, title="Новый чат")
     db.add(conv)
     db.commit()
-    db.refresh(copy)
     db.refresh(conv)
 
     db.add(ConversationSkill(conversation_id=conv.id, skill_id=copy.id))
