@@ -41,6 +41,12 @@ def test_skills_library_and_editor(client):
     assert "Показывать в каталоге" in editor.text
     assert "/catalog/skills/" in editor.text
 
+    listed = client.get("/skills")
+    assert listed.status_code == 200
+    assert "Налоги" in listed.text
+    assert "в каталоге" in listed.text
+    assert "в новых чатах" in listed.text
+
     catalog = client.get("/catalog")
     assert "Налоги" in catalog.text
     skill_id = location.rsplit("/", 1)[-1]
