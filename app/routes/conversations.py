@@ -13,6 +13,13 @@ from app.auth import get_user_from_session
 from app.config import get_settings
 from app.db import Conversation, Message, User, get_db
 from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
+from app.skills import (
+    conversation_skill_ids,
+    copy_defaults_to_conversation,
+    default_skill_ids,
+    set_conversation_skills,
+    set_default_skill_ids,
+)
 
 router = APIRouter()
 
@@ -40,6 +47,7 @@ def _conversation_summary(c: Conversation) -> dict[str, Any]:
         "created_at": _iso(c.created_at),
         "updated_at": _iso(c.updated_at),
         "archived_at": _iso(c.archived_at),
+        "skill_ids": conversation_skill_ids(c),
     }
 
 
@@ -56,7 +64,7 @@ def _get_owned_conversation(db: Session, user: User, conversation_id: int) -> Co
     return db.scalar(
         select(Conversation)
         .where(Conversation.id == conversation_id, Conversation.user_id == user.id)
-        .options(selectinload(Conversation.messages))
+        .options(selectinload(Conversation.messages), selectinload(Conversation.skill_links))
     )
 
 
@@ -79,7 +87,12 @@ class MessagesAppend(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    preferred_model: str
+    preferred_model: str | None = None
+    default_skill_ids: list[str] | None = None
+
+
+class ConversationSkillsUpdate(BaseModel):
+    skill_ids: list[str] = Field(default_factory=list)
 
 
 @router.get("/api/conversations")
@@ -90,6 +103,7 @@ def list_conversations(request: Request, db: Session = Depends(get_db)):
     rows = db.scalars(
         select(Conversation)
         .where(Conversation.user_id == user.id, Conversation.archived_at.is_(None))
+        .options(selectinload(Conversation.skill_links))
         .order_by(Conversation.updated_at.desc())
     ).all()
     return {"data": [_conversation_summary(c) for c in rows]}
@@ -108,8 +122,11 @@ def create_conversation(
     now = datetime.now(timezone.utc)
     conv = Conversation(user_id=user.id, title=title, created_at=now, updated_at=now)
     db.add(conv)
+    db.flush()
+    copy_defaults_to_conversation(db, user, conv)
     db.commit()
     db.refresh(conv)
+    db.refresh(conv, attribute_names=["skill_links"])
     return _conversation_summary(conv)
 
 
@@ -154,6 +171,29 @@ def patch_conversation(
     db.commit()
     db.refresh(conv)
     return _conversation_summary(conv)
+
+
+@router.put("/api/conversations/{conversation_id}/skills")
+def put_conversation_skills(
+    conversation_id: int,
+    request: Request,
+    body: ConversationSkillsUpdate,
+    db: Session = Depends(get_db),
+):
+    user = _require_user(request, db)
+    if isinstance(user, JSONResponse):
+        return user
+    conv = _get_owned_conversation(db, user, conversation_id)
+    if not conv:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    skill_ids, err = set_conversation_skills(db, user, conv, body.skill_ids)
+    if err:
+        return JSONResponse(status_code=400, content={"error": err})
+    conv.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(conv)
+    db.refresh(conv, attribute_names=["skill_links"])
+    return {"skill_ids": skill_ids}
 
 
 @router.delete("/api/conversations/{conversation_id}")
@@ -216,7 +256,7 @@ def get_settings_api(request: Request, db: Session = Depends(get_db)):
     if isinstance(user, JSONResponse):
         return user
     model = (user.preferred_model or "").strip() or PUBLIC_DEFAULT_ID
-    return {"preferred_model": model}
+    return {"preferred_model": model, "default_skill_ids": default_skill_ids(db, user)}
 
 
 @router.put("/api/settings")
@@ -229,13 +269,20 @@ async def put_settings_api(
     if isinstance(user, JSONResponse):
         return user
 
-    model = (body.preferred_model or "").strip() or PUBLIC_DEFAULT_ID
-    await get_models_list()
-    try:
-        resolve_upstream_model(model)
-    except HTTPException as exc:
-        return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+    if body.preferred_model is not None:
+        model = (body.preferred_model or "").strip() or PUBLIC_DEFAULT_ID
+        await get_models_list()
+        try:
+            resolve_upstream_model(model)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
+        user.preferred_model = model
 
-    user.preferred_model = model
+    if body.default_skill_ids is not None:
+        _, err = set_default_skill_ids(db, user, body.default_skill_ids)
+        if err:
+            return JSONResponse(status_code=400, content={"error": err})
+
     db.commit()
-    return {"preferred_model": model}
+    model = (user.preferred_model or "").strip() or PUBLIC_DEFAULT_ID
+    return {"preferred_model": model, "default_skill_ids": default_skill_ids(db, user)}

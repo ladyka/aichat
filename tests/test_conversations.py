@@ -112,8 +112,11 @@ def test_conversations_are_owned(client):
 
 def test_settings_get_and_put(client, mock_models):
     _auth(client)
-    assert client.get("/api/settings").json() == {"preferred_model": "default"}
+    assert client.get("/api/settings").json() == {
+        "preferred_model": "default",
+        "default_skill_ids": [],
+    }
 
     response = client.put("/api/settings", json={"preferred_model": "default"})
     assert response.status_code == 200
-    assert response.json() == {"preferred_model": "default"}
+    assert response.json() == {"preferred_model": "default", "default_skill_ids": []}
