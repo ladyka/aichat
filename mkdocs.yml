@@ -38,6 +38,7 @@ nav:
   - Главная: index.md
   - Разработка:
     - Стек и runtime: dev/runtime.md
+    - OAuth-провайдеры: dev/oauth-providers.md
   - Продукт:
     - Видение (Беларусь): product/vision-belarus.md
     - MVP и следующие шаги: product/mvp-next-steps.md

@@ -15,6 +15,7 @@
 | Раздел | Содержание |
 |--------|------------|
 | [Стек и runtime](dev/runtime.md) | Python 3.13, Node.js 24, pin-файлы, прод |
+| [OAuth-провайдеры](dev/oauth-providers.md) | Как получить креды Google, Apple, Яндекс, VK, GitHub |
 | [Видение (Беларусь)](product/vision-belarus.md) | Зачем локальный LLM-сервис для РБ, сценарии, риски |
 | [MVP и следующие шаги](product/mvp-next-steps.md) | Фокус первого релиза, чеклист, открытые вопросы |
 

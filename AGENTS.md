@@ -54,7 +54,7 @@
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
 | `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды) |
-| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime + продукт |
+| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime, OAuth-креды, продукт |
 | `.python-version` | pin CPython 3.13 |
 | `.nvmrc` | pin Node.js 24 |
 

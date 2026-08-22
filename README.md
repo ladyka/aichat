@@ -132,13 +132,17 @@ cd frontend && npm run dev   # :5173
 
 ### OAuth-вход (Google / Apple / Яндекс / VK / GitHub)
 
-Каждый провайдер включается **отдельно**: кнопка на `/login` и `/register` появляется, только если заданы `PUBLIC_BASE_URL` и переменные этого провайдера. Redirect URI:
+Каждый провайдер включается **отдельно**: кнопка на `/login` и `/register` появляется, только если заданы `PUBLIC_BASE_URL` и переменные этого провайдера.
 
-- Google: `{PUBLIC_BASE_URL}/auth/google/callback` → указать в OAuth-клиенте Google (Authorized redirect URIs).
-- Apple: `{PUBLIC_BASE_URL}/auth/apple/callback` → указать в «Sign in with Apple» Service ID. Для Apple нужен платный Developer Account: Service ID + Team ID + Key ID + содержимое `.p8`-файла ключа (в `APPLE_PRIVATE_KEY`).
-- Яндекс: `{PUBLIC_BASE_URL}/auth/yandex/callback` → приложение на [oauth.yandex.ru](https://oauth.yandex.ru/), права `login:info` и `login:email`.
-- VK: `{PUBLIC_BASE_URL}/auth/vk/callback` → приложение VK ID; `VK_CLIENT_ID` — ID приложения, `VK_CLIENT_SECRET` (или `VK_SERVICE_TOKEN`) — **сервисный ключ**. Нужен scope `email`.
-- GitHub: `{PUBLIC_BASE_URL}/auth/github/callback` → OAuth App, scopes `read:user` и `user:email`.
+Пошагово, как завести приложение и какие поля куда копировать: **[docs/dev/oauth-providers.md](docs/dev/oauth-providers.md)** (в MkDocs — «OAuth-провайдеры»).
+
+Redirect URI (прописать в кабинете 1:1):
+
+- Google: `{PUBLIC_BASE_URL}/auth/google/callback`
+- Apple: `{PUBLIC_BASE_URL}/auth/apple/callback`
+- Яндекс: `{PUBLIC_BASE_URL}/auth/yandex/callback`
+- VK: `{PUBLIC_BASE_URL}/auth/vk/callback`
+- GitHub: `{PUBLIC_BASE_URL}/auth/github/callback`
 
 Новые пользователи создаются автоматически по email из провайдера; если email совпадает с существующим — вход в тот же аккаунт. Привязка провайдера хранится в таблице `oauth_identities`. OAuth-аккаунты пароль не имеют — вход по email+пароль для них недоступен.
 
