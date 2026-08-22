@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Мои навыки — aichat{% endblock %}
+{% block content %}
+<section class="auth-card skill-card">
+  <p class="back-link"><a href="/chat">← К чату</a> · <a href="/settings">Настройки</a> · <a href="/catalog">Каталог</a></p>
+  <h1>Мои навыки</h1>
+  <p class="lede">Инструкции для чата. По умолчанию приватные — в каталог попадают только опубликованные.</p>
+  <p class="cta-row">
+    <a class="btn" href="/skills/new">Создать навык</a>
+    <a class="btn btn-ghost" href="/catalog">Открыть каталог</a>
+  </p>
+  <ul class="token-list skill-list">
+    {% for item in items %}
+    <li>
+      <div>
+        <a href="/skills/{{ item.id }}"><strong>{{ item.title }}</strong></a>
+        <span class="muted">
+          {% if item.public %}в каталоге{% else %}личный{% endif %}
+          {% if item.is_default %} · в новых чатах{% endif %}
+          {% if item.updated_day %} · {{ item.updated_day }}{% endif %}
+        </span>
+        {% if item.description %}<span class="muted">{{ item.description }}</span>{% endif %}
+      </div>
+      <a class="btn btn-ghost btn-small" href="/skills/{{ item.id }}">Открыть</a>
+    </li>
+    {% else %}
+    <li class="muted">Пока нет навыков. Создайте свой или скопируйте из каталога.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

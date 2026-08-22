@@ -4,7 +4,7 @@
 
 ## Что это сейчас
 
-Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели) и опционально e7 (Ollama). В чате доступны погодные инструменты (OpenWeatherMap) с геолокацией браузера и заказ с pzz.by (Пицца Лисицца); вход — email+пароль или OAuth (Google/Apple).
+Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели) и опционально e7 (Ollama). В чате доступны погодные инструменты (OpenWeatherMap) с геолокацией браузера, заказ с pzz.by (Пицца Лисицца) и markdown-навыки (`/skills`, каталог `/catalog`); вход — email+пароль или OAuth (Google/Apple).
 
 **Runtime:** Python **3.13+**, Node.js **24+** (сборка чата). См. [Стек и runtime](dev/runtime.md).
 

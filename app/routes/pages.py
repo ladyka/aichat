@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
@@ -22,9 +22,22 @@ from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, User, get_db, get_user_by_email
 from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
 from app.og import og_context
+from app.skills import default_skill_ids, list_owned_skills, set_default_skill_ids, skill_payload
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(get_settings().root / "templates"))
+
+
+def safe_next_path(raw: str | None) -> str | None:
+    """Allow only same-origin relative paths (for post-login return)."""
+    if not raw:
+        return None
+    value = raw.strip()
+    if not value.startswith("/") or value.startswith("//") or "\\" in value:
+        return None
+    if "://" in value:
+        return None
+    return value
 
 
 def _ctx(user: User | None = None, **extra):
@@ -76,10 +89,15 @@ def terms_page(request: Request, user: User | None = Depends(get_current_user_op
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+def login_page(
+    request: Request,
+    user: User | None = Depends(get_current_user_optional),
+    next_url: str | None = Query(default=None, alias="next"),
+):
+    dest = safe_next_path(next_url)
     if user:
-        return RedirectResponse("/chat", status_code=303)
-    return render(request, "login.html", user, error=None)
+        return RedirectResponse(dest or "/chat", status_code=303)
+    return render(request, "login.html", user, error=None, next_path=dest)
 
 
 @router.post("/login")
@@ -87,9 +105,11 @@ def login_submit(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    next: str = Form(""),
     db: Session = Depends(get_db),
 ):
     settings = get_settings()
+    dest = safe_next_path(next)
     found = get_user_by_email(db, email)
     if not found or not verify_password(password, found.password_hash):
         return render(
@@ -98,9 +118,10 @@ def login_submit(
             None,
             status_code=400,
             error="Неверный email или пароль",
+            next_path=dest,
         )
     raw = create_user_session(db, found)
-    response = RedirectResponse("/chat", status_code=303)
+    response = RedirectResponse(dest or "/chat", status_code=303)
     response.set_cookie(
         settings.session_cookie,
         raw,
@@ -200,6 +221,7 @@ def _settings_render(
     settings = get_settings()
     preferred = (user.preferred_model or "").strip() or settings.default_model or PUBLIC_DEFAULT_ID
     tokens, usage = _tokens_view_data(db, user)
+    owned = list_owned_skills(db, user)
     return render(
         request,
         "settings.html",
@@ -215,6 +237,8 @@ def _settings_render(
         api_daily_limit=settings.api_daily_limit,
         max_tokens_per_user=settings.max_tokens_per_user,
         active_tokens=len(tokens),
+        skill_items=[skill_payload(skill) for skill in owned],
+        default_skill_ids=default_skill_ids(db, user),
     )
 
 
@@ -245,13 +269,16 @@ def settings_page(
 @router.post("/settings", response_class=HTMLResponse)
 async def settings_submit(
     request: Request,
-    preferred_model: str = Form(...),
     db: Session = Depends(get_db),
 ):
     settings = get_settings()
     user = get_user_from_session(db, request.cookies.get(settings.session_cookie))
     if not user:
         return RedirectResponse("/login", status_code=303)
+
+    form = await request.form()
+    preferred_model = str(form.get("preferred_model") or "")
+    raw_ids = [str(value) for value in form.getlist("default_skill_ids")]
 
     model = (preferred_model or "").strip() or PUBLIC_DEFAULT_ID
     await get_models_list()
@@ -264,6 +291,16 @@ async def settings_submit(
             db,
             status_code=400,
             error=str(exc.detail),
+        )
+
+    _, err = set_default_skill_ids(db, user, raw_ids)
+    if err:
+        return _settings_render(
+            request,
+            user,
+            db,
+            status_code=400,
+            error=err,
         )
 
     user.preferred_model = model

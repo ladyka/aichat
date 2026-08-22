@@ -333,6 +333,39 @@ textarea { resize: vertical; min-height: 64px; }
   font-size: 2.2rem;
   margin: 0 0 0.4rem;
 }
+.skill-card {
+  width: min(720px, 100%);
+}
+.check-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.6rem 0;
+}
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 500;
+}
+.check-row input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+.skill-list li > div { display: grid; gap: 0.15rem; }
+.catalog-body {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem 1.2rem;
+}
+.catalog-body p { margin: 0.4rem 0; }
+.catalog-body pre {
+  overflow: auto;
+  background: #132019;
+  color: #e8f2ec;
+  padding: 0.85rem;
+  border-radius: 10px;
+}
 .stack {
   display: grid;
   gap: 0.9rem;

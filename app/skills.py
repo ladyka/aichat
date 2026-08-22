@@ -73,7 +73,7 @@ def skill_is_public(skill: Skill, now: datetime | None = None) -> bool:
 
 
 def catalog_url(skill_id: int) -> str:
-    return f"/api/catalog/skills/{skill_id}"
+    return f"/catalog/skills/{skill_id}"
 
 
 def skill_payload(skill: Skill, *, public: bool | None = None) -> dict[str, Any]:

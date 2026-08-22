@@ -45,6 +45,7 @@
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
+| `app/routes/skill_pages.py` | `/skills`, `/catalog` (Jinja) |
 | `app/routes/oauth.py` | `/auth/google`, `/auth/apple` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` (модель + `default_skill_ids`) |

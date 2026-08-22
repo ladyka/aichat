@@ -17,7 +17,7 @@
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
 - Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
-- Skills: свои markdown-навыки (приватные по умолчанию), публикация в каталог, копия чужого с `parent_id`, дефолты в `/api/settings`, набор на чат (`PUT /api/conversations/{id}/skills`)
+- Skills: свои markdown-навыки (приватные по умолчанию), публикация в каталог `/catalog`, копия чужого с `parent_id`, дефолты в `/settings`, набор чата в панели «Навыки»
 
 ## Quick Start
 
@@ -186,7 +186,7 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
-templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
+templates/     # Jinja2: лендинг, auth, settings, tokens, skills, catalog, chat shell
 static/        # CSS
 docs/          # MkDocs: стек/runtime + продукт / видение
 tests/         # pytest + integration_weather.py (интеграционный тест погоды)

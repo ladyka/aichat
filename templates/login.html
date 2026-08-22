@@ -24,6 +24,7 @@
   <div class="or-divider"><span>или</span></div>
   {% endif %}
   <form method="post" action="/login" class="stack-form">
+    {% if next_path %}<input type="hidden" name="next" value="{{ next_path }}">{% endif %}
     <label>Email
       <input type="email" name="email" required autocomplete="email">
     </label>

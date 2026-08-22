@@ -227,7 +227,7 @@ def test_catalog_only_public_and_copy_is_private(client):
     share = client.post(f"/api/skills/{public['id']}/share")
     assert share.status_code == 200
     assert share.json()["public"] is True
-    assert share.json()["url"] == f"/api/catalog/skills/{public['id']}"
+    assert share.json()["url"] == f"/catalog/skills/{public['id']}"
     assert client.get(f"/api/skills/{public['id']}/share").json()["public"] is True
     assert client.get(f"/api/skills/{public['id']}").json()["public"] is True
 
