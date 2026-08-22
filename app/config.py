@@ -81,6 +81,13 @@ class Settings:
         self.apple_team_id = _env("APPLE_TEAM_ID", "") or ""
         self.apple_key_id = _env("APPLE_KEY_ID", "") or ""
         self.apple_private_key = (_env("APPLE_PRIVATE_KEY", "") or "").replace("\\n", "\n")
+        self.yandex_client_id = _env("YANDEX_CLIENT_ID", "") or ""
+        self.yandex_client_secret = _env("YANDEX_CLIENT_SECRET", "") or ""
+        self.vk_client_id = _env("VK_CLIENT_ID", "") or ""
+        # Service token from VK ID app settings (also accepted as VK_SERVICE_TOKEN).
+        self.vk_client_secret = _env("VK_CLIENT_SECRET", "") or _env("VK_SERVICE_TOKEN", "") or ""
+        self.github_client_id = _env("GITHUB_CLIENT_ID", "") or ""
+        self.github_client_secret = _env("GITHUB_CLIENT_SECRET", "") or ""
 
         # Arize AX / Phoenix OTLP (see app/telemetry.py). Same vars as /tmp/aichat example.
         self.arize_space_id = _env("ARIZE_SPACE_ID", "") or ""
@@ -147,8 +154,23 @@ class Settings:
         return f"{self.public_base_url}/auth/apple/callback" if self.public_base_url else ""
 
     @property
+    def yandex_redirect_uri(self) -> str:
+        return f"{self.public_base_url}/auth/yandex/callback" if self.public_base_url else ""
+
+    @property
+    def vk_redirect_uri(self) -> str:
+        return f"{self.public_base_url}/auth/vk/callback" if self.public_base_url else ""
+
+    @property
+    def github_redirect_uri(self) -> str:
+        return f"{self.public_base_url}/auth/github/callback" if self.public_base_url else ""
+
+    def _oauth_pair_enabled(self, client_id: str, client_secret: str) -> bool:
+        return bool(self.public_base_url and client_id and client_secret)
+
+    @property
     def google_oauth_enabled(self) -> bool:
-        return bool(self.public_base_url and self.google_client_id and self.google_client_secret)
+        return self._oauth_pair_enabled(self.google_client_id, self.google_client_secret)
 
     @property
     def apple_oauth_enabled(self) -> bool:
@@ -158,4 +180,26 @@ class Settings:
             and self.apple_team_id
             and self.apple_key_id
             and self.apple_private_key
+        )
+
+    @property
+    def yandex_oauth_enabled(self) -> bool:
+        return self._oauth_pair_enabled(self.yandex_client_id, self.yandex_client_secret)
+
+    @property
+    def vk_oauth_enabled(self) -> bool:
+        return self._oauth_pair_enabled(self.vk_client_id, self.vk_client_secret)
+
+    @property
+    def github_oauth_enabled(self) -> bool:
+        return self._oauth_pair_enabled(self.github_client_id, self.github_client_secret)
+
+    @property
+    def any_oauth_enabled(self) -> bool:
+        return bool(
+            self.google_oauth_enabled
+            or self.apple_oauth_enabled
+            or self.yandex_oauth_enabled
+            or self.vk_oauth_enabled
+            or self.github_oauth_enabled
         )

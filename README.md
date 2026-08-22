@@ -6,7 +6,7 @@
 
 - Публичный лендинг без авторизации
 - Регистрация / вход (email + пароль, cookie-сессия)
-- Вход через **Google** и **Apple** (OAuth 2.0 / OIDC; включается через `.env`, см. ниже)
+- Вход через **Google**, **Apple**, **Яндекс**, **VK** и **GitHub** (OAuth 2.0 / OIDC; каждый провайдер включается своими переменными в `.env`)
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
 - Модель чата в **/settings** (не на экране чата)
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
@@ -119,6 +119,9 @@ cd frontend && npm run dev   # :5173
 | `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); redirect URI OAuth и абсолютные URL превью ссылок (`og:image`, `og:url`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth-клиент Google (выкл., пока не заполнены оба) |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | «Sign in with Apple» (выкл., пока не заполнены все) |
+| `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | Яндекс ID (выкл., пока не заполнены оба) |
+| `VK_CLIENT_ID` / `VK_CLIENT_SECRET` | VK ID; секрет — сервисный ключ (`VK_SERVICE_TOKEN` как синоним) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App (выкл., пока не заполнены оба) |
 | `FTP_*` | Деплой через `make update-prod` |
 | `ARIZE_SPACE_ID` / `ARIZE_API_KEY` | Включить OTLP-трейсы (Arize / Phoenix) |
 | `ARIZE_PROJECT_NAME` | Имя проекта в коллекторе (по умолчанию `aichat`) |
@@ -127,12 +130,15 @@ cd frontend && npm run dev   # :5173
 | `NEW_RELIC_USER_KEY` | Ключ пользователя New Relic для запросов к API (GraphQL); самому агенту не нужен |
 | `NEW_RELIC_APP_NAME` | Имя приложения в New Relic (по умолчанию `aichat`) |
 
-### OAuth-вход (Google / Apple)
+### OAuth-вход (Google / Apple / Яндекс / VK / GitHub)
 
-Фича отключена, пока в `.env` не заполнены все соответствующие переменные. Обязателен `PUBLIC_BASE_URL` — по нему строятся redirect URI:
+Каждый провайдер включается **отдельно**: кнопка на `/login` и `/register` появляется, только если заданы `PUBLIC_BASE_URL` и переменные этого провайдера. Redirect URI:
 
 - Google: `{PUBLIC_BASE_URL}/auth/google/callback` → указать в OAuth-клиенте Google (Authorized redirect URIs).
 - Apple: `{PUBLIC_BASE_URL}/auth/apple/callback` → указать в «Sign in with Apple» Service ID. Для Apple нужен платный Developer Account: Service ID + Team ID + Key ID + содержимое `.p8`-файла ключа (в `APPLE_PRIVATE_KEY`).
+- Яндекс: `{PUBLIC_BASE_URL}/auth/yandex/callback` → приложение на [oauth.yandex.ru](https://oauth.yandex.ru/), права `login:info` и `login:email`.
+- VK: `{PUBLIC_BASE_URL}/auth/vk/callback` → приложение VK ID; `VK_CLIENT_ID` — ID приложения, `VK_CLIENT_SECRET` (или `VK_SERVICE_TOKEN`) — **сервисный ключ**. Нужен scope `email`.
+- GitHub: `{PUBLIC_BASE_URL}/auth/github/callback` → OAuth App, scopes `read:user` и `user:email`.
 
 Новые пользователи создаются автоматически по email из провайдера; если email совпадает с существующим — вход в тот же аккаунт. Привязка провайдера хранится в таблице `oauth_identities`. OAuth-аккаунты пароль не имеют — вход по email+пароль для них недоступен.
 

@@ -35,6 +35,10 @@ def _ctx(user: User | None = None, **extra):
         "default_model": settings.default_model,
         "google_oauth_enabled": settings.google_oauth_enabled,
         "apple_oauth_enabled": settings.apple_oauth_enabled,
+        "yandex_oauth_enabled": settings.yandex_oauth_enabled,
+        "vk_oauth_enabled": settings.vk_oauth_enabled,
+        "github_oauth_enabled": settings.github_oauth_enabled,
+        "any_oauth_enabled": settings.any_oauth_enabled,
     }
     data.update(extra)
     return data
