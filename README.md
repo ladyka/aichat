@@ -172,7 +172,7 @@ python3 api_check.py --host https://YOUR_HOST --token aichat_…
 
 ## Документация
 
-Продуктовые заметки (видение, аудитории, MVP): каталог [`docs/`](docs/), сборка MkDocs Material. Витрина этого репозитория — для обычных людей; корпоративный контур — отдельный LibreChat, см. [`docs/product/audiences.md`](docs/product/audiences.md).
+Продуктовые заметки: каталог [`docs/`](docs/) (MkDocs Material). О сервисе, roadmap, версия 1 (план и факт) — [`docs/product/about.md`](docs/product/about.md), [`docs/product/roadmap.md`](docs/product/roadmap.md), [`docs/product/v1.md`](docs/product/v1.md). Витрина — для обычных людей; LibreChat — версия 2, см. [`docs/product/audiences.md`](docs/product/audiences.md).
 
 ```bash
 make docs-serve   # http://127.0.0.1:8000/  (нужен Docker)

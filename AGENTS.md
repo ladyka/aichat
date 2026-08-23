@@ -23,6 +23,7 @@
 - Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`TODO.md`).
 - **Витрина этого репозитория — для обычных людей** (простой чат, бытовые tools). Не заменять её на LibreChat и не тащить сюда корпоративный ACL/агентский зоопарк.
 - **Компании — отдельный деплой LibreChat** (OAuth/SSO, роли, агенты). Бытовые tools витрины туда не вырезать; при необходимости — обёртка снаружи (MCP/OpenAPI). См. `docs/product/audiences.md`.
+- **Версия 1:** факт — текущая витрина (чат, tools, API). План — только **skills и каталог skills**; других новых функций в v1 нет. LibreChat и корпоративные пользователи — **версия 2**. См. `docs/product/v1.md`, `docs/product/roadmap.md`.
 
 ### Where things live
 

@@ -14,10 +14,13 @@
 
 | Раздел | Содержание |
 |--------|------------|
+| [О сервисе](product/about.md) | Что такое aichat и чем не является |
+| [Roadmap](product/roadmap.md) | Версия 1 (витрина) и версия 2 (LibreChat) |
+| [Версия 1: план и факт](product/v1.md) | Текущий функционал и единственное новое — skills |
 | [Стек и runtime](dev/runtime.md) | Python 3.13, Node.js 24, pin-файлы, прод |
 | [Видение (Беларусь)](product/vision-belarus.md) | Зачем локальный LLM-сервис для РБ, сценарии, риски |
 | [Две аудитории](product/audiences.md) | Витрина `aichat` для людей; LibreChat для компаний |
-| [MVP и следующие шаги](product/mvp-next-steps.md) | Фокус первого релиза, чеклист, открытые вопросы |
+| [MVP и следующие шаги](product/mvp-next-steps.md) | Длинный горизонт (egov); не backlog v1 |
 
 ## Локальный просмотр
 
