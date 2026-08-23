@@ -39,5 +39,9 @@ nav:
   - Разработка:
     - Стек и runtime: dev/runtime.md
   - Продукт:
+    - О сервисе: product/about.md
+    - Roadmap: product/roadmap.md
+    - Версия 1 (план и факт): product/v1.md
+    - Две аудитории: product/audiences.md
     - Видение (Беларусь): product/vision-belarus.md
     - MVP и следующие шаги: product/mvp-next-steps.md
