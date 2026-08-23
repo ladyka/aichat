@@ -5,6 +5,7 @@
 ## Возможности
 
 - Публичный лендинг без авторизации
+- Страница о сервисе (`/about`)
 - Регистрация / вход (email + пароль, cookie-сессия)
 - Вход через **Google**, **Apple**, **Яндекс**, **VK** и **GitHub** (OAuth 2.0 / OIDC; каждый провайдер включается своими переменными в `.env`)
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
@@ -182,7 +183,7 @@ python3 api_check.py --host https://YOUR_HOST --token aichat_…
 
 ## Документация
 
-Продуктовые заметки (видение, MVP): каталог [`docs/`](docs/), сборка MkDocs Material.
+Продуктовые заметки: каталог [`docs/`](docs/) (MkDocs Material). О сервисе, roadmap, версия 1 (план и факт) — [`docs/product/about.md`](docs/product/about.md), [`docs/product/roadmap.md`](docs/product/roadmap.md), [`docs/product/v1.md`](docs/product/v1.md). Витрина — для обычных людей; LibreChat — версия 2, см. [`docs/product/audiences.md`](docs/product/audiences.md).
 
 ```bash
 make docs-serve   # http://127.0.0.1:8000/  (нужен Docker)
@@ -195,7 +196,7 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
-templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
+templates/     # Jinja2: лендинг, о сервисе, auth, settings, tokens, chat shell
 static/        # CSS
 docs/          # MkDocs: стек/runtime + продукт / видение
 tests/         # pytest + integration_weather.py (интеграционный тест погоды)
