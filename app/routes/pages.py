@@ -61,7 +61,10 @@ def about_page(request: Request, user: User | None = Depends(get_current_user_op
         request,
         "about.html",
         user,
-        og_description="Чат в браузере: пишете как знакомому. Модель отвечает, а если нужно — сходит за погодой, картинкой или пиццей.",
+        og_description=(
+            "Чат в браузере: пишете как знакомому. "
+            "Модель отвечает, а если нужно — сходит за погодой, картинкой или пиццей."
+        ),
     )
 
 
