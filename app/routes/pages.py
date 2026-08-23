@@ -55,6 +55,16 @@ def landing(request: Request, user: User | None = Depends(get_current_user_optio
     return render(request, "landing.html", user)
 
 
+@router.get("/about", response_class=HTMLResponse)
+def about_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+    return render(
+        request,
+        "about.html",
+        user,
+        og_description="Чат в браузере: пишете как знакомому. Модель отвечает, а если нужно — сходит за погодой, картинкой или пиццей.",
+    )
+
+
 @router.get("/privacy", response_class=HTMLResponse)
 def privacy_page(request: Request, user: User | None = Depends(get_current_user_optional)):
     return render(

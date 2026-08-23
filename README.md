@@ -5,6 +5,7 @@
 ## Возможности
 
 - Публичный лендинг без авторизации
+- Страница о сервисе (`/about`)
 - Регистрация / вход (email + пароль, cookie-сессия)
 - Вход через **Google** и **Apple** (OAuth 2.0 / OIDC; включается через `.env`, см. ниже)
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
@@ -185,7 +186,7 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
-templates/     # Jinja2: лендинг, auth, settings, tokens, chat shell
+templates/     # Jinja2: лендинг, о сервисе, auth, settings, tokens, chat shell
 static/        # CSS
 docs/          # MkDocs: стек/runtime + продукт / видение
 tests/         # pytest + integration_weather.py (интеграционный тест погоды)

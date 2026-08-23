@@ -27,6 +27,21 @@ def test_og_image_is_served(client):
     assert len(response.content) > 1000
 
 
+def test_about_page(client):
+    response = client.get("/about")
+    assert response.status_code == 200
+    assert "О сервисе" in response.text
+    assert "Чат в браузере" in response.text
+    assert "pzz.by" in response.text
+    assert "настройках" in response.text
+    assert 'property="og:title"' in response.text
+    assert "Чат в браузере: пишете как знакомому" in response.text
+    assert "/about" in client.get("/").text
+    forbidden = ("этап 1", "Этап 1", "версия 1", "Версия 1", "LibreChat", ":free")
+    for phrase in forbidden:
+        assert phrase not in response.text
+
+
 def test_privacy_and_terms_have_og_description(client):
     privacy = client.get("/privacy")
     assert privacy.status_code == 200
