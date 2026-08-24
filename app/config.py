@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -8,6 +9,10 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
+
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_LOG_LEVEL_NAMES = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+_LOG_LEVEL_ALIASES = {"WARN": "WARNING", "FATAL": "CRITICAL"}
 
 
 def _env(key: str, default: str | None = None) -> str | None:
@@ -21,6 +26,47 @@ def _flag(value: str | None, default: bool = False) -> bool:
     if value is None or value == "":
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def compose_s3_access_key(tenant_id: str, key_id: str) -> str:
+    """Build Cloud.ru SigV4 access key ``tenant_id:key_id`` without double-prefixing."""
+    key = (key_id or "").strip()
+    tenant = (tenant_id or "").strip()
+    if not key:
+        return ""
+    if ":" in key:
+        return key
+    if tenant:
+        return f"{tenant}:{key}"
+    return key
+
+
+def parse_log_level_name(value: str | None) -> str:
+    """Normalize LOG_LEVEL to a standard logging name; unknown values become INFO."""
+    raw = (value or "INFO").strip().upper()
+    raw = _LOG_LEVEL_ALIASES.get(raw, raw)
+    if raw in _LOG_LEVEL_NAMES:
+        return raw
+    return "INFO"
+
+
+def setup_logging(level: int | None = None) -> None:
+    """Apply LOG_LEVEL and undo Alembic ``fileConfig`` (disabled loggers / WARNING root)."""
+    if level is None:
+        level = get_settings().log_level
+    root = logging.getLogger()
+    root.setLevel(level)
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        handler.setLevel(level)
+        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        root.addHandler(handler)
+    else:
+        for handler in root.handlers:
+            handler.setLevel(level)
+    for logger in logging.root.manager.loggerDict.values():
+        if isinstance(logger, logging.Logger) and logger.disabled:
+            logger.disabled = False
 
 
 @lru_cache
@@ -58,12 +104,14 @@ class Settings:
 
         # Cloud.ru (or S3-compatible) object storage. generate_image needs this + OpenRouter.
         self.s3_endpoint = (_env("S3_ENDPOINT", "") or "").rstrip("/")
-        self.s3_region = _env("S3_REGION", "ru-central-1") or "ru-central-1"
-        self.s3_bucket = _env("S3_BUCKET", "") or ""
+        self.s3_region = (_env("S3_REGION", "ru-central-1") or "ru-central-1").strip()
+        self.s3_bucket = (_env("S3_BUCKET", "") or "").strip()
         self.s3_path_style = _flag(_env("S3_PATH_STYLE", "1"), default=True)
         self.s3_public_base_url = (_env("S3_PUBLIC_BASE_URL", "") or "").rstrip("/")
-        self.s3_sa_key_id = _env("S3_SA_KEY_ID", "") or ""
-        self.s3_sa_key_secret = _env("S3_SA_KEY_SECRET", "") or ""
+        # Cloud.ru: aws_access_key_id = tenant_id:key_id (assembled in s3_access_key_id).
+        self.s3_tenant_id = (_env("S3_TENANT_ID", "") or "").strip()
+        self.s3_sa_key_id = (_env("S3_SA_KEY_ID", "") or "").strip()
+        self.s3_sa_key_secret = (_env("S3_SA_KEY_SECRET", "") or "").strip()
 
         self.image_generation_model = (
             _env("IMAGE_GENERATION_MODEL", "black-forest-labs/flux.2-klein-4b")
@@ -91,6 +139,10 @@ class Settings:
             _env("ARIZE_OTLP_ENDPOINT") or _env("ARIZE_COLLECTOR_ENDPOINT") or ""
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
+
+        self.log_level_name = parse_log_level_name(_env("LOG_LEVEL", "INFO"))
+        self.log_level = logging.getLevelNamesMapping()[self.log_level_name]
+        self.debug = _flag(_env("DEBUG", "0"), default=False)
 
         # New Relic (see app/newrelic_telemetry.py). Enable by setting NEW_RELIC_LICENSE_KEY.
         # The agent reads NEW_RELIC_* env vars itself; these are used for gating and the app name.
@@ -127,6 +179,11 @@ class Settings:
         if value.endswith("/v1"):
             return value
         return f"{value}/v1"
+
+    @property
+    def s3_access_key_id(self) -> str:
+        """Access key for SigV4. Cloud.ru needs tenant_id:key_id; other S3 uses key_id as-is."""
+        return compose_s3_access_key(self.s3_tenant_id, self.s3_sa_key_id)
 
     @property
     def s3_enabled(self) -> bool:

@@ -111,6 +111,8 @@ class FakePzzClient:
     def __init__(self, *a, **kw):
         self.posts = []
         self.gets = []
+        self.params = []
+        self.catalog_pages = {}
         self.catalog = {
             "pizzas": [PIZZA, HIDDEN, OOS, NO_PRICE],
             "snacks": [SNACK],
@@ -147,7 +149,9 @@ class FakePzzClient:
 
     async def get(self, path, **kw):
         path = self._path(path)
+        params = kw.get("params")
         self.gets.append(path)
+        self.params.append(params)
         if path in ("/", "") or path.endswith("://pzz.by/"):
             return FakeResp(data=None)
         cat = self._category_from(path)
@@ -156,6 +160,25 @@ class FakePzzClient:
                 return FakeResp(data=None, status_code=502)
             if cat in self.unwrap_invalid:
                 return FakeResp({"error": False, "code": 200, "response": {"data": {"oops": 1}}})
+            pages = self.catalog_pages.get(cat)
+            if pages:
+                page = 1
+                if isinstance(params, dict) and params.get("page") not in (None, ""):
+                    try:
+                        page = int(params.get("page"))
+                    except (TypeError, ValueError):
+                        page = 1
+                chunk = pages[page - 1] if 1 <= page <= len(pages) else []
+                return FakeResp(
+                    {
+                        "error": False,
+                        "code": 200,
+                        "response": {
+                            "data": chunk,
+                            "meta": {"current_page": page, "last_page": len(pages)},
+                        },
+                    }
+                )
             return _ok(self.catalog[cat])
         if "/streets/" in path:
             if "houses" in self.get_invalid:
@@ -311,11 +334,38 @@ def test_search_menu_category_and_limit(monkeypatch):
     _patch_pzz(monkeypatch)
     result = asyncio.run(search_menu(query="", category="snacks", limit=1))
     assert result["count"] == 1
+    assert result["total"] == 1
     assert result["items"][0]["id"] == 10
     empty = asyncio.run(search_menu(query="неттакого", category="pizzas"))
     assert empty["count"] == 0
     unknown = asyncio.run(search_menu(category="nope"))
     assert "pizzas" in unknown["categories"]
+    truncated = asyncio.run(search_menu(query="", limit=1))
+    assert truncated["count"] == 1
+    assert truncated["total"] > 1
+    assert "из" in truncated["note"]
+
+
+def test_fetch_pizzas_uses_menu_filters(monkeypatch):
+    client = _patch_pzz(monkeypatch)
+    asyncio.run(fetch_category("pizzas", client))
+    assert client.params
+    params = client.params[0] or {}
+    assert "parent_id:is:null" in params.get("filter", "")
+    assert params.get("order") == "position:asc"
+    assert "page" not in params
+    assert len([path for path in client.gets if path.endswith("/pizzas")]) == 1
+
+
+def test_fetch_category_follows_pages(monkeypatch):
+    client = _patch_pzz(monkeypatch)
+    page1 = {**PIZZA, "id": 1, "title": "Первая страница"}
+    page2 = {**PIZZA, "id": 2, "title": "Вторая страница"}
+    client.catalog_pages = {"pizzas": [[page1], [page2]]}
+    items = asyncio.run(fetch_category("pizzas", client))
+    assert [row["id"] for row in items] == [1, 2]
+    assert [row["title"] for row in items] == ["Первая страница", "Вторая страница"]
+    assert len([path for path in client.gets if path.endswith("/pizzas")]) == 2
 
 
 def test_fetch_unknown_category_and_invalid_json(monkeypatch):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import os
 import subprocess
 import sys
@@ -146,3 +147,51 @@ assert not diffs, diffs
     )
     if result.returncode != 0:
         raise AssertionError(f"schema drift:\n{result.stdout}\n{result.stderr}")
+
+
+def test_revision_create_index_calls_omit_if_not_exists():
+    """MySQL rejects CREATE INDEX IF NOT EXISTS (SQLite accepts it)."""
+    for path in (ROOT / "migrations" / "versions").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+            if name != "create_index":
+                continue
+            for kw in node.keywords:
+                assert kw.arg != "if_not_exists", f"{path.name}: create_index uses if_not_exists"
+
+
+def test_create_index_if_missing_is_idempotent(tmp_path):
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    from migrations.helpers import create_index_if_missing
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'idx.db'}")
+    with engine.begin() as conn:
+        conn.execute(
+            text("CREATE TABLE users (id INTEGER PRIMARY KEY, email VARCHAR(255) NOT NULL)")
+        )
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            create_index_if_missing("users", "ix_users_email", ["email"], unique=True)
+            create_index_if_missing("users", "ix_users_email", ["email"], unique=True)
+    names = {ix["name"] for ix in inspect(engine).get_indexes("users")}
+    assert "ix_users_email" in names
+
+
+def test_mysql_dialect_emits_if_not_exists_when_requested():
+    from sqlalchemy import Column, Index, Integer, MetaData, String, Table
+    from sqlalchemy.dialects.mysql import dialect as mysql_dialect
+    from sqlalchemy.schema import CreateIndex
+
+    meta = MetaData()
+    users = Table("users", meta, Column("id", Integer), Column("email", String(255)))
+    idx = Index("ix_users_email", users.c.email, unique=True)
+    unsafe = str(CreateIndex(idx, if_not_exists=True).compile(dialect=mysql_dialect()))
+    safe = str(CreateIndex(idx).compile(dialect=mysql_dialect()))
+    assert "IF NOT EXISTS" in unsafe.upper()
+    assert "IF NOT EXISTS" not in safe.upper()

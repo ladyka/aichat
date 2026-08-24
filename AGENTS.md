@@ -27,7 +27,7 @@
 | Путь | Назначение |
 |------|------------|
 | `app/main.py` | FastAPI app, static + `/chat-ui` mount |
-| `app/config.py` | env / settings |
+| `app/config.py` | env / settings (`LOG_LEVEL` — уровень логов приложения и uvicorn) |
 | `app/db.py` | SQLAlchemy models; `init_db()` гоняет Alembic `upgrade head` |
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
@@ -50,10 +50,11 @@
 | `frontend/` | React + assistant-ui (чат) |
 | `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация) |
 | `templates/`, `static/` | Jinja лендинг/auth/tokens/settings |
+| `docker-compose.yml` | локальный MySQL 8.0.46 (`docker compose up -d`) |
 | `server.py` | entrypoint (uvicorn; `PORT` или `SOCKET`) |
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
-| `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды) |
+| `tests/` | pytest + `integration_weather.py` / `integration_s3.py` |
 | `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime + продукт |
 | `.python-version` | pin CPython 3.13 |
 | `.nvmrc` | pin Node.js 24 |
@@ -99,4 +100,4 @@ python3 api_check.py --host http://127.0.0.1:8080 --token aichat_…
 4. Если трогали API — `api_check.py` или curl на `/v1/models` и completions.
 5. В ответе пользователю кратко укажи, что проверено.
 
-Автотесты: pytest (`make test-coverage`), Vitest во `frontend/src/tests/` (`cd frontend && npm run test`), интеграционный тест погоды (`tests/integration_weather.py`).
+Автотесты: pytest (`make test-coverage`), Vitest во `frontend/src/tests/` (`cd frontend && npm run test`), интеграционные скрипты (`tests/integration_weather.py`, `tests/integration_s3.py`).

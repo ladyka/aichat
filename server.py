@@ -14,6 +14,12 @@ load_dotenv(ROOT / ".env")
 os.chdir(ROOT)
 
 
+def _uvicorn_log_level() -> str:
+    from app.config import get_settings
+
+    return get_settings().log_level_name.lower()
+
+
 def main() -> None:
     import uvicorn
 
@@ -25,7 +31,7 @@ def main() -> None:
         config = uvicorn.Config(
             "app.main:app",
             uds=socket,
-            log_level="info",
+            log_level=_uvicorn_log_level(),
         )
         server = uvicorn.Server(config)
         # chmod after bind
@@ -47,7 +53,7 @@ def main() -> None:
     host = os.environ.get("INSTANCE_HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", "8080"))
     print(f"Listening http://{host}:{port}/")
-    uvicorn.run("app.main:app", host=host, port=port, log_level="info")
+    uvicorn.run("app.main:app", host=host, port=port, log_level=_uvicorn_log_level())
 
 
 if __name__ == "__main__":
