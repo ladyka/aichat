@@ -38,6 +38,7 @@ nav:
   - Главная: index.md
   - Разработка:
     - Стек и runtime: dev/runtime.md
+    - OAuth-провайдеры: dev/oauth-providers.md
   - Продукт:
     - О сервисе: product/about.md
     - Roadmap: product/roadmap.md

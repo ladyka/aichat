@@ -40,11 +40,11 @@
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image` |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
-| `app/oauth.py` | OAuth2/OIDC Google + Apple (authorize-URL, token exchange, проверка id_token) |
+| `app/oauth.py` | OAuth2/OIDC: Google, Apple, Яндекс, VK ID, GitHub (authorize-URL, token exchange, id_token / userinfo) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
-| `app/routes/oauth.py` | `/auth/google`, `/auth/apple` и callback'и |
+| `app/routes/oauth.py` | `/auth/{google,apple,yandex,vk,github}` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |
 | `app/routes/notes.py` | `/api/conversations/{id}/note` (GET/PUT) и download |
@@ -57,7 +57,7 @@
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
 | `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды) |
-| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime + продукт |
+| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime, OAuth-креды, продукт |
 | `.python-version` | pin CPython 3.13 |
 | `.nvmrc` | pin Node.js 24 |
 
