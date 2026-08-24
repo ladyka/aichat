@@ -8,6 +8,7 @@
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   {% include "_oauth_buttons.html" %}
   <form method="post" action="/login" class="stack-form">
+    {% if next_path %}<input type="hidden" name="next" value="{{ next_path }}">{% endif %}
     <label>Email
       <input type="email" name="email" required autocomplete="email">
     </label>

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}{% if skill.id %}{{ skill.title or 'Навык' }} — aichat{% else %}Новый навык — aichat{% endif %}{% endblock %}
+{% block content %}
+<section class="auth-card skill-card">
+  <p class="back-link"><a href="/skills">← Мои навыки</a></p>
+  <h1>{% if skill.id %}{{ skill.title or 'Навык' }}{% else %}Новый навык{% endif %}</h1>
+  {% if copied_from %}
+  <p class="muted">Скопировано из каталога. Правки оригинала эту копию не меняют.</p>
+  {% endif %}
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if saved %}<p class="ok">Сохранено.</p>{% endif %}
+  <form method="post" action="{% if skill.id %}/skills/{{ skill.id }}{% else %}/skills/new{% endif %}" class="stack">
+    <label>Название
+      <input type="text" name="title" maxlength="200" value="{{ skill.title or '' }}">
+    </label>
+    <label>Короткое описание
+      <input type="text" name="description" maxlength="500" value="{{ skill.description or '' }}" placeholder="Когда применять этот навык">
+    </label>
+    <label>Инструкция
+      <textarea name="body" rows="14" placeholder="Markdown: как отвечать, какие шаги выполнять">{{ skill.body or '' }}</textarea>
+    </label>
+    <label class="check-row">
+      <input type="checkbox" name="public" {% if is_public %}checked{% endif %}>
+      Показывать в каталоге
+    </label>
+    <label class="check-row">
+      <input type="checkbox" name="default" {% if is_default %}checked{% endif %}>
+      Подключать в новых чатах
+    </label>
+    {% if catalog_href %}
+    <label>Ссылка каталога
+    <input type="text" readonly value="{{ catalog_href }}" onclick="this.select()">
+    </label>
+    {% endif %}
+    <button class="btn" type="submit">Сохранить</button>
+  </form>
+  {% if skill.id %}
+  <form method="post" action="/skills/{{ skill.id }}/delete" onsubmit="return confirm('Удалить навык? Копии у других людей останутся.');">
+    <button type="submit" class="btn btn-ghost">Удалить</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

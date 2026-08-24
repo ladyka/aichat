@@ -8,6 +8,7 @@ import {
   Link2,
   PanelLeftClose,
   PanelLeftOpen,
+  Sparkles,
   StickyNote,
   Trash2,
   UserRound,
@@ -16,8 +17,10 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { NotePane } from "@/components/NotePane";
 import { RuntimeProvider } from "@/components/RuntimeProvider";
 import { ShareDialog } from "@/components/ShareDialog";
+import { SkillsDialog } from "@/components/SkillsDialog";
 import { Thread } from "@/components/Thread";
 import { ThreadList } from "@/components/ThreadList";
+import { getConversation } from "@/lib/api";
 import { useConversationId } from "@/lib/conversation-id";
 
 const SIDEBAR_KEY = "aichat.sidebarOpen";
@@ -46,6 +49,8 @@ function ChatLayout() {
   });
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [skillCount, setSkillCount] = useState(0);
   const [confirm, setConfirm] = useState<null | "archive" | "delete">(null);
   const [noteCollapsed, setNoteCollapsed] = useState(false);
   const [noteForcedOpen, setNoteForcedOpen] = useState(false);
@@ -59,6 +64,20 @@ function ChatLayout() {
     setNoteCollapsed(false);
     setNoteForcedOpen(false);
     setNoteHasBody(false);
+    setSkillsOpen(false);
+    setSkillCount(0);
+    if (!conversationId) return;
+    let cancelled = false;
+    void getConversation(conversationId)
+      .then((conv) => {
+        if (!cancelled) setSkillCount(conv.skill_ids?.length ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setSkillCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId]);
 
   const noteVisible =
@@ -140,6 +159,18 @@ function ChatLayout() {
                 Настройки
               </a>
               <a
+                href="/skills"
+                className="block px-3 py-2 text-sm text-[var(--chat-ink)] hover:bg-black/5"
+              >
+                Навыки
+              </a>
+              <a
+                href="/catalog"
+                className="block px-3 py-2 text-sm text-[var(--chat-ink)] hover:bg-black/5"
+              >
+                Каталог
+              </a>
+              <a
                 href="/privacy"
                 className="block px-3 py-2 text-sm text-[var(--chat-muted)] hover:bg-black/5"
               >
@@ -185,6 +216,15 @@ function ChatLayout() {
           </button>
           {conversationId && (
             <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+                onClick={() => setSkillsOpen(true)}
+                aria-label="Навыки"
+              >
+                <Sparkles className="h-4 w-4" />
+                {skillCount > 0 ? `Навыки · ${skillCount}` : "Навыки"}
+              </button>
               <button
                 type="button"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
@@ -257,6 +297,14 @@ function ChatLayout() {
           )}
         </div>
       </div>
+
+      {skillsOpen && conversationId && (
+        <SkillsDialog
+          conversationId={conversationId}
+          onClose={() => setSkillsOpen(false)}
+          onChange={setSkillCount}
+        />
+      )}
 
       {shareOpen && conversationId && (
         <ShareDialog

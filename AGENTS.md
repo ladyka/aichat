@@ -20,6 +20,7 @@
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
 - У чата в UI одна markdown-заметка (в БД M2M `notes` ↔ `conversations`); шаринга заметок нет.
+- Skills приватны по умолчанию. В каталоге только опубликованные. В чат и в дефолты — только свои (чужой — через копию). Набор чата можно менять по ходу диалога.
 - Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`TODO.md`).
 - **Витрина этого репозитория — для обычных людей** (простой чат, бытовые tools). Не заменять её на LibreChat и не тащить сюда корпоративный ACL/агентский зоопарк.
 - **Компании — отдельный деплой LibreChat** (OAuth/SSO, роли, агенты). Бытовые tools витрины туда не вырезать; при необходимости — обёртка снаружи (MCP/OpenAPI). См. `docs/product/audiences.md`.
@@ -32,6 +33,7 @@
 | `app/main.py` | FastAPI app, static + `/chat-ui` mount |
 | `app/config.py` | env / settings |
 | `app/db.py` | SQLAlchemy models; `init_db()` гоняет Alembic `upgrade head` |
+| `skills` / `user_skill_defaults` / `conversation_skills` / `skill_shares` | Skills: свой markdown, копия с `parent_id`, дефолты новых чатов, набор чата (можно менять), шаринг в каталог |
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
@@ -39,14 +41,17 @@
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image` |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
+| `app/skills.py` | CRUD skills, публикация/каталог/копия, дефолты, набор чата |
+| `app/routes/skills.py` | `/api/skills*`, `/api/catalog/skills*` |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC: Google, Apple, Яндекс, VK ID, GitHub (authorize-URL, token exchange, id_token / userinfo) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
+| `app/routes/skill_pages.py` | `/skills`, `/catalog` (Jinja) |
 | `app/routes/oauth.py` | `/auth/{google,apple,yandex,vk,github}` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
-| `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` |
+| `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` (модель + `default_skill_ids`) |
 | `app/routes/notes.py` | `/api/conversations/{id}/note` (GET/PUT) и download |
 | `app/og.py` | Open Graph: абсолютные URL превью, сниппет описания |
 | `app/visitors.py` | классификация User-Agent: human / crawler / bot |

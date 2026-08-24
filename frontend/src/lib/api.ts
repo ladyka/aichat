@@ -4,6 +4,7 @@ export type ConversationSummary = {
   created_at: string | null;
   updated_at: string | null;
   archived_at: string | null;
+  skill_ids?: string[];
 };
 
 export type ConversationMessage = {
@@ -28,7 +29,10 @@ async function parseError(res: Response): Promise<string> {
   return `HTTP ${res.status}`;
 }
 
-export async function fetchSettings(): Promise<{ preferred_model: string }> {
+export async function fetchSettings(): Promise<{
+  preferred_model: string;
+  default_skill_ids?: string[];
+}> {
   const res = await fetch("/api/settings", { credentials: "include" });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
@@ -168,4 +172,37 @@ export async function putConversationNote(
 
 export function conversationNoteDownloadUrl(id: string): string {
   return `/api/conversations/${id}/note/download`;
+}
+
+export type SkillSummary = {
+  id: string;
+  title: string;
+  description: string;
+  body: string;
+  parent_id: string | null;
+  public: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export async function listSkills(): Promise<SkillSummary[]> {
+  const res = await fetch("/api/skills", { credentials: "include" });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return Array.isArray(data?.data) ? data.data : [];
+}
+
+export async function putConversationSkills(
+  id: string,
+  skillIds: string[],
+): Promise<string[]> {
+  const res = await fetch(`/api/conversations/${id}/skills`, {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ skill_ids: skillIds }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return Array.isArray(data?.skill_ids) ? data.skill_ids.map(String) : [];
 }

@@ -30,6 +30,7 @@ from app.models_catalog import (
     to_e7_public_id,
     to_public_id,
 )
+from app.skills import inject_conversation_skills
 from app.tools import call_tool, enabled_tools, extract_tool_calls
 
 router = APIRouter()
@@ -476,6 +477,9 @@ async def _proxy_inner(
         preferred = (getattr(user, "preferred_model", None) or "").strip()
         if preferred:
             body = {**body, "model": preferred}
+
+    if source == "chat":
+        body = inject_conversation_skills(body, db, user)
 
     # Internal chat only: advertise the enabled tools to the model.
     known_location: dict[str, float] | None = None

@@ -16,6 +16,24 @@
         <option value="{{ preferred_model }}" selected>{{ preferred_model }}</option>
       </select>
     </label>
+    <div>
+      <p class="section-title">Навыки в новых чатах</p>
+      <p class="muted">Выбранные навыки подключатся при создании чата. Набор можно изменить в самом чате.</p>
+      {% if skill_items %}
+      <div class="check-list">
+        {% for item in skill_items %}
+        <label class="check-row">
+          <input type="checkbox" name="default_skill_ids" value="{{ item.id }}" {% if item.id in default_skill_ids %}checked{% endif %}>
+          {{ item.title }}
+          {% if item.public %}<span class="muted">каталог</span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="muted">Пока нет навыков. <a href="/skills">Создайте навык</a> или скопируйте из <a href="/catalog">каталога</a>.</p>
+      {% endif %}
+      <p class="muted"><a href="/skills">Управлять навыками</a></p>
+    </div>
     <button class="btn" type="submit">Сохранить</button>
   </form>
   <p class="muted"><a href="/chat">← К чату</a></p>

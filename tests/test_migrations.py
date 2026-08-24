@@ -26,6 +26,10 @@ EXPECTED_TABLES = {
     "share_accesses",
     "notes",
     "conversation_notes",
+    "skills",
+    "user_skill_defaults",
+    "conversation_skills",
+    "skill_shares",
     "alembic_version",
 }
 
@@ -104,6 +108,12 @@ def test_upgrade_adds_columns_on_legacy_create_all_db(tmp_path):
     assert "conversations" in insp.get_table_names()
     assert "notes" in insp.get_table_names()
     assert "conversation_notes" in insp.get_table_names()
+    assert "skills" in insp.get_table_names()
+    assert "user_skill_defaults" in insp.get_table_names()
+    assert "conversation_skills" in insp.get_table_names()
+    assert "skill_shares" in insp.get_table_names()
+    skill_cols = {c["name"] for c in insp.get_columns("skills")}
+    assert {"parent_id", "title", "description", "body"} <= skill_cols
 
     with engine.connect() as conn:
         model = conn.execute(text("SELECT preferred_model FROM users WHERE id = 1")).scalar()
