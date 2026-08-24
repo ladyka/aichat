@@ -6,23 +6,7 @@
   <h1>Регистрация</h1>
   <p class="muted">Создайте аккаунт для чата и доступа к API.</p>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  {% if google_oauth_enabled or apple_oauth_enabled %}
-  <div class="oauth-buttons">
-    {% if google_oauth_enabled %}
-    <a class="btn btn-ghost oauth-btn" href="/auth/google">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1Z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23Z"/><path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84Z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 0 0 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52Z"/></svg>
-      <span>Войти через Google</span>
-    </a>
-    {% endif %}
-    {% if apple_oauth_enabled %}
-    <a class="btn btn-ghost oauth-btn" href="/auth/apple">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16.37 12.81c-.03-2.45 2-3.63 2.09-3.69-1.14-1.67-2.92-1.9-3.55-1.92-1.51-.16-2.95.89-3.72.89-.77 0-1.96-.87-3.22-.85-1.66.02-3.19.96-4.04 2.45-1.72 2.99-.44 7.41 1.24 9.84.82 1.19 1.79 2.52 3.07 2.47 1.23-.05 1.7-.8 3.19-.8 1.48 0 1.9.8 3.21.77 1.33-.02 2.17-1.21 2.98-2.41.94-1.37 1.32-2.7 1.35-2.77-.03-.01-2.58-.99-2.6-3.98ZM14.02 5.36c.68-.83 1.14-1.98 1.02-3.13-1.1.06-2.31.69-3.06 1.54-.62.7-1.19 1.81-1.04 2.88 1.18.09 2.36-.46 3.08-1.29Z"/></svg>
-      <span>Войти через Apple</span>
-    </a>
-    {% endif %}
-  </div>
-  <div class="or-divider"><span>или</span></div>
-  {% endif %}
+  {% include "_oauth_buttons.html" %}
   <form method="post" action="/register" class="stack-form">
     <label>Email
       <input type="email" name="email" required autocomplete="email">

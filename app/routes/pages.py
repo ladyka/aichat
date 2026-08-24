@@ -48,6 +48,10 @@ def _ctx(user: User | None = None, **extra):
         "default_model": settings.default_model,
         "google_oauth_enabled": settings.google_oauth_enabled,
         "apple_oauth_enabled": settings.apple_oauth_enabled,
+        "yandex_oauth_enabled": settings.yandex_oauth_enabled,
+        "vk_oauth_enabled": settings.vk_oauth_enabled,
+        "github_oauth_enabled": settings.github_oauth_enabled,
+        "any_oauth_enabled": settings.any_oauth_enabled,
     }
     data.update(extra)
     return data
@@ -66,6 +70,19 @@ def render(request: Request, name: str, user: User | None = None, status_code: i
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request, user: User | None = Depends(get_current_user_optional)):
     return render(request, "landing.html", user)
+
+
+@router.get("/about", response_class=HTMLResponse)
+def about_page(request: Request, user: User | None = Depends(get_current_user_optional)):
+    return render(
+        request,
+        "about.html",
+        user,
+        og_description=(
+            "Чат в браузере: пишете как знакомому. "
+            "Модель отвечает, а если нужно — сходит за погодой, картинкой или пиццей."
+        ),
+    )
 
 
 @router.get("/privacy", response_class=HTMLResponse)

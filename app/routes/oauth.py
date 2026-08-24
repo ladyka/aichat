@@ -16,8 +16,14 @@ from app.oauth import (
     apple_authorize_url,
     consume_oauth_state,
     exchange_apple_code,
+    exchange_github_code,
     exchange_google_code,
+    exchange_vk_code,
+    exchange_yandex_code,
+    github_authorize_url,
     google_authorize_url,
+    vk_authorize_url,
+    yandex_authorize_url,
 )
 from app.routes.pages import render
 
@@ -77,12 +83,41 @@ def _upsert_oauth_user(
     return user
 
 
+def _oauth_error_page(request: Request, message: str):
+    return render(request, "login.html", None, status_code=400, error=message)
+
+
+def _start_oauth(enabled: bool, authorize_url: str) -> RedirectResponse:
+    if not enabled:
+        return RedirectResponse("/login", status_code=303)
+    return RedirectResponse(authorize_url, status_code=302)
+
+
+async def _finish_code_login(
+    request: Request,
+    db: Session,
+    provider: str,
+    code: str,
+    state: str,
+    exchanger,
+    *,
+    error: str = "",
+    error_description: str = "",
+):
+    if error:
+        return _oauth_error_page(request, error_description or error)
+    try:
+        consume_oauth_state(state, provider)
+        profile = await exchanger(code)
+        user = _upsert_oauth_user(db, provider, profile["subject"], profile.get("email"))
+    except OAuthError as exc:
+        return _oauth_error_page(request, str(exc))
+    return _set_session_cookie(user, db)
+
+
 @router.get("/auth/google")
 def google_login():
-    settings = get_settings()
-    if not settings.google_oauth_enabled:
-        return RedirectResponse("/login", status_code=303)
-    return RedirectResponse(google_authorize_url(), status_code=302)
+    return _start_oauth(get_settings().google_oauth_enabled, google_authorize_url())
 
 
 @router.get("/auth/google/callback")
@@ -90,23 +125,25 @@ async def google_callback(
     request: Request,
     code: str = "",
     state: str = "",
+    error: str = "",
+    error_description: str = "",
     db: Session = Depends(get_db),
 ):
-    try:
-        consume_oauth_state(state, "google")
-        profile = await exchange_google_code(code)
-        user = _upsert_oauth_user(db, "google", profile["subject"], profile["email"])
-    except OAuthError as exc:
-        return render(request, "login.html", None, status_code=400, error=str(exc))
-    return _set_session_cookie(user, db)
+    return await _finish_code_login(
+        request,
+        db,
+        "google",
+        code,
+        state,
+        exchange_google_code,
+        error=error,
+        error_description=error_description,
+    )
 
 
 @router.get("/auth/apple")
 def apple_login():
-    settings = get_settings()
-    if not settings.apple_oauth_enabled:
-        return RedirectResponse("/login", status_code=303)
-    return RedirectResponse(apple_authorize_url(), status_code=302)
+    return _start_oauth(get_settings().apple_oauth_enabled, apple_authorize_url())
 
 
 @router.post("/auth/apple/callback")
@@ -120,13 +157,7 @@ async def apple_callback(
     db: Session = Depends(get_db),
 ):
     if error:
-        return render(
-            request,
-            "login.html",
-            None,
-            status_code=400,
-            error=error_description or error,
-        )
+        return _oauth_error_page(request, error_description or error)
     try:
         consume_oauth_state(state, "apple")
         profile = await exchange_apple_code(code)
@@ -139,5 +170,88 @@ async def apple_callback(
                 email = ""
         user_row = _upsert_oauth_user(db, "apple", profile["subject"], email)
     except OAuthError as exc:
-        return render(request, "login.html", None, status_code=400, error=str(exc))
+        return _oauth_error_page(request, str(exc))
     return _set_session_cookie(user_row, db)
+
+
+@router.get("/auth/yandex")
+def yandex_login():
+    return _start_oauth(get_settings().yandex_oauth_enabled, yandex_authorize_url())
+
+
+@router.get("/auth/yandex/callback")
+async def yandex_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_description: str = "",
+    db: Session = Depends(get_db),
+):
+    return await _finish_code_login(
+        request,
+        db,
+        "yandex",
+        code,
+        state,
+        exchange_yandex_code,
+        error=error,
+        error_description=error_description,
+    )
+
+
+@router.get("/auth/vk")
+def vk_login():
+    return _start_oauth(get_settings().vk_oauth_enabled, vk_authorize_url())
+
+
+@router.get("/auth/vk/callback")
+async def vk_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    device_id: str = "",
+    error: str = "",
+    error_description: str = "",
+    db: Session = Depends(get_db),
+):
+    if error:
+        return _oauth_error_page(request, error_description or error)
+    try:
+        extra = consume_oauth_state(state, "vk")
+        profile = await exchange_vk_code(
+            code,
+            device_id=device_id,
+            code_verifier=extra.get("code_verifier", ""),
+            state=state,
+        )
+        user = _upsert_oauth_user(db, "vk", profile["subject"], profile.get("email"))
+    except OAuthError as exc:
+        return _oauth_error_page(request, str(exc))
+    return _set_session_cookie(user, db)
+
+
+@router.get("/auth/github")
+def github_login():
+    return _start_oauth(get_settings().github_oauth_enabled, github_authorize_url())
+
+
+@router.get("/auth/github/callback")
+async def github_callback(
+    request: Request,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_description: str = "",
+    db: Session = Depends(get_db),
+):
+    return await _finish_code_login(
+        request,
+        db,
+        "github",
+        code,
+        state,
+        exchange_github_code,
+        error=error,
+        error_description=error_description,
+    )
