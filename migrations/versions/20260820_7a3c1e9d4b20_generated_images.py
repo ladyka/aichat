@@ -10,6 +10,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
+from migrations.helpers import create_index_if_missing, drop_index_if_exists
+
 revision: str = "7a3c1e9d4b20"
 down_revision: Union[str, Sequence[str], None] = "cc2b1969cbe6"
 branch_labels: Union[str, Sequence[str], None] = None
@@ -34,23 +36,11 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("generated_images", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_generated_images_user_id"),
-            ["user_id"],
-            unique=False,
-            if_not_exists=True,
-        )
-        batch_op.create_index(
-            batch_op.f("ix_generated_images_created_at"),
-            ["created_at"],
-            unique=False,
-            if_not_exists=True,
-        )
+    create_index_if_missing("generated_images", "ix_generated_images_user_id", ["user_id"])
+    create_index_if_missing("generated_images", "ix_generated_images_created_at", ["created_at"])
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("generated_images", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_generated_images_created_at"))
-        batch_op.drop_index(batch_op.f("ix_generated_images_user_id"))
-    op.drop_table("generated_images")
+    drop_index_if_exists("generated_images", "ix_generated_images_created_at")
+    drop_index_if_exists("generated_images", "ix_generated_images_user_id")
+    op.drop_table("generated_images", if_exists=True)

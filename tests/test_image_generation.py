@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import logging
 import uuid
 
 from sqlalchemy import func, select
@@ -35,6 +36,7 @@ def _enable_image_gen(monkeypatch, *, daily_limit=5):
     monkeypatch.setattr(settings, "s3_sa_key_secret", "secret")
     monkeypatch.setattr(settings, "image_generation_daily_limit", daily_limit)
     monkeypatch.setattr(settings, "image_generation_model", "black-forest-labs/flux.2-klein-4b")
+    monkeypatch.setattr(settings, "debug", False)
 
 
 def test_generate_image_not_advertised_without_s3(monkeypatch):
@@ -52,7 +54,7 @@ def test_generate_image_advertised_when_configured(monkeypatch):
     assert "generate_image" in names
 
 
-def test_generate_image_tool_uploads(monkeypatch, client, db):
+def test_generate_image_tool_uploads(monkeypatch, client, db, caplog):
     _enable_image_gen(monkeypatch)
     email = f"img-{uuid.uuid4().hex[:8]}@example.com"
     register(client, email)
@@ -77,18 +79,22 @@ def test_generate_image_tool_uploads(monkeypatch, client, db):
     monkeypatch.setattr("app.tools.openrouter_generate_image", fake_or)
     monkeypatch.setattr("app.tools.storage.put_bytes", fake_put)
 
-    raw = asyncio.run(
-        call_tool(
-            "generate_image",
-            json.dumps({"prompt": "гора на закате", "aspect_ratio": "16:9"}),
-            user=user,
-            db=db,
+    with caplog.at_level(logging.INFO, logger="aichat.tools"):
+        raw = asyncio.run(
+            call_tool(
+                "generate_image",
+                json.dumps({"prompt": "гора на закате", "aspect_ratio": "16:9"}),
+                user=user,
+                db=db,
+            )
         )
-    )
     payload = json.loads(raw)
     assert payload["markdown"].startswith("![")
     assert payload["url"].startswith("https://aichat.s3.cloud.ru/")
     assert payload["cost_usd"] == "0.014"
+    assert "generate_image started" in caplog.text
+    assert "generate_image saved" in caplog.text
+    assert payload["url"] not in caplog.text
     row = db.scalar(select(GeneratedImage).where(GeneratedImage.user_id == user.id))
     assert row.prompt == "гора на закате"
     assert row.aspect_ratio == "16:9"
@@ -124,7 +130,7 @@ def test_generate_image_daily_limit(monkeypatch, client, db):
     assert "лимит" in second["error"]
 
 
-def test_generate_image_openrouter_error(monkeypatch, client, db):
+def test_generate_image_openrouter_error(monkeypatch, client, db, caplog):
     _enable_image_gen(monkeypatch)
     email = f"img-err-{uuid.uuid4().hex[:8]}@example.com"
     register(client, email)
@@ -134,14 +140,102 @@ def test_generate_image_openrouter_error(monkeypatch, client, db):
         return {"error": "Insufficient credits", "status": 402}
 
     monkeypatch.setattr("app.tools.openrouter_generate_image", fake_or)
-    result = json.loads(
-        asyncio.run(call_tool("generate_image", '{"prompt": "кот"}', user=user, db=db))
-    )
+    with caplog.at_level(logging.WARNING, logger="aichat.tools"):
+        result = json.loads(
+            asyncio.run(call_tool("generate_image", '{"prompt": "кот"}', user=user, db=db))
+        )
     assert result["error"] == "Insufficient credits"
     leftover = db.scalar(
         select(func.count()).select_from(GeneratedImage).where(GeneratedImage.user_id == user.id)
     )
     assert int(leftover or 0) == 0
+    assert "generate_image failed" in caplog.text
+    assert "Insufficient credits" in caplog.text
+
+
+def test_generate_image_logs_url_at_debug(monkeypatch, client, db, caplog):
+    _enable_image_gen(monkeypatch)
+    email = f"img-dbg-{uuid.uuid4().hex[:8]}@example.com"
+    register(client, email)
+    user = get_user_by_email(db, email)
+
+    async def fake_or(prompt, aspect_ratio=None, model=None):
+        return {
+            "bytes": base64.b64decode(_PNG_B64),
+            "media_type": "image/png",
+            "cost": 0.01,
+            "model": "black-forest-labs/flux.2-klein-4b",
+        }
+
+    monkeypatch.setattr("app.tools.openrouter_generate_image", fake_or)
+    monkeypatch.setattr(
+        "app.tools.storage.put_bytes",
+        lambda key, body, content_type: f"https://aichat.s3.cloud.ru/{key}",
+    )
+    with caplog.at_level(logging.DEBUG, logger="aichat.tools"):
+        raw = asyncio.run(call_tool("generate_image", '{"prompt": "кот"}', user=user, db=db))
+    payload = json.loads(raw)
+    debug_text = "\n".join(
+        record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG
+    )
+    assert f"generate_image url={payload['url']}" in debug_text
+
+
+def test_generate_image_logs_s3_failure(monkeypatch, client, db, caplog):
+    _enable_image_gen(monkeypatch)
+    email = f"img-s3-{uuid.uuid4().hex[:8]}@example.com"
+    register(client, email)
+    user = get_user_by_email(db, email)
+
+    async def fake_or(prompt, aspect_ratio=None, model=None):
+        return {
+            "bytes": base64.b64decode(_PNG_B64),
+            "media_type": "image/png",
+            "cost": 0.01,
+            "model": "black-forest-labs/flux.2-klein-4b",
+        }
+
+    def boom(key, body, content_type):
+        raise RuntimeError("access denied")
+
+    monkeypatch.setattr("app.tools.openrouter_generate_image", fake_or)
+    monkeypatch.setattr("app.tools.storage.put_bytes", boom)
+    with caplog.at_level(logging.WARNING, logger="aichat.tools"):
+        result = json.loads(
+            asyncio.run(call_tool("generate_image", '{"prompt": "кот"}', user=user, db=db))
+        )
+    assert "Не удалось сохранить" in result["error"]
+    assert "generate_image failed" in caplog.text
+    assert "stage=s3" in caplog.text
+
+
+def test_generate_image_saves_local_copy_when_debug(monkeypatch, client, db, tmp_path):
+    _enable_image_gen(monkeypatch)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "debug", True)
+    monkeypatch.setattr(settings, "root", tmp_path)
+    email = f"img-dbg-disk-{uuid.uuid4().hex[:8]}@example.com"
+    register(client, email)
+    user = get_user_by_email(db, email)
+    png = base64.b64decode(_PNG_B64)
+
+    async def fake_or(prompt, aspect_ratio=None, model=None):
+        return {
+            "bytes": png,
+            "media_type": "image/png",
+            "cost": 0.01,
+            "model": "black-forest-labs/flux.2-klein-4b",
+        }
+
+    monkeypatch.setattr("app.tools.openrouter_generate_image", fake_or)
+    monkeypatch.setattr(
+        "app.tools.storage.put_bytes",
+        lambda key, body, content_type: f"https://aichat.s3.cloud.ru/{key}",
+    )
+    asyncio.run(call_tool("generate_image", '{"prompt": "кот"}', user=user, db=db))
+    files = list((tmp_path / "data" / "aichat" / "generated" / str(user.id)).rglob("*.png"))
+    assert len(files) == 1
+    assert files[0].read_bytes() == png
 
 
 def _fake_weather(*a, **kw):

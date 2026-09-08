@@ -6,6 +6,7 @@ Create Date: 2026-08-20 22:03:09.143011
 
 Idempotent: existing databases created by ``create_all`` keep their tables;
 missing additive columns (the old ``_ensure_column`` helpers) are added.
+Indexes are created only when missing — MySQL has no ``CREATE INDEX IF NOT EXISTS``.
 """
 
 from typing import Sequence, Union
@@ -15,19 +16,41 @@ from alembic import op
 from sqlalchemy import inspect
 from sqlalchemy.sql.schema import Column
 
+from migrations.helpers import create_index_if_missing, drop_index_if_exists
+
 # revision identifiers, used by Alembic.
 revision: str = "cc2b1969cbe6"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+_INDEXES: list[tuple[str, str, list[str], bool]] = [
+    ("users", "ix_users_email", ["email"], True),
+    ("api_tokens", "ix_api_tokens_token_hash", ["token_hash"], True),
+    ("api_tokens", "ix_api_tokens_user_id", ["user_id"], False),
+    ("conversations", "ix_conversations_user_id", ["user_id"], False),
+    ("downloads", "ix_downloads_user_id", ["user_id"], False),
+    ("oauth_identities", "ix_oauth_identities_user_id", ["user_id"], False),
+    ("sessions", "ix_sessions_token_hash", ["token_hash"], True),
+    ("sessions", "ix_sessions_user_id", ["user_id"], False),
+    ("usage_logs", "ix_usage_logs_user_id", ["user_id"], False),
+    ("api_token_usage", "ix_api_token_usage_token_id", ["token_id"], False),
+    ("messages", "ix_messages_conversation_id", ["conversation_id"], False),
+    ("share_links", "ix_share_links_conversation_id", ["conversation_id"], False),
+    ("share_links", "ix_share_links_token_hash", ["token_hash"], True),
+    ("share_accesses", "ix_share_accesses_share_id", ["share_id"], False),
+    ("share_accesses", "ix_share_accesses_visitor_kind", ["visitor_kind"], False),
+]
+
 
 def _add_column_if_missing(table: str, column: Column) -> None:
     bind = op.get_bind()
-    names = set(inspect(bind).get_table_names())
+    inspector = inspect(bind)
+    inspector.clear_cache()
+    names = set(inspector.get_table_names())
     if table not in names:
         return
-    existing = {c["name"] for c in inspect(bind).get_columns(table)}
+    existing = {c["name"] for c in inspector.get_columns(table)}
     if column.name in existing:
         return
     op.add_column(table, column)
@@ -46,11 +69,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("users", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_users_email"), ["email"], unique=True, if_not_exists=True
-        )
-
     op.create_table(
         "api_tokens",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -64,14 +82,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("api_tokens", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_api_tokens_token_hash"), ["token_hash"], unique=True, if_not_exists=True
-        )
-        batch_op.create_index(
-            batch_op.f("ix_api_tokens_user_id"), ["user_id"], unique=False, if_not_exists=True
-        )
-
     op.create_table(
         "conversations",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -84,11 +94,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("conversations", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_conversations_user_id"), ["user_id"], unique=False, if_not_exists=True
-        )
-
     op.create_table(
         "downloads",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -104,11 +109,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("user_id", "url_hash", name="uq_download_user_url"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("downloads", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_downloads_user_id"), ["user_id"], unique=False, if_not_exists=True
-        )
-
     op.create_table(
         "oauth_identities",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -121,11 +121,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("provider", "subject", name="uq_oauth_provider_subject"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("oauth_identities", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_oauth_identities_user_id"), ["user_id"], unique=False, if_not_exists=True
-        )
-
     op.create_table(
         "sessions",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -137,14 +132,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("sessions", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_sessions_token_hash"), ["token_hash"], unique=True, if_not_exists=True
-        )
-        batch_op.create_index(
-            batch_op.f("ix_sessions_user_id"), ["user_id"], unique=False, if_not_exists=True
-        )
-
     op.create_table(
         "usage_logs",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -159,11 +146,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("usage_logs", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_usage_logs_user_id"), ["user_id"], unique=False, if_not_exists=True
-        )
-
     op.create_table(
         "api_token_usage",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -175,14 +157,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("token_id", "day", name="uq_api_token_usage_day"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("api_token_usage", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_api_token_usage_token_id"),
-            ["token_id"],
-            unique=False,
-            if_not_exists=True,
-        )
-
     op.create_table(
         "messages",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -194,14 +168,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("messages", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_messages_conversation_id"),
-            ["conversation_id"],
-            unique=False,
-            if_not_exists=True,
-        )
-
     op.create_table(
         "share_links",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -215,17 +181,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
     )
-    with op.batch_alter_table("share_links", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_share_links_conversation_id"),
-            ["conversation_id"],
-            unique=False,
-            if_not_exists=True,
-        )
-        batch_op.create_index(
-            batch_op.f("ix_share_links_token_hash"), ["token_hash"], unique=True, if_not_exists=True
-        )
-
     op.create_table(
         "share_accesses",
         sa.Column("id", sa.Integer(), nullable=False),
@@ -261,64 +216,22 @@ def upgrade() -> None:
         sa.Column("user_agent", sa.String(length=512), server_default="", nullable=False),
     )
 
-    with op.batch_alter_table("share_accesses", schema=None) as batch_op:
-        batch_op.create_index(
-            batch_op.f("ix_share_accesses_share_id"), ["share_id"], unique=False, if_not_exists=True
-        )
-        batch_op.create_index(
-            batch_op.f("ix_share_accesses_visitor_kind"),
-            ["visitor_kind"],
-            unique=False,
-            if_not_exists=True,
-        )
+    for table, name, columns, unique in _INDEXES:
+        create_index_if_missing(table, name, columns, unique=unique)
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("share_accesses", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_share_accesses_visitor_kind"), if_exists=True)
-        batch_op.drop_index(batch_op.f("ix_share_accesses_share_id"), if_exists=True)
+    for table, name, _columns, _unique in reversed(_INDEXES):
+        drop_index_if_exists(table, name)
 
     op.drop_table("share_accesses", if_exists=True)
-    with op.batch_alter_table("share_links", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_share_links_token_hash"), if_exists=True)
-        batch_op.drop_index(batch_op.f("ix_share_links_conversation_id"), if_exists=True)
-
     op.drop_table("share_links", if_exists=True)
-    with op.batch_alter_table("messages", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_messages_conversation_id"), if_exists=True)
-
     op.drop_table("messages", if_exists=True)
-    with op.batch_alter_table("api_token_usage", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_api_token_usage_token_id"), if_exists=True)
-
     op.drop_table("api_token_usage", if_exists=True)
-    with op.batch_alter_table("usage_logs", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_usage_logs_user_id"), if_exists=True)
-
     op.drop_table("usage_logs", if_exists=True)
-    with op.batch_alter_table("sessions", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_sessions_user_id"), if_exists=True)
-        batch_op.drop_index(batch_op.f("ix_sessions_token_hash"), if_exists=True)
-
     op.drop_table("sessions", if_exists=True)
-    with op.batch_alter_table("oauth_identities", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_oauth_identities_user_id"), if_exists=True)
-
     op.drop_table("oauth_identities", if_exists=True)
-    with op.batch_alter_table("downloads", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_downloads_user_id"), if_exists=True)
-
     op.drop_table("downloads", if_exists=True)
-    with op.batch_alter_table("conversations", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_conversations_user_id"), if_exists=True)
-
     op.drop_table("conversations", if_exists=True)
-    with op.batch_alter_table("api_tokens", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_api_tokens_user_id"), if_exists=True)
-        batch_op.drop_index(batch_op.f("ix_api_tokens_token_hash"), if_exists=True)
-
     op.drop_table("api_tokens", if_exists=True)
-    with op.batch_alter_table("users", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_users_email"), if_exists=True)
-
     op.drop_table("users", if_exists=True)

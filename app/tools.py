@@ -578,36 +578,45 @@ def _prompt_alt(prompt: str) -> str:
     return text.replace("[", "(").replace("]", ")") or "image"
 
 
+def _generate_image_fail(user_id: Any, reason: str, **fields: Any) -> str:
+    extras = " ".join(f"{key}={value}" for key, value in fields.items() if value is not None)
+    if extras:
+        logger.warning("generate_image failed user_id=%s reason=%s %s", user_id, reason, extras)
+    else:
+        logger.warning("generate_image failed user_id=%s reason=%s", user_id, reason)
+    payload: dict[str, Any] = {"error": reason}
+    status = fields.get("status")
+    if status is not None:
+        payload["status"] = status
+    return json.dumps(payload, ensure_ascii=False)
+
+
 async def _generate_image(args: dict[str, Any], user: Any = None, db: Any = None) -> str:
     settings = get_settings()
+    user_id = getattr(user, "id", None)
     if not settings.image_generation_enabled:
-        return json.dumps(
-            {"error": "Генерация изображений не настроена (нужны OpenRouter и S3)."},
-            ensure_ascii=False,
+        return _generate_image_fail(
+            user_id, "Генерация изображений не настроена (нужны OpenRouter и S3)."
         )
     if user is None or db is None:
-        return json.dumps({"error": "Нет контекста пользователя."}, ensure_ascii=False)
+        return _generate_image_fail(user_id, "Нет контекста пользователя.")
 
     prompt = str(args.get("prompt") or "").strip()
     if not prompt:
-        return json.dumps({"error": "Нужен prompt — описание картинки."}, ensure_ascii=False)
+        return _generate_image_fail(user_id, "Нужен prompt — описание картинки.")
     if len(prompt) > _IMAGE_MAX_PROMPT:
-        return json.dumps(
-            {"error": f"Слишком длинный prompt (максимум {_IMAGE_MAX_PROMPT} символов)."},
-            ensure_ascii=False,
+        return _generate_image_fail(
+            user_id, f"Слишком длинный prompt (максимум {_IMAGE_MAX_PROMPT} символов)."
         )
 
     aspect_raw = str(args.get("aspect_ratio") or "").strip()
     aspect_ratio = aspect_raw or None
     if aspect_ratio and aspect_ratio not in _IMAGE_ASPECT_RATIOS:
-        return json.dumps(
-            {
-                "error": (
-                    "Недопустимый aspect_ratio. Используй одно из: "
-                    + ", ".join(sorted(_IMAGE_ASPECT_RATIOS))
-                )
-            },
-            ensure_ascii=False,
+        allowed = ", ".join(sorted(_IMAGE_ASPECT_RATIOS))
+        return _generate_image_fail(
+            user_id,
+            f"Недопустимый aspect_ratio. Используй одно из: {allowed}",
+            aspect_ratio=aspect_ratio,
         )
 
     start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -620,73 +629,104 @@ async def _generate_image(args: dict[str, Any], user: Any = None, db: Any = None
         )
     )
     if int(used or 0) >= settings.image_generation_daily_limit:
+        return _generate_image_fail(
+            user_id,
+            (
+                f"Дневной лимит генерации изображений исчерпан: "
+                f"{settings.image_generation_daily_limit} в сутки."
+            ),
+            used=int(used or 0),
+        )
+
+    logger.info(
+        "generate_image started user_id=%s model=%s aspect_ratio=%s prompt_chars=%s",
+        user_id,
+        settings.image_generation_model,
+        aspect_ratio,
+        len(prompt),
+    )
+    try:
+        result = await openrouter_generate_image(prompt, aspect_ratio=aspect_ratio)
+        if result.get("error"):
+            return _generate_image_fail(
+                user_id,
+                str(result["error"]),
+                status=result.get("status"),
+                stage="openrouter",
+            )
+
+        image_bytes: bytes = result["bytes"]
+        if len(image_bytes) > _IMAGE_MAX_BYTES:
+            return _generate_image_fail(
+                user_id,
+                f"Изображение слишком большое ({len(image_bytes)} байт).",
+                bytes=len(image_bytes),
+            )
+
+        media_type = str(result.get("media_type") or "image/png")
+        model = str(result.get("model") or settings.image_generation_model)
+        key = storage.object_key(user.id, _mime_extension(media_type))
+        storage.save_debug_copy(key, image_bytes)
+        try:
+            url = storage.put_bytes(key, image_bytes, media_type)
+        except Exception as exc:
+            logger.warning(
+                "generate_image failed user_id=%s reason=%s stage=s3 error=%s",
+                user_id,
+                "Не удалось сохранить изображение",
+                exc,
+            )
+            return json.dumps(
+                {"error": f"Не удалось сохранить изображение: {exc}"},
+                ensure_ascii=False,
+            )
+
+        cost = result.get("cost")
+        cost_usd = None if cost is None else str(cost)
+        row = GeneratedImage(
+            user_id=user.id,
+            object_key=key,
+            public_url=url,
+            prompt=prompt,
+            model=model,
+            mime=media_type.split(";")[0].strip() or "image/png",
+            size_bytes=len(image_bytes),
+            aspect_ratio=aspect_ratio,
+            cost_usd=cost_usd,
+        )
+        db.add(row)
+        db.commit()
+        logger.info(
+            "generate_image saved user_id=%s key=%s bytes=%s model=%s cost_usd=%s",
+            user_id,
+            key,
+            len(image_bytes),
+            model,
+            cost_usd,
+        )
+        logger.debug("generate_image url=%s", url)
+        alt = _prompt_alt(prompt)
+        markdown = f"![{alt}]({url})"
         return json.dumps(
             {
-                "error": (
-                    f"Дневной лимит генерации изображений исчерпан: "
-                    f"{settings.image_generation_daily_limit} в сутки."
-                )
+                "url": url,
+                "markdown": markdown,
+                "model": model,
+                "aspect_ratio": aspect_ratio,
+                "cost_usd": cost_usd,
             },
             ensure_ascii=False,
         )
-
-    result = await openrouter_generate_image(prompt, aspect_ratio=aspect_ratio)
-    if result.get("error"):
+    except Exception:
+        logger.exception("generate_image failed user_id=%s", user_id)
+        try:
+            db.rollback()
+        except Exception:
+            logger.debug("generate_image rollback failed", exc_info=True)
         return json.dumps(
-            {"error": result["error"], "status": result.get("status")},
+            {"error": "Не удалось сгенерировать изображение."},
             ensure_ascii=False,
         )
-
-    image_bytes: bytes = result["bytes"]
-    if len(image_bytes) > _IMAGE_MAX_BYTES:
-        return json.dumps(
-            {"error": f"Изображение слишком большое ({len(image_bytes)} байт)."},
-            ensure_ascii=False,
-        )
-
-    media_type = str(result.get("media_type") or "image/png")
-    model = str(result.get("model") or settings.image_generation_model)
-    key = storage.object_key(user.id, _mime_extension(media_type))
-    try:
-        url = storage.put_bytes(key, image_bytes, media_type)
-    except Exception as exc:
-        logger.warning("s3 put failed: %s", exc)
-        return json.dumps({"error": f"Не удалось сохранить изображение: {exc}"}, ensure_ascii=False)
-
-    cost = result.get("cost")
-    cost_usd = None if cost is None else str(cost)
-    row = GeneratedImage(
-        user_id=user.id,
-        object_key=key,
-        public_url=url,
-        prompt=prompt,
-        model=model,
-        mime=media_type.split(";")[0].strip() or "image/png",
-        size_bytes=len(image_bytes),
-        aspect_ratio=aspect_ratio,
-        cost_usd=cost_usd,
-    )
-    db.add(row)
-    db.commit()
-    logger.info(
-        "generate_image user_id=%s model=%s cost_usd=%s url=%s",
-        user.id,
-        model,
-        cost_usd,
-        url,
-    )
-    alt = _prompt_alt(prompt)
-    markdown = f"![{alt}]({url})"
-    return json.dumps(
-        {
-            "url": url,
-            "markdown": markdown,
-            "model": model,
-            "aspect_ratio": aspect_ratio,
-            "cost_usd": cost_usd,
-        },
-        ensure_ascii=False,
-    )
 
 
 def _current_datetime(arguments: str) -> str:

@@ -8,7 +8,7 @@ PYTHON_BIN ?= python3.13
 DOCKER ?= docker
 MKDOCS_IMAGE ?= squidfunk/mkdocs-material
 NPM ?= npm
-PY_FILES := app tests scripts server.py api_check.py migrations/env.py migrations/versions
+PY_FILES := app tests scripts server.py api_check.py migrations/env.py migrations/helpers.py migrations/versions
 
 venv:
 	$(PYTHON_BIN) -m venv $(VENV)

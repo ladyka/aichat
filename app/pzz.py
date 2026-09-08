@@ -18,6 +18,34 @@ API_PREFIX = "/api/v1"
 PRICE_DIVISOR = 10_000
 CATALOG_TTL_SEC = 600
 STREETS_TTL_SEC = 3600
+_MAX_CATALOG_PAGES = 20
+# Как Backbone SPA на pzz.by: только корневые позиции меню, в порядке витрины.
+CATEGORY_QUERY: dict[str, dict[str, str]] = {
+    "pizzas": {
+        "filter": "meal_only:0,parent_id:is:null",
+        "order": "position:asc",
+    },
+    "snacks": {
+        "filter": "meal_only:0,parent_id:is:null",
+        "order": "position:asc",
+    },
+    "drinks": {
+        "filter": "pizzeria_type:pizzeria,is_alcoholic:0",
+        "order": "position:asc",
+    },
+    "warmers": {
+        "filter": "pizzeria_type:pizzeria",
+        "order": "position:asc",
+    },
+    "desserts": {
+        "filter": "pizzeria_type:pizzeria",
+        "order": "position:asc",
+    },
+    "sauces": {
+        "filter": "pizzeria_type:pizzeria",
+        "order": "position:asc",
+    },
+}
 
 CATEGORIES: dict[str, str] = {
     "pizzas": "Пиццы",
@@ -121,6 +149,24 @@ def _unwrap(payload: Any) -> Any:
     return None
 
 
+def _last_page(payload: Any) -> int | None:
+    """Laravel-style pagination; None means the list is not paged (do not fetch page=2)."""
+    if not isinstance(payload, dict):
+        return None
+    response = payload.get("response")
+    if not isinstance(response, dict):
+        return None
+    meta = response.get("meta")
+    if not isinstance(meta, dict):
+        return None
+    raw = meta.get("last_page", meta.get("lastPage"))
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 1 else None
+
+
 async def _get_json(client: httpx.AsyncClient, path: str, **kwargs: Any) -> Any:
     response = await client.get(path, **kwargs)
     try:
@@ -142,9 +188,34 @@ async def fetch_category(
     if own:
         client = httpx.AsyncClient(base_url=PZZ_ORIGIN, timeout=20.0, headers=_HEADERS)
     try:
-        payload = await _get_json(client, f"{API_PREFIX}/{category}")
-        raw = _unwrap(payload)
-        items = raw if isinstance(raw, list) else []
+        query = dict(CATEGORY_QUERY.get(category) or {})
+        items: list[dict[str, Any]] = []
+        seen: set[Any] = set()
+        page = 1
+        last_page = 1
+        while page <= last_page and page <= _MAX_CATALOG_PAGES:
+            params = dict(query)
+            if page > 1:
+                params["page"] = str(page)
+            payload = await _get_json(client, f"{API_PREFIX}/{category}", params=params)
+            raw = _unwrap(payload)
+            chunk = raw if isinstance(raw, list) else []
+            for item in chunk:
+                if not isinstance(item, dict):
+                    continue
+                item_id = item.get("id")
+                if item_id is not None and item_id in seen:
+                    continue
+                if item_id is not None:
+                    seen.add(item_id)
+                items.append(item)
+            detected = _last_page(payload)
+            if detected is None:
+                break
+            last_page = detected
+            if not chunk:
+                break
+            page += 1
         _catalog_cache[category] = (now, items)
         return items
     finally:
@@ -170,7 +241,7 @@ def _matches(item: dict[str, Any], tokens: list[str]) -> bool:
 
 
 async def search_menu(
-    query: str = "", category: str | None = None, limit: int = 15
+    query: str = "", category: str | None = None, limit: int = 50
 ) -> dict[str, Any]:
     categories = [category] if category and category in CATEGORIES else list(CATEGORIES)
     tokens = _tokens(query)
@@ -183,21 +254,22 @@ async def search_menu(
                 summary = summarize_product(cat, item)
                 if summary:
                     found.append(summary)
-                if len(found) >= limit:
-                    break
-            if len(found) >= limit:
-                break
+    items = found[: max(1, limit)]
+    note = (
+        "Цены в белорусских рублях (BYN), как на pzz.by. "
+        "Перед заказом уточни размер пиццы (пинса / тонкое / 31 см / 36 см)."
+    )
+    if len(found) > len(items):
+        note += f" Показаны {len(items)} из {len(found)} позиций — уточни запрос или категорию."
     return {
         "source": "pzz.by",
         "query": query,
         "categories": {key: CATEGORIES[key] for key in categories},
-        "count": len(found),
-        "items": found,
+        "count": len(items),
+        "total": len(found),
+        "items": items,
         "menu_url": PZZ_ORIGIN,
-        "note": (
-            "Цены в белорусских рублях (BYN), как на pzz.by. "
-            "Перед заказом уточни размер пиццы (пинса / тонкое / 31 см / 36 см)."
-        ),
+        "note": note,
     }
 
 

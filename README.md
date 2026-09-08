@@ -47,6 +47,15 @@ make run
 
 Локально по умолчанию используется SQLite (`aichat.db`). MySQL включается, если заданы `MYSQL_HOST` и `MYSQL_PASSWORD`.
 
+Локальный MySQL 8.0.46 (как на проде; контейнер только с БД):
+
+```bash
+# в .env: MYSQL_HOST=127.0.0.1, MYSQL_USER / MYSQL_DATABASE=aichat, MYSQL_PASSWORD=…
+docker compose up -d
+```
+
+Данные в named volume `mysql-data`. `docker compose down` контейнер останавливает, БД оставляет; `docker compose down -v` удаляет данные.
+
 Схема БД версионируется **Alembic** (`alembic.ini`, `migrations/`). При старте приложения `init_db()` выполняет `alembic upgrade head`. Новые таблицы и колонки не появляются из `create_all`.
 
 После изменения моделей в `app/db.py`:
@@ -73,6 +82,12 @@ cd frontend && npm run test:cov   # с покрытием
 
 ```bash
 PYTHONPATH=. .venv/bin/python tests/integration_weather.py
+```
+
+Интеграционный тест S3 (PutObject + GetObject по `.env`, секреты не печатает):
+
+```bash
+PYTHONPATH=. .venv/bin/python tests/integration_s3.py
 ```
 
 Линтеры (flake8 + isort + black):
@@ -113,10 +128,13 @@ cd frontend && npm run dev   # :5173
 | `S3_BUCKET` | Имя bucket (создать заранее) |
 | `S3_PATH_STYLE` | `1` — path-style (`{endpoint}/{bucket}/{key}`), как у Cloud.ru |
 | `S3_PUBLIC_BASE_URL` | Префикс публичных URL (без повторного имени bucket), например `https://<bucket>.s3.cloud.ru` |
-| `S3_SA_KEY_ID` / `S3_SA_KEY_SECRET` | Ключи Cloud.ru как есть (не `AWS_ACCESS_KEY_*`) |
+| `S3_TENANT_ID` | Идентификатор тенанта Cloud.ru (над списком бакетов). Вместе с `S3_SA_KEY_ID` собирается в `tenant_id:key_id` |
+| `S3_SA_KEY_ID` / `S3_SA_KEY_SECRET` | Key ID и Key Secret из консоли Cloud.ru (не склеивать с тенантом вручную; если в `S3_SA_KEY_ID` уже есть `:`, оставляем как есть) |
 | `IMAGE_GENERATION_MODEL` | Модель OpenRouter Images (по умолчанию `black-forest-labs/flux.2-klein-4b`) |
 | `IMAGE_GENERATION_DAILY_LIMIT` | Картинок на пользователя в сутки UTC (по умолчанию `5`) |
 | `MYSQL_*` / `DATABASE_URL` | БД (иначе SQLite) |
+| `DEBUG` | `true` — локально копировать `generate_image` на диск (`data/aichat/generated/…`, каталог в `.gitignore`) |
+| `LOG_LEVEL` | Уровень логов приложения и uvicorn: `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` (по умолчанию `INFO`). Нужен `INFO`, чтобы в консоль шли вызовы моделей (`aichat_model=…`) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
 | `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); redirect URI OAuth и абсолютные URL превью ссылок (`og:image`, `og:url`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth-клиент Google (выкл., пока не заполнены оба) |

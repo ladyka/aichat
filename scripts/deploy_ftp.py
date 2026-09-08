@@ -7,6 +7,7 @@ import fnmatch
 import hashlib
 import json
 import socket
+import subprocess
 import sys
 from ftplib import FTP, error_perm, error_proto, error_temp
 from io import BytesIO
@@ -15,10 +16,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = ROOT / ".env"
 UPLOADIGNORE_PATH = ROOT / ".uploadignore"
+VERSION_FILE = ".version"
 PROBE_NAME = ".aichat_upload_probe"
 MANIFEST_NAME = ".aichat_manifest.json"
 MANIFEST_TMP = ".aichat_manifest.json.tmp"
 _HASH_CHUNK = 1024 * 1024
+
+
+def get_git_commit_hash() -> str:
+    """Get the current git commit hash."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        die("Failed to get git commit hash. Is this a git repository?")
+
+
+def check_git_status() -> None:
+    """Ensure no uncommitted changes exist."""
+    try:
+        status = subprocess.check_output(
+            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()
+        if status:
+            die(f"You have uncommitted changes. Please commit or stash them before deploying:\n{status}")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        die("Failed to check git status. Is this a git repository?")
 
 
 def sha256_file(path: Path) -> str:
@@ -313,6 +337,7 @@ def delete_file(ftp: FTP, remote: str) -> None:
 def main() -> None:
     force = "--force" in sys.argv
 
+    check_git_status()
     env = load_env(ENV_PATH)
     host, user, password, port, remote_root = require_ftp_config(env)
 
@@ -364,6 +389,16 @@ def main() -> None:
         except (error_perm, error_temp, error_proto, OSError) as exc:
             print(
                 f"warning: files uploaded, but could not write {MANIFEST_NAME}: {exc}",
+                file=sys.stderr,
+            )
+
+        try:
+            commit_hash = get_git_commit_hash()
+            ftp.storbinary(f"STOR {VERSION_FILE}", BytesIO(commit_hash.encode("utf-8")))
+            print(f"Version {commit_hash[:7]} uploaded to {VERSION_FILE}")
+        except (error_perm, error_temp, error_proto, OSError) as exc:
+            print(
+                f"warning: could not upload {VERSION_FILE}: {exc}",
                 file=sys.stderr,
             )
 

@@ -1,27 +1,25 @@
 from __future__ import annotations
 
-import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.config import get_settings
+from app.config import get_settings, setup_logging
 from app.db import init_db
 from app.newrelic_telemetry import shutdown_newrelic, wrap_asgi
 from app.routes import api_router
 from app.telemetry import setup_telemetry, shutdown_telemetry
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+setup_logging()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     setup_telemetry()
     init_db()
+    # Alembic env.py may have called fileConfig and silenced aichat/uvicorn loggers.
+    setup_logging()
     try:
         yield
     finally:
