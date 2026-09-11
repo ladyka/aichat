@@ -1,32 +1,36 @@
 {% extends "base.html" %}
 {% block title %}{{ title or 'Навык' }} — aichat{% endblock %}
-{% block body_class %}page-share{% endblock %}
+{% block body_class %}page-catalog{% endblock %}
 {% block content %}
-<div class="share-wrap">
-  <div class="share-head">
-    <a class="back-link" href="/catalog">← Каталог</a>
-    <h1>{{ title or "Навык" }}</h1>
-    <p class="share-badge">Каталог</p>
-    {% if description %}<p class="lede">{{ description }}</p>{% endif %}
-    {% if updated_day %}<p class="muted share-date">Обновлено {{ updated_day }}</p>{% endif %}
-  </div>
+<article class="about catalog catalog-skill">
+  <p class="back-link">
+    <a href="/catalog">← Каталог</a>
+    {% if user %} · <a href="/skills">Мои навыки</a>{% endif %}
+  </p>
+  <p class="brand-mark about-mark">aichat</p>
+  <p class="catalog-badge">Каталог</p>
+  <h1>{{ title or "Навык" }}</h1>
+  {% if description %}<p class="lede">{{ description }}</p>{% endif %}
+  {% if updated_day %}<p class="muted catalog-date">Обновлено {{ updated_day }}</p>{% endif %}
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
-  <div class="share-log catalog-body">
+
+  <section class="catalog-prose">
     {% if body_html %}
       {{ body_html | safe }}
     {% else %}
       <p class="muted">Пустая инструкция.</p>
     {% endif %}
-  </div>
-  <div class="cta-row" style="margin-top: 1.2rem;">
+  </section>
+
+  <div class="cta-row about-cta">
     {% if user %}
     <form method="post" action="/catalog/skills/{{ skill_id }}/copy">
       <button class="btn" type="submit">Добавить копию себе</button>
     </form>
+    <a class="btn btn-ghost" href="/skills">Мои навыки</a>
     {% else %}
     <a class="btn" href="/login?next=/catalog/skills/{{ skill_id }}">Войти и скопировать</a>
     {% endif %}
-    {% if user %}<a class="btn btn-ghost" href="/skills">Мои навыки</a>{% endif %}
   </div>
-</div>
+</article>
 {% endblock %}

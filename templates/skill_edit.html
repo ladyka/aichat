@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{% if skill.id %}{{ skill.title or 'Навык' }} — aichat{% else %}Новый навык — aichat{% endif %}{% endblock %}
+{% block body_class %}page-auth{% endblock %}
 {% block content %}
-<section class="auth-card skill-card">
+<section class="auth-panel skill-card">
   <p class="back-link"><a href="/skills">← Мои навыки</a></p>
   <h1>{% if skill.id %}{{ skill.title or 'Навык' }}{% else %}Новый навык{% endif %}</h1>
   {% if copied_from %}
