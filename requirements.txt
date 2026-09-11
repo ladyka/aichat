@@ -8,6 +8,7 @@ python-multipart>=0.0.12         # парсинг form-data (логин/реги
 
 # --- HTTP-клиент ---
 httpx2>=2.0.0                    # асинхронный HTTP-клиент: прокси к OpenRouter + download_file (app/tools.py)
+ollama>=0.6.0                    # официальный клиент Ollama: облачный провайдер ol, модели :cloud (app/model_providers/ol.py)
 boto3>=1.35.0                    # S3-совместимое хранилище Cloud.ru (app/storage.py, generate_image)
 
 # --- База данных ---

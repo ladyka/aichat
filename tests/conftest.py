@@ -9,6 +9,8 @@ os.environ["MODELS_CACHE_TTL"] = "3600"
 # Keep local .env e7 credentials from hitting the network in unit tests.
 os.environ["E7_BY_BASE_URL"] = ""
 os.environ["E7_BY_API_KEY"] = ""
+# Same for the ol (Ollama Cloud) provider.
+os.environ["OLLAMA_API_KEY"] = ""
 
 # Env must be set before the app package is imported (noqa: E402).
 import pytest  # noqa: E402

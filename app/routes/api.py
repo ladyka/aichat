@@ -18,16 +18,18 @@ from app import telemetry as telemetry_mod
 from app.auth import get_user_from_api_token, get_user_from_session
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, UsageLog, User, get_db
-from app.model_providers import e7by
+from app.model_providers import e7by, ol
 from app.model_providers.openrouter import chat_completions, stream_chat_completions
 from app.models_catalog import (
     PROVIDER_E7_BY,
+    PROVIDER_OL,
     PUBLIC_DEFAULT_ID,
     UPSTREAM_DEFAULT_ID,
     ModelRoute,
     get_models_list,
     resolve_model,
     to_e7_public_id,
+    to_ol_public_id,
     to_public_id,
 )
 from app.skills import inject_conversation_skills
@@ -59,6 +61,8 @@ def _response_model_id(route: ModelRoute, reported: str | None) -> str:
     if reported:
         if route.provider == PROVIDER_E7_BY:
             return to_e7_public_id(reported) or route.public_id
+        if route.provider == PROVIDER_OL:
+            return to_ol_public_id(reported) or route.public_id
         return to_public_id(reported)
     return route.public_id
 
@@ -90,12 +94,16 @@ def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]
 async def _call_chat(route: ModelRoute, payload: dict[str, Any]):
     if route.provider == PROVIDER_E7_BY:
         return await e7by.chat_completions(payload)
+    if route.provider == PROVIDER_OL:
+        return await ol.chat_completions(payload)
     return await chat_completions(payload)
 
 
 def _stream_completions(route: ModelRoute, payload: dict[str, Any]) -> AsyncIterator[bytes]:
     if route.provider == PROVIDER_E7_BY:
         return e7by.stream_chat_completions(payload)
+    if route.provider == PROVIDER_OL:
+        return ol.stream_chat_completions(payload)
     return stream_chat_completions(payload)
 
 

@@ -139,3 +139,42 @@ def test_resolve_e7_model(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         mc.resolve_model("e7/llama3.2:latest")
     assert exc.value.status_code == 503
+
+
+def test_to_ol_public_and_upstream_id():
+    assert mc.to_ol_public_id("deepseek-v4.1-flash") == "ol/deepseek-v4.1-flash"
+    assert mc.to_ol_public_id("deepseek-v4.1-flash:cloud") == "ol/deepseek-v4.1-flash"
+    assert mc.to_ol_public_id("ol/deepseek-v4.1-flash") == "ol/deepseek-v4.1-flash"
+    assert mc.to_ol_public_id("") == ""
+    assert mc.to_ol_upstream_id("ol/deepseek-v4.1-flash") == "deepseek-v4.1-flash:cloud"
+    assert mc.to_ol_upstream_id("deepseek-v4.1-flash") == "deepseek-v4.1-flash:cloud"
+    assert mc.to_ol_upstream_id("deepseek-v4.1-flash:cloud") == "deepseek-v4.1-flash:cloud"
+
+
+def test_build_models_response_includes_ol_ids():
+    raw = [{"id": "vendor/paid-model:free", "created": 1}]
+    ol_raw = [{"id": "deepseek-v4.1-flash", "created": 2}]
+    payload = mc._build_models_response(raw, [], ol_raw)
+    ids = [item["id"] for item in payload["data"]]
+    assert "ol/deepseek-v4.1-flash" in ids
+    owned = {item["id"]: item["owned_by"] for item in payload["data"]}
+    assert owned["ol/deepseek-v4.1-flash"] == "ol"
+    routes = mc._build_models_catalog(raw, [], ol_raw)[1]
+    assert routes["ol/deepseek-v4.1-flash"].upstream_id == "deepseek-v4.1-flash:cloud"
+    assert routes["ol/deepseek-v4.1-flash"].provider == mc.PROVIDER_OL
+
+
+def test_resolve_ol_model(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "ol_enabled", True)
+    monkeypatch.setattr(mc, "_cache_public_ids", set())
+    monkeypatch.setattr(mc, "_cache_routes", {})
+    route = mc.resolve_model("ol/deepseek-v4.1-flash")
+    assert route.provider == mc.PROVIDER_OL
+    assert route.upstream_id == "deepseek-v4.1-flash:cloud"
+
+    monkeypatch.setattr(get_settings(), "ol_enabled", False)
+    with pytest.raises(HTTPException) as exc:
+        mc.resolve_model("ol/deepseek-v4.1-flash")
+    assert exc.value.status_code == 503
