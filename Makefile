@@ -1,4 +1,4 @@
-.PHONY: run update-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format migrate migrate-rev
+.PHONY: run update-prod update-requirements-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format migrate migrate-rev
 
 PORT ?= 20000
 INSTANCE_HOST ?= 0.0.0.0
@@ -38,6 +38,11 @@ migrate-rev: $(VENV)/bin/python
 update-prod: $(VENV)/bin/python frontend-build
 	@echo "Checking production FTP upload access…"
 	$(PYTHON) scripts/deploy_ftp.py
+
+# Только requirements.txt: без сборки фронта, удаления файлов и записи .version.
+update-requirements-prod: $(VENV)/bin/python
+	@echo "Uploading requirements.txt to production…"
+	$(PYTHON) scripts/deploy_ftp.py --only requirements.txt
 
 test-coverage: $(VENV)/bin/python
 	$(PYTHON) -m pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=80

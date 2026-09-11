@@ -238,6 +238,7 @@ requirements-dev.txt # инструменты разработки (линтер
 
 ```bash
 make update-prod   # собирает frontend, затем FTP
+make update-requirements-prod  # заливает на FTP только requirements.txt
 ```
 
 Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.

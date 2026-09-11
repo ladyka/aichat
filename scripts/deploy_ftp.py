@@ -334,8 +334,24 @@ def delete_file(ftp: FTP, remote: str) -> None:
     remove_empty_dirs(ftp, remote)
 
 
+def parse_only_paths(argv: list[str]) -> list[str]:
+    """Файлы из ``--only <path>`` (можно несколько), остальной argv игнорируется."""
+    paths: list[str] = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--only":
+            if i + 1 >= len(argv):
+                die("--only requires a file path, e.g. --only requirements.txt")
+            paths.append(argv[i + 1])
+            i += 2
+        else:
+            i += 1
+    return paths
+
+
 def main() -> None:
     force = "--force" in sys.argv
+    only = parse_only_paths(sys.argv)
 
     check_git_status()
     env = load_env(ENV_PATH)
@@ -348,10 +364,44 @@ def main() -> None:
 
     local_hashes = {local.relative_to(ROOT).as_posix(): sha256_file(local) for local in files}
 
+    if only:
+        missing = [rel for rel in only if rel not in local_hashes]
+        if missing:
+            die("--only: file(s) not found or ignored by .uploadignore: " + ", ".join(missing))
+        files = [ROOT / rel for rel in only]
+
     ftp = connect_ftp(host, port, user, password)
     try:
         enter_remote_dir(ftp, remote_root)
         verify_write_access(ftp)
+
+        if only:
+            print(f"Uploading {len(only)} selected file(s)…")
+            for rel in only:
+                try:
+                    upload_file(ftp, ROOT / rel, rel)
+                    print(f"   ↑ {rel}")
+                except error_perm as exc:
+                    die(f"Upload denied for {rel}: {exc}")
+                except (error_temp, error_proto, OSError) as exc:
+                    die(f"Failed to upload {rel}: {exc}")
+            # Обновить записи манифеста, чтобы следующий полный деплой не
+            # перезалил эти файлы повторно.
+            try:
+                manifest = read_remote_manifest(ftp, MANIFEST_NAME)
+                if manifest is not None:
+                    manifest = {**manifest, **{rel: local_hashes[rel] for rel in only}}
+                    write_remote_manifest(ftp, MANIFEST_NAME, manifest)
+            except (error_perm, error_temp, error_proto, OSError) as exc:
+                print(
+                    f"warning: could not update {MANIFEST_NAME}: {exc}",
+                    file=sys.stderr,
+                )
+            try:
+                ftp.quit()
+            except (error_perm, error_temp, error_proto, OSError):
+                ftp.close()
+            return
 
         manifest = None if force else read_remote_manifest(ftp, MANIFEST_NAME)
         to_upload, to_delete, new_files = plan_sync(local_hashes, manifest, rules)
