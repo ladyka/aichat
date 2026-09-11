@@ -12,6 +12,7 @@ def test_catalog_is_public(client):
     page = client.get("/catalog")
     assert page.status_code == 200
     assert "Каталог навыков" in page.text
+    assert 'class="about catalog"' in page.text
     assert client.get("/skills", follow_redirects=False).status_code == 303
 
 
@@ -49,10 +50,12 @@ def test_skills_library_and_editor(client):
 
     catalog = client.get("/catalog")
     assert "Налоги" in catalog.text
+    assert 'class="catalog-grid"' in catalog.text
     skill_id = location.rsplit("/", 1)[-1]
     card = client.get(f"/catalog/skills/{skill_id}")
     assert card.status_code == 200
     assert "Ссылайся на кодекс" in card.text
+    assert 'class="catalog-prose"' in card.text
 
     settings = client.get("/settings")
     assert "Навыки в новых чатах" in settings.text

@@ -1,26 +1,40 @@
 {% extends "base.html" %}
 {% block title %}Каталог навыков — aichat{% endblock %}
+{% block body_class %}page-catalog{% endblock %}
 {% block content %}
-<section class="auth-card skill-card">
+<article class="about catalog">
   <p class="back-link">
     <a href="/">← На главную</a>
     {% if user %} · <a href="/skills">Мои навыки</a> · <a href="/chat">Чат</a>{% endif %}
   </p>
+  <p class="brand-mark about-mark">aichat</p>
   <h1>Каталог навыков</h1>
   <p class="lede">Публичные инструкции. Скопируйте к себе — получится свой приватный снимок.</p>
-  <ul class="token-list skill-list">
+
+  {% if items %}
+  <ul class="catalog-grid">
     {% for item in items %}
     <li>
-      <div>
-        <a href="/catalog/skills/{{ item.id }}"><strong>{{ item.title }}</strong></a>
-        {% if item.updated_day %}<span class="muted">{{ item.updated_day }}</span>{% endif %}
-        {% if item.description %}<span class="muted">{{ item.description }}</span>{% endif %}
-      </div>
-      <a class="btn btn-ghost btn-small" href="/catalog/skills/{{ item.id }}">Открыть</a>
+      <a class="catalog-tile" href="/catalog/skills/{{ item.id }}">
+        <h2>{{ item.title or "Без названия" }}</h2>
+        {% if item.description %}<p>{{ item.description }}</p>{% endif %}
+        {% if item.updated_day %}<p class="muted">Обновлено {{ item.updated_day }}</p>{% endif %}
+      </a>
     </li>
-    {% else %}
-    <li class="muted">Пока никто не опубликовал навыки.</li>
     {% endfor %}
   </ul>
-</section>
+  {% else %}
+  <p class="muted">Пока никто не опубликовал навыки.</p>
+  {% endif %}
+
+  <div class="cta-row about-cta">
+    {% if user %}
+      <a class="btn" href="/skills">Мои навыки</a>
+      <a class="btn btn-ghost" href="/chat">Открыть чат</a>
+    {% else %}
+      <a class="btn" href="/register">Создать аккаунт</a>
+      <a class="btn btn-ghost" href="/login">Войти</a>
+    {% endif %}
+  </div>
+</article>
 {% endblock %}
