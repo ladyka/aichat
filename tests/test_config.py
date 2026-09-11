@@ -15,6 +15,11 @@ def test_settings_defaults(monkeypatch):
         "NEW_RELIC_USER_KEY",
         "E7_BY_BASE_URL",
         "E7_BY_API_KEY",
+        "DEFAULT_MODEL",
+        "SYSTEM_PROMPT",
+        "TITLE_MODEL",
+        "OLLAMA_API_KEY",
+        "OLL_HOST",
         "S3_ENDPOINT",
         "S3_BUCKET",
         "S3_SA_KEY_ID",
@@ -29,6 +34,8 @@ def test_settings_defaults(monkeypatch):
     assert settings.session_cookie == "aichat_session"
     assert settings.session_days == 30
     assert settings.default_model == "default"
+    assert settings.title_model == ""
+    assert "aichat.by" in settings.system_prompt
     assert settings.models_cache_ttl == 3600
     assert settings.api_daily_limit == 10
     assert settings.max_tokens_per_user == 10

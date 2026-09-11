@@ -166,6 +166,10 @@ class Settings:
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
 
+        # Модель для фонового определения темы диалога (после 1-го, 2-го и 5-го
+        # ответа ассистента). Пусто — дефолтная модель (openrouter/free).
+        self.title_model = (_env("TITLE_MODEL", "") or "").strip()
+
         self.log_level_name = parse_log_level_name(_env("LOG_LEVEL", "INFO"))
         self.log_level = logging.getLevelNamesMapping()[self.log_level_name]
         self.debug = _flag(_env("DEBUG", "0"), default=False)

@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_user_from_session
@@ -20,6 +20,7 @@ from app.skills import (
     set_conversation_skills,
     set_default_skill_ids,
 )
+from app.title import TITLE_CHECKPOINTS, update_conversation_title
 
 router = APIRouter()
 
@@ -162,7 +163,11 @@ def patch_conversation(
     if not conv:
         return JSONResponse(status_code=404, content={"error": "Not found"})
     if body.title is not None:
-        conv.title = body.title.strip()[:200] or conv.title
+        new_title = body.title.strip()[:200]
+        if new_title and new_title != conv.title:
+            # Ручное переименование: авто-тема больше не перезаписывает название.
+            conv.title = new_title
+            conv.title_locked = True
     if body.archived is True:
         conv.archived_at = datetime.now(timezone.utc)
     elif body.archived is False:
@@ -218,6 +223,7 @@ def append_messages(
     conversation_id: int,
     request: Request,
     body: MessagesAppend,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     user = _require_user(request, db)
@@ -247,6 +253,19 @@ def append_messages(
     db.commit()
     for msg in created:
         db.refresh(msg)
+
+    # Фон: после 1-го, 2-го и 5-го ответа ассистента переформулировать тему.
+    assistant_total = (
+        db.scalar(
+            select(func.count(Message.id)).where(
+                Message.conversation_id == conv.id, Message.role == "assistant"
+            )
+        )
+        or 0
+    )
+    if assistant_total in TITLE_CHECKPOINTS:
+        background_tasks.add_task(update_conversation_title, conv.id)
+
     return {"data": [_message_item(m) for m in created]}
 
 

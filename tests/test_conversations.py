@@ -120,3 +120,144 @@ def test_settings_get_and_put(client, mock_models):
     response = client.put("/api/settings", json={"preferred_model": "default"})
     assert response.status_code == 200
     assert response.json() == {"preferred_model": "default", "default_skill_ids": []}
+
+
+def test_title_regenerated_at_checkpoints(client, monkeypatch):
+    from app import title as title_mod
+
+    calls: list[str] = []
+
+    async def fake_request_title(transcript):
+        calls.append(transcript)
+        return "Тема диалога"
+
+    monkeypatch.setattr(title_mod, "_request_title", fake_request_title)
+    _auth(client)
+    conv = client.post("/api/conversations", json={"title": "Чат"}).json()
+
+    def append(role, content):
+        return client.post(
+            f"/api/conversations/{conv['id']}/messages",
+            json={"messages": [{"role": role, "content": content}]},
+        )
+
+    append("user", "вопрос про погоду")
+    append("assistant", "ответ 1")  # checkpoint 1
+    assert len(calls) == 1
+    append("assistant", "ответ 2")  # checkpoint 2
+    assert len(calls) == 2
+    append("assistant", "ответ 3")  # не checkpoint
+    append("assistant", "ответ 4")
+    assert len(calls) == 2
+    append("assistant", "ответ 5")  # checkpoint 5
+    assert len(calls) == 3
+
+    fetched = client.get(f"/api/conversations/{conv['id']}").json()
+    assert fetched["title"] == "Тема диалога"
+
+
+def test_title_task_skips_when_no_messages(client):
+    from app.title import _build_transcript
+
+    assert _build_transcript([]) == ""
+
+
+def test_truncate_title_strips_leaked_thinking():
+    # glm-5.3-flash игнорирует think=false и дописывает рассуждения перед </think>.
+    from app.title import THINK_MARKER, _truncate_title
+
+    leaked = (
+        "We need a title. Based on the dialogue: aichat.by.\n\n"
+        + THINK_MARKER
+        + "Возможности ассистента"
+    )
+    assert _truncate_title(leaked) == "Возможности ассистента"
+    # Модель оборвала монолог, не дойдя до заголовка — название не портим.
+    assert (
+        _truncate_title("We need to pick one of the options below for this particular chat") == ""
+    )
+    assert _truncate_title("Тема диалога.") == "Тема диалога"
+    assert _truncate_title("  «Погода в Минске»  ") == "Погода в Минске"
+    assert _truncate_title("") == ""
+
+
+def test_request_title_disables_thinking_for_ol(client, monkeypatch):
+    import asyncio
+
+    from app import title as title_mod
+    from app.models_catalog import ModelRoute
+
+    captured: list[dict] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Тема"}}]}
+
+    async def fake_call_llm(route, payload):
+        captured.append(payload)
+        return FakeResponse()
+
+    monkeypatch.setattr(title_mod, "_call_llm", fake_call_llm)
+    monkeypatch.setattr(
+        title_mod,
+        "resolve_model",
+        lambda _model: ModelRoute(
+            public_id="ol/deepseek-v4.1-flash",
+            provider="ol",
+            upstream_id="deepseek-v4.1-flash:cloud",
+        ),
+    )
+    assert asyncio.run(title_mod._request_title("user: привет")) == "Тема"
+    assert captured[0]["think"] is False
+    assert captured[0]["max_tokens"] == title_mod.TITLE_MAX_TOKENS
+
+
+def test_manual_rename_locks_title(client, monkeypatch):
+    from app import title as title_mod
+
+    calls: list[str] = []
+
+    async def fake_request_title(transcript):
+        calls.append(transcript)
+        return "Авто-тема"
+
+    monkeypatch.setattr(title_mod, "_request_title", fake_request_title)
+    _auth(client)
+    conv = client.post("/api/conversations", json={"title": "Новый чат"}).json()
+    conv_id = conv["id"]
+
+    client.post(
+        f"/api/conversations/{conv_id}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "вопрос"},
+                {"role": "assistant", "content": "ответ"},
+            ]
+        },
+    )
+    fetched = client.get(f"/api/conversations/{conv_id}").json()
+    assert fetched["title"] == "Авто-тема"
+
+    renamed = client.patch(f"/api/conversations/{conv_id}", json={"title": "Моё название"}).json()
+    assert renamed["title"] == "Моё название"
+
+    client.post(
+        f"/api/conversations/{conv_id}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "ещё вопрос"},
+                {"role": "assistant", "content": "ещё ответ"},
+            ]
+        },
+    )
+    fetched = client.get(f"/api/conversations/{conv_id}").json()
+    assert fetched["title"] == "Моё название"
+
+
+def test_patch_title_to_same_value_does_not_lock(client):
+    _auth(client)
+    conv = client.post("/api/conversations", json={"title": "Новый чат"}).json()
+    patched = client.patch(f"/api/conversations/{conv['id']}", json={"title": "Новый чат"}).json()
+    assert patched["title"] == "Новый чат"
