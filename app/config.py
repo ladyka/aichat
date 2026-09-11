@@ -14,6 +14,14 @@ _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 _LOG_LEVEL_NAMES = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 _LOG_LEVEL_ALIASES = {"WARN": "WARNING", "FATAL": "CRITICAL"}
 
+# Базовый системный промпт для всех диалогов. Переопределяется SYSTEM_PROMPT.
+DEFAULT_SYSTEM_PROMPT = (
+    "Ты — ИИ-помощник aichat.by, развёрнутый на сайте aichat.by. "
+    "Основная аудитория — жители Беларуси. Учитывай белорусский контекст: "
+    "валюта (BYN), законодательство и местные сервисы. "
+    "Отвечай на языке пользователя (по умолчанию — по-русски)."
+)
+
 
 def _env(key: str, default: str | None = None) -> str | None:
     value = os.environ.get(key)
@@ -95,6 +103,11 @@ class Settings:
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()
         self.default_model = _env("DEFAULT_MODEL", "default")
+        # Системный промпт на все диалоги (/api/chat и /v1/chat/completions).
+        # Не задан — берётся DEFAULT_SYSTEM_PROMPT; задан пустым — отключён.
+        self.system_prompt = (
+            os.environ["SYSTEM_PROMPT"] if "SYSTEM_PROMPT" in os.environ else DEFAULT_SYSTEM_PROMPT
+        ).strip()
         self.models_cache_ttl = int(_env("MODELS_CACHE_TTL", "3600") or "3600")
         self.api_daily_limit = int(_env("API_DAILY_LIMIT", "10") or "10")
         self.max_tokens_per_user = int(_env("MAX_TOKENS_PER_USER", "10") or "10")
@@ -152,6 +165,10 @@ class Settings:
             _env("ARIZE_OTLP_ENDPOINT") or _env("ARIZE_COLLECTOR_ENDPOINT") or ""
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
+
+        # Модель для фонового определения темы диалога (после 1-го, 2-го и 5-го
+        # ответа ассистента). Пусто — дефолтная модель (openrouter/free).
+        self.title_model = (_env("TITLE_MODEL", "") or "").strip()
 
         self.log_level_name = parse_log_level_name(_env("LOG_LEVEL", "INFO"))
         self.log_level = logging.getLevelNamesMapping()[self.log_level_name]

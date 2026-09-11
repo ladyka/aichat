@@ -313,11 +313,8 @@ def resolve_model(public_id: str | None) -> ModelRoute:
                 status_code=400,
                 detail=f"Model '{requested}' is not available",
             )
-        if _cache_public_ids and requested not in _cache_public_ids:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Model '{requested}' is not available",
-            )
+        # Не сверяемся с кешем каталога: ollama.com отдаёт только часть имён
+        # (без latest-алиасов), а облако само вернёт ошибку для несуществующей модели.
         return ModelRoute(
             public_id=requested,
             provider=PROVIDER_OL,

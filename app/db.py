@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -93,6 +94,8 @@ class Conversation(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # True после ручного переименования: авто-тема больше не перезаписывает title.
+    title_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
     user: Mapped[User] = relationship(back_populates="conversations")
     messages: Mapped[list["Message"]] = relationship(
@@ -195,7 +198,6 @@ class Skill(Base):
     body: Mapped[str] = mapped_column(
         Text().with_variant(MEDIUMTEXT(), "mysql"),
         default="",
-        server_default="",
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

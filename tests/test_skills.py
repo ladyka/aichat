@@ -357,10 +357,11 @@ def test_chat_injects_attached_skills(client, mock_models, monkeypatch):
     )
     assert response.status_code == 200
     messages = captured["messages"]
-    assert messages[0]["role"] == "system"
-    assert "Налог" in messages[0]["content"]
-    assert "НК РБ" in messages[0]["content"]
-    assert messages[1] == {"role": "user", "content": "вопрос"}
+    system_messages = [m for m in messages if m["role"] == "system"]
+    assert len(system_messages) == 2  # базовый промпт + навыки
+    assert "Налог" in system_messages[1]["content"]
+    assert "НК РБ" in system_messages[1]["content"]
+    assert messages[-1] == {"role": "user", "content": "вопрос"}
 
     captured.clear()
     client.post(
@@ -371,7 +372,7 @@ def test_chat_injects_attached_skills(client, mock_models, monkeypatch):
             "messages": [{"role": "user", "content": "без чата"}],
         },
     )
-    assert captured["messages"][0]["role"] == "user"
+    assert captured["messages"][-1]["role"] == "user"
 
 
 def test_v1_does_not_inject_skills(client, mock_models, monkeypatch):
@@ -412,5 +413,6 @@ def test_v1_does_not_inject_skills(client, mock_models, monkeypatch):
         },
     )
     assert response.status_code == 200
-    assert captured["messages"][0]["role"] == "user"
+    system_messages = [m for m in captured["messages"] if m["role"] == "system"]
+    assert len(system_messages) == 1  # только базовый промпт, без навыков
     assert "не должно уйти в v1" not in json.dumps(captured["messages"], ensure_ascii=False)

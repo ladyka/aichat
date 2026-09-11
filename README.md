@@ -119,6 +119,8 @@ cd frontend && npm run dev   # :5173
 | `OLL_HOST` | Хост ollama для ol (по умолчанию `https://ollama.com`) |
 | `OLL_TIMEOUT` | Таймаут completions ol (сек, по умолчанию 300) |
 | `DEFAULT_MODEL` | Публичная модель по умолчанию (`default`) |
+| `SYSTEM_PROMPT` | Системный промпт всех диалогов. Не задан — дефолт из `app/config.py`, пустой — отключён |
+| `TITLE_MODEL` | Модель фонового определения темы диалога (после 1-го, 2-го, 5-го ответа робота). Пусто — дефолтная из `DEFAULT_MODEL` (id `default`) |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |
 | `API_DAILY_LIMIT` | Дневной лимит `/v1/chat/completions` на один API-токен (по умолчанию `10`) |
 | `MAX_TOKENS_PER_USER` | Максимум активных API-токенов на пользователя (по умолчанию `10`) |
@@ -238,6 +240,7 @@ requirements-dev.txt # инструменты разработки (линтер
 
 ```bash
 make update-prod   # собирает frontend, затем FTP
+make update-requirements-prod  # заливает на FTP только requirements.txt
 ```
 
 Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.

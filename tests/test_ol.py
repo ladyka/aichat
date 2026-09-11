@@ -80,6 +80,18 @@ def test_to_ollama_request_maps_options():
     assert request["options"] == {"temperature": 0.5, "num_predict": 100, "stop": ["END"]}
     assert request["tools"] == [{"type": "function", "function": {"name": "t"}}]
     assert "stream" not in request
+    assert "think" not in request
+
+
+def test_to_ollama_request_passes_think():
+    request = ol._to_ollama_request(
+        {
+            "model": "glm-5.3-flash:cloud",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "think": False,
+        }
+    )
+    assert request["think"] is False
 
 
 def test_to_openai_response_wraps_content():

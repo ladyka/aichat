@@ -174,6 +174,11 @@ def test_resolve_ol_model(monkeypatch):
     assert route.provider == mc.PROVIDER_OL
     assert route.upstream_id == "deepseek-v4.1-flash:cloud"
 
+    # Модель может отсутствовать в каталоге (алиасы latest), облако валидирует само.
+    monkeypatch.setattr(mc, "_cache_public_ids", {"ol/deepseek-v4.1-flash"})
+    route = mc.resolve_model("ol/qwen3.5")
+    assert route.upstream_id == "qwen3.5:cloud"
+
     monkeypatch.setattr(get_settings(), "ol_enabled", False)
     with pytest.raises(HTTPException) as exc:
         mc.resolve_model("ol/deepseek-v4.1-flash")

@@ -106,3 +106,15 @@ def test_plan_sync_no_manifest_uploads_all():
     assert to_upload == ["a", "b"]
     assert new_files == {"a", "b"}
     assert to_delete == []
+
+
+def test_parse_only_paths():
+    from scripts.deploy_ftp import parse_only_paths
+
+    assert parse_only_paths(["deploy_ftp.py"]) == []
+    assert parse_only_paths(["deploy_ftp.py", "--force"]) == []
+    assert parse_only_paths(["deploy_ftp.py", "--only", "requirements.txt"]) == ["requirements.txt"]
+    assert parse_only_paths(["deploy_ftp.py", "--force", "--only", "a.txt", "--only", "b.txt"]) == [
+        "a.txt",
+        "b.txt",
+    ]

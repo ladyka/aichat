@@ -138,6 +138,9 @@ def _to_ollama_request(payload: dict[str, Any]) -> dict[str, Any]:
         request["options"] = options
     if payload.get("tools"):
         request["tools"] = payload["tools"]
+    if payload.get("think") is not None:
+        # Управление рассуждениями thinking-моделей (ollama: "think").
+        request["think"] = bool(payload["think"])
     return request
 
 

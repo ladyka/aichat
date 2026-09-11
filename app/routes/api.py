@@ -67,12 +67,26 @@ def _response_model_id(route: ModelRoute, reported: str | None) -> str:
     return route.public_id
 
 
+def _drop_client_system_messages(body: dict[str, Any]) -> dict[str, Any]:
+    """Промпт клиента с role=system игнорируется: промпт задаётся на сервере (SYSTEM_PROMPT)."""
+    messages = list(body.get("messages") or [])
+    kept = [m for m in messages if not (isinstance(m, dict) and m.get("role") == "system")]
+    if len(kept) == len(messages):
+        return body
+    return {**body, "messages": kept}
+
+
 def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]]:
     public_model = _normalize_public_model(body.get("model"))
     route = resolve_model(public_model)
+    settings = get_settings()
+    messages = list(body.get("messages") or [])
+    if settings.system_prompt:
+        # Базовый промпт — первым; навыки уже добавлены в _proxy_inner после него.
+        messages.insert(0, {"role": "system", "content": settings.system_prompt})
     payload: dict[str, Any] = {
         "model": route.upstream_id,
-        "messages": list(body.get("messages") or []),
+        "messages": messages,
     }
     for key in (
         "temperature",
@@ -485,6 +499,8 @@ async def _proxy_inner(
         preferred = (getattr(user, "preferred_model", None) or "").strip()
         if preferred:
             body = {**body, "model": preferred}
+
+    body = _drop_client_system_messages(body)
 
     if source == "chat":
         body = inject_conversation_skills(body, db, user)
