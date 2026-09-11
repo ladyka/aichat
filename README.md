@@ -11,7 +11,7 @@
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
 - Модель чата в **/settings** (не на экране чата)
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
-- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, плюс модели e7 как `e7/<имя>`
+- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, модели e7 как `e7/<имя>` и облачные модели ollama.com как `ol/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
 - Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
@@ -28,13 +28,14 @@
 - Node.js **24+** (pin: `.nvmrc`, `engines` в `frontend/package.json`)
 - Ключ OpenRouter (`OPENROUTER_API_KEY`)
 - Для моделей e7 — `E7_BY_BASE_URL` (Ollama)
+- Для моделей ol — `OLLAMA_API_KEY` (Ollama Cloud)
 
 ### Запуск
 
 ```bash
 cp .env.example .env
 # заполните OPENROUTER_API_KEY
-# при необходимости: E7_BY_BASE_URL (Ollama e7)
+# при необходимости: E7_BY_BASE_URL (Ollama e7), OLLAMA_API_KEY (Ollama Cloud ol)
 
 # nvm use   # Node 24 из .nvmrc
 make venv                 # python3.13 -m venv .venv
@@ -114,6 +115,9 @@ cd frontend && npm run dev   # :5173
 | `E7_BY_BASE_URL` | Ollama e7: хост или `.../v1`. Пусто — провайдер выключен |
 | `E7_BY_API_KEY` | Опциональный ключ для e7 |
 | `E7_BY_TIMEOUT` | Таймаут completions e7 (сек, по умолчанию 300) |
+| `OLLAMA_API_KEY` | Ключ Ollama Cloud для провайдера ol. Пусто — провайдер выключен |
+| `OLL_HOST` | Хост ollama для ol (по умолчанию `https://ollama.com`) |
+| `OLL_TIMEOUT` | Таймаут completions ol (сек, по умолчанию 300) |
 | `DEFAULT_MODEL` | Публичная модель по умолчанию (`default`) |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |
 | `API_DAILY_LIMIT` | Дневной лимит `/v1/chat/completions` на один API-токен (по умолчанию `10`) |

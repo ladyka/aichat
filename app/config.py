@@ -85,6 +85,12 @@ class Settings:
         self.e7_by_api_key = _env("E7_BY_API_KEY", "") or ""
         self.e7_by_timeout = float(_env("E7_BY_TIMEOUT", "300") or "300")
         self.e7_by_enabled = bool(self.e7_by_base_url)
+        # ol is a second Ollama provider (Ollama Cloud через официальный клиент `ollama`).
+        # Пустой OLLAMA_API_KEY выключает его. Локального инференса нет: только :cloud-модели.
+        self.ol_host = (_env("OLL_HOST", "https://ollama.com") or "https://ollama.com").rstrip("/")
+        self.ol_api_key = _env("OLLAMA_API_KEY", "") or ""
+        self.ol_timeout = float(_env("OLL_TIMEOUT", "300") or "300")
+        self.ol_enabled = bool(self.ol_api_key)
         self.session_cookie = _env("SESSION_COOKIE", "aichat_session")
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()

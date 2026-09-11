@@ -48,7 +48,7 @@ cd frontend && npm run dev  # :5173
 
 ## Что не меняется
 
-- Бэкенд LLM: OpenRouter (free-модели) и опционально e7 (Ollama).
+- Бэкенд LLM: OpenRouter (free-модели), опционально e7 (Ollama) и ol (Ollama Cloud).
 - Публичные id моделей без суффикса `:free`; `default` → upstream `openrouter/free`.
 - Модель чата выбирается в `/settings`, не на странице чата.
 
