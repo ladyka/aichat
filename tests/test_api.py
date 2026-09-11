@@ -222,3 +222,37 @@ def test_v1_streaming(client, mock_models, monkeypatch):
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "Привет" in response.text
     assert '"model": "default"' in response.text
+
+
+def test_payload_from_body_prepends_system_prompt():
+    from app.routes.api import _payload_from_body
+
+    route, payload = _payload_from_body({"messages": [{"role": "user", "content": "привет"}]})
+    messages = payload["messages"]
+    assert messages[0]["role"] == "system"
+    assert "aichat.by" in messages[0]["content"]
+    assert messages[1] == {"role": "user", "content": "привет"}
+
+
+def test_payload_from_body_without_system_prompt(monkeypatch):
+    from app.config import get_settings
+    from app.routes.api import _payload_from_body
+
+    monkeypatch.setattr(get_settings(), "system_prompt", "")
+    _, payload = _payload_from_body({"messages": [{"role": "user", "content": "привет"}]})
+    assert payload["messages"] == [{"role": "user", "content": "привет"}]
+
+
+def test_drop_client_system_messages():
+    from app.routes.api import _drop_client_system_messages
+
+    body = {
+        "messages": [
+            {"role": "system", "content": "клиентский промпт"},
+            {"role": "user", "content": "вопрос"},
+        ]
+    }
+    cleaned = _drop_client_system_messages(body)
+    assert cleaned["messages"] == [{"role": "user", "content": "вопрос"}]
+    unchanged = {"messages": [{"role": "user", "content": "вопрос"}]}
+    assert _drop_client_system_messages(unchanged) is unchanged

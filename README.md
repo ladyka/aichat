@@ -119,6 +119,7 @@ cd frontend && npm run dev   # :5173
 | `OLL_HOST` | Хост ollama для ol (по умолчанию `https://ollama.com`) |
 | `OLL_TIMEOUT` | Таймаут completions ol (сек, по умолчанию 300) |
 | `DEFAULT_MODEL` | Публичная модель по умолчанию (`default`) |
+| `SYSTEM_PROMPT` | Системный промпт всех диалогов. Не задан — дефолт из `app/config.py`, пустой — отключён |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |
 | `API_DAILY_LIMIT` | Дневной лимит `/v1/chat/completions` на один API-токен (по умолчанию `10`) |
 | `MAX_TOKENS_PER_USER` | Максимум активных API-токенов на пользователя (по умолчанию `10`) |

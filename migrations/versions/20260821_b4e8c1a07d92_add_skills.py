@@ -29,7 +29,6 @@ def upgrade() -> None:
         sa.Column(
             "body",
             sa.Text().with_variant(mysql.MEDIUMTEXT(), "mysql"),
-            server_default="",
             nullable=False,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
