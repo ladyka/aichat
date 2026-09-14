@@ -72,6 +72,22 @@ make migrate                                       # применить к те�
 make test-coverage
 ```
 
+Git-хук на коммит (один раз после клонирования):
+
+```bash
+make hooks     # git config core.hooksPath .githooks
+```
+
+Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test`;
+если что-то падает — коммит не создаётся. `--no-verify` обходит проверку. Если `.venv` или
+`frontend/node_modules` нет, соответствующие тесты пропускаются с предупреждением (на свежем клоне
+это ожидаемо).
+
+Тесты не должны зависеть от конкретного `.env`: `tests/conftest.py` до импорта приложения
+выставляет окружение (SQLite, `DEFAULT_MODEL`, пустые ключи e7/ol/S3, флаги pzz) — `load_dotenv`
+не перетирает уже заданные переменные, поэтому локальные секреты и `SYSTEM_PROMPT` на юнит-тесты
+не влияют.
+
 Тесты фронтенда (Vitest + jsdom, геолокация/SSE-поток адаптера):
 
 ```bash
@@ -221,12 +237,15 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
+frontend/public/  # PWA: manifest.webmanifest + иконки (коммитятся; генератор — scripts/generate_pwa_icons.py)
+frontend/src/sw.ts # PWA: service worker (сборка → dist/sw.js, бэкенд отдаёт его как /sw.js)
 templates/     # Jinja2: лендинг, о сервисе, auth, settings, tokens, skills, catalog, chat shell
 static/        # CSS
 docs/          # MkDocs: стек/runtime + продукт / видение
 tests/         # pytest + integration_weather.py (интеграционный тест погоды)
 server.py      # entrypoint (uvicorn, port или SOCKET)
 scripts/       # FTP deploy
+.githooks/     # git-хуки (pre-commit: тесты; включается `make hooks`)
 api_check.py   # smoke-тест API
 mkdocs.yml     # конфиг документации
 .flake8        # flake8 (100 символов; E203/W503 выключены — конфликт с black)
@@ -244,6 +263,8 @@ make update-requirements-prod  # заливает на FTP только requirem
 ```
 
 Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
+
+PWA-артефакты (`dist/sw.js`, `dist/manifest.webmanifest`, иконки) уезжают вместе с остальной сборкой. Иконки в `frontend/public/` **коммитятся**: `scripts/deploy_ftp.py` отказывается работать на «грязном» git-дереве, так что перед `make update-prod` их нужно закоммитить. Учтите и обратную сторону: `plan_sync` удаляет на проде файлы, которых нет в локальной сборке, — если собрать фронт без PWA-плагина, `dist/sw.js` пропадёт локально и будет удалён на сервере (чат при этом продолжит работать, но без офлайна).
 
 ## Для агентов
 

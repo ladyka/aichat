@@ -24,7 +24,7 @@ make test-coverage
 
 ## Node.js 24
 
-Нужен только для сборки и разработки чата (`frontend/`). В runtime приложения уходит статика из `frontend/dist` (`/chat-ui/`).
+Нужен только для сборки и разработки чата (`frontend/`). В runtime приложения уходит статика из `frontend/dist` (`/chat-ui/`), плюс `dist/sw.js` и `dist/manifest.webmanifest` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`), чтобы service worker получил scope `/` и покрыл `/chat`.
 
 | Pin | Где |
 |-----|-----|
@@ -35,7 +35,7 @@ make test-coverage
 nvm use                 # читает .nvmrc → Node 24
 node --version          # v24.x
 make frontend-install
-make frontend-build     # ассеты в frontend/dist
+make frontend-build     # ассеты в frontend/dist (+ dist/sw.js — service worker PWA)
 cd frontend && npm run test
 ```
 
@@ -45,6 +45,8 @@ Dev-сервер чата (прокси на FastAPI):
 make run                    # :8080
 cd frontend && npm run dev  # :5173
 ```
+
+PWA (установка, офлайн) работает только на собранной версии: в `npm run dev` service worker не регистрируется. Проверять через `make frontend-build` + `make run`.
 
 ## Что не меняется
 

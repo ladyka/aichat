@@ -13,6 +13,22 @@ os.environ["E7_BY_BASE_URL"] = ""
 os.environ["E7_BY_API_KEY"] = ""
 # Same for the ol (Ollama Cloud) provider.
 os.environ["OLLAMA_API_KEY"] = ""
+# S3 + OpenRouter keys from the local .env would switch generate_image on, and the
+# tool lists asserted below would silently gain an entry.
+os.environ["S3_ENDPOINT"] = ""
+os.environ["S3_BUCKET"] = ""
+os.environ["S3_SA_KEY_ID"] = ""
+os.environ["S3_SA_KEY_SECRET"] = ""
+os.environ["S3_PUBLIC_BASE_URL"] = ""
+# pzz flags are per-deployment: PZZ_ORDERS_ENABLED=0 in the local .env would turn
+# every "order submitted" assertion into "submitted: false".
+os.environ["PZZ_ENABLED"] = "1"
+os.environ["PZZ_ORDERS_ENABLED"] = "1"
+# SYSTEM_PROMPT is also a deployment setting; a local value would change the first
+# message of every payload asserted in tests/test_tools.py. Drop it so the built-in
+# default (app.config.DEFAULT_SYSTEM_PROMPT) applies — it is itself covered in
+# tests/test_api.py.
+os.environ.pop("SYSTEM_PROMPT", None)
 
 # Env must be set before the app package is imported (noqa: E402).
 import pytest  # noqa: E402

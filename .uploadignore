@@ -11,6 +11,7 @@
 
 # VCS and tooling
 .git/
+.githooks/
 .gitignore
 .uploadignore
 Makefile

@@ -47,7 +47,7 @@
 | `app/oauth.py` | OAuth2/OIDC: Google, Apple, Яндекс, VK ID, GitHub (authorize-URL, token exchange, id_token / userinfo) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |
-| `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens |
+| `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens, `/sw.js` + `/manifest.webmanifest` (PWA-файлы из `frontend/dist`, из корня — иначе у SW нет scope `/`) |
 | `app/routes/skill_pages.py` | `/skills`, `/catalog` (Jinja) |
 | `app/routes/oauth.py` | `/auth/{google,apple,yandex,vk,github}` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
@@ -56,6 +56,8 @@
 | `app/og.py` | Open Graph: абсолютные URL превью, сниппет описания |
 | `app/visitors.py` | классификация User-Agent: human / crawler / bot |
 | `frontend/` | React + assistant-ui (чат) |
+| `frontend/src/sw.ts` | PWA: service worker (кеш API + офлайн-оболочка; сборка → `dist/sw.js`). Собирается `tsconfig.sw.json`, `tsconfig.app.json` его исключает — DOM- и WebWorker-lib несовместимы |
+| `frontend/public/` | PWA: `manifest.webmanifest` (версионируемый, `start_url` `/chat`) + иконки (генератор — `scripts/generate_pwa_icons.py`). PWA-теги — только в `templates/chat.html` |
 | `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация) |
 | `templates/`, `static/` | Jinja лендинг/auth/tokens/settings |
 | `docker-compose.yml` | локальный MySQL 8.0.46 (`docker compose up -d`) |
@@ -64,6 +66,7 @@
 | `api_check.py` | проверка API-токена против хоста |
 | `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды)  / `integration_s3.py` |
 | `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime, OAuth-креды, продукт |
+| `.githooks/pre-commit` | тесты бэкенда + фронтенда перед коммитом (включается `make hooks`) |
 | `.python-version` | pin CPython 3.13 |
 | `.nvmrc` | pin Node.js 24 |
 
@@ -89,8 +92,13 @@
 cp .env.example .env   # OPENROUTER_API_KEY; опционально E7_BY_BASE_URL
 make venv              # python3.13 -m venv .venv
 make frontend-install && make frontend-build   # Node 24+
+make hooks             # git core.hooksPath=.githooks: тесты на коммите
 make run  # http://127.0.0.1:8080/
 ```
+
+`.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test` и не даёт
+закоммитить красные тесты (обход — `--no-verify`). Хук срабатывает и на твоих коммитах: если тесты
+падают, сначала почини их (или скажи пользователю, что падает и почему), а не обходи проверку.
 
 Smoke API:
 
@@ -108,4 +116,4 @@ python3 api_check.py --host http://127.0.0.1:8080 --token aichat_…
 4. Если трогали API — `api_check.py` или curl на `/v1/models` и completions.
 5. В ответе пользователю кратко укажи, что проверено.
 
-Автотесты: pytest (`make test-coverage`), Vitest во `frontend/src/tests/` (`cd frontend && npm run test`), интеграционные скрипты (`tests/integration_weather.py`, `tests/integration_s3.py`).
+Автотесты: pytest (`make test-coverage`), Vitest во `frontend/src/tests/` (`cd frontend && npm run test`), интеграционные скрипты (`tests/integration_weather.py`, `tests/integration_s3.py`). Обе пачки гоняет `.githooks/pre-commit` (ставится `make hooks`) и блокирует коммит при падении. Юнит-тесты не должны зависеть от локального `.env`: нужные переменные фиксирует `tests/conftest.py` до импорта приложения (секреты S3 включали бы `generate_image`, `SYSTEM_PROMPT` менял бы первый message payload'а).

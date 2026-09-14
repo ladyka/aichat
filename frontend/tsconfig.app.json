@@ -24,5 +24,7 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["src/tests"]
+  // `src/sw.ts` — свой проект (`tsconfig.sw.json`): у service worker'а
+  // `lib: ["WebWorker"]` без DOM, вместе они конфликтуют.
+  "exclude": ["src/tests", "src/sw.ts"]
 }

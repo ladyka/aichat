@@ -4,6 +4,15 @@
 {% block main_class %}chat-main chat-spa{% endblock %}
 {% block head %}
   <link rel="stylesheet" href="/chat-ui/assets/index.css">
+  {# PWA: только для чата — остальные страницы сайта устанавливаемыми не делаем. #}
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0f7a5f">
+  <link rel="icon" type="image/png" sizes="32x32" href="/chat-ui/favicon-32.png">
+  <link rel="apple-touch-icon" href="/chat-ui/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="aichat">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
 {% endblock %}
 {% block content %}
 <div id="root" class="chat-root"></div>

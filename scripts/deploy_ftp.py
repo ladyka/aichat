@@ -26,9 +26,11 @@ _HASH_CHUNK = 1024 * 1024
 def get_git_commit_hash() -> str:
     """Get the current git commit hash."""
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
-        ).decode("utf-8").strip()
+        return (
+            subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL)
+            .decode("utf-8")
+            .strip()
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         die("Failed to get git commit hash. Is this a git repository?")
 
@@ -36,11 +38,16 @@ def get_git_commit_hash() -> str:
 def check_git_status() -> None:
     """Ensure no uncommitted changes exist."""
     try:
-        status = subprocess.check_output(
-            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL
-        ).decode("utf-8").strip()
+        status = (
+            subprocess.check_output(["git", "status", "--porcelain"], stderr=subprocess.DEVNULL)
+            .decode("utf-8")
+            .strip()
+        )
         if status:
-            die(f"You have uncommitted changes. Please commit or stash them before deploying:\n{status}")
+            die(
+                "You have uncommitted changes. Please commit or stash them before deploying:\n"
+                f"{status}"
+            )
     except (subprocess.CalledProcessError, FileNotFoundError):
         die("Failed to check git status. Is this a git repository?")
 

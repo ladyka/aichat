@@ -1,4 +1,4 @@
-.PHONY: run update-prod update-requirements-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format migrate migrate-rev
+.PHONY: run update-prod update-requirements-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format hooks migrate migrate-rev
 
 PORT ?= 20000
 INSTANCE_HOST ?= 0.0.0.0
@@ -55,6 +55,10 @@ lint: $(VENV)/bin/python
 format: $(VENV)/bin/python
 	$(VENV)/bin/isort $(PY_FILES)
 	$(VENV)/bin/black $(PY_FILES)
+
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks enabled: pre-commit runs backend + frontend tests."
 
 docs-serve:
 	$(DOCKER) run --rm -it -p 8000:8000 -v "$(CURDIR):/docs" -w /docs $(MKDOCS_IMAGE)

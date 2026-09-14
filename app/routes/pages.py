@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -222,6 +223,39 @@ def chat_page(
     if not user:
         return RedirectResponse("/login", status_code=303)
     return render(request, "chat.html", user)
+
+
+def _dist_file(name: str) -> Path | None:
+    """Файл из сборки чата (`frontend/dist`); None, если сборки нет."""
+    path = get_settings().root / "frontend" / "dist" / name
+    return path if path.is_file() else None
+
+
+def _dist_response(name: str, media_type: str) -> FileResponse:
+    path = _dist_file(name)
+    if path is None:
+        raise HTTPException(status_code=404, detail=f"{name} not found")
+    return FileResponse(path, media_type=media_type, headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/sw.js")
+def service_worker() -> FileResponse:
+    """Service worker чата.
+
+    Лежит в корне сайта, а не в `/chat-ui/`, потому что только так у него scope
+    `/`, покрывающий `/chat` — настоящую страницу чата. См. `frontend/src/sw.ts`.
+    """
+    return _dist_response("sw.js", "application/javascript")
+
+
+@router.get("/manifest.webmanifest")
+def web_manifest() -> FileResponse:
+    """Web app manifest (start_url `/chat`).
+
+    Отдаём сами, с явным media type: содержимое — из `frontend/public`, но
+    `mimetypes` хостинга может не знать `.webmanifest` и отдать `text/plain`.
+    """
+    return _dist_response("manifest.webmanifest", "application/manifest+json")
 
 
 def _settings_render(

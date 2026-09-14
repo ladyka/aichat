@@ -17,6 +17,19 @@ def _auth(client):
     register(client, email())
 
 
+def _upstream(payload):
+    """Messages sent upstream, without the server system prompt.
+
+    `app/routes/api.py` puts the server prompt first in every payload and drops the
+    client's own `role=system`, so the tool-loop tests look at the tail. The prompt
+    itself is asserted in tests/test_api.py; here we only check it is still there,
+    so that dropping it from the helper cannot hide a missing prompt.
+    """
+    messages = payload["messages"]
+    assert messages[0]["role"] == "system"
+    return messages[1:]
+
+
 def _sse_text(text, model="openrouter/free"):
     data = {"choices": [{"delta": {"content": text}}], "model": model}
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
@@ -363,9 +376,9 @@ def test_stream_location_resolved_from_body(client, mock_models, monkeypatch):
     assert "У вас +15" in response.text
     assert plan.stream_calls == 2
 
-    roles = [m["role"] for m in plan.stream_payloads[1]["messages"]]
-    assert roles == ["user", "assistant", "tool"]
-    tool_msg = plan.stream_payloads[1]["messages"][2]
+    sent = _upstream(plan.stream_payloads[1])
+    assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
+    tool_msg = sent[2]
     assert json.loads(tool_msg["content"]) == {"lat": 53.9, "lon": 27.5}
     assert "location" not in plan.stream_payloads[0]  # координаты не уходят апстрим
 
@@ -423,7 +436,7 @@ def test_continuation_with_coords(client, mock_models, monkeypatch):
     )
     assert response.status_code == 200
     assert "В Минске +15" in response.text
-    sent = plan.stream_payloads[0]["messages"]
+    sent = _upstream(plan.stream_payloads[0])
     assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
 
 
@@ -522,9 +535,9 @@ def test_stream_tool_loop(client, mock_models, monkeypatch):
     assert plan.stream_calls == 2
 
     second = plan.stream_payloads[1]
-    roles = [m["role"] for m in second["messages"]]
-    assert roles == ["user", "assistant", "tool"]
-    tool_msg = second["messages"][2]
+    sent = _upstream(second)
+    assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
+    tool_msg = sent[2]
     assert tool_msg["tool_call_id"] == "call_1"
     assert json.loads(tool_msg["content"])["temperature_c"] == 15.0
     assert second["stream"] is True
@@ -556,8 +569,8 @@ def test_non_stream_tool_loop(client, mock_models, monkeypatch):
     body = response.json()
     assert body["choices"][0]["message"]["content"] == "Солнечно, +15"
     assert plan.chat_calls == 2
-    roles = [m["role"] for m in plan.chat_payloads[1]["messages"]]
-    assert roles == ["user", "assistant", "tool"]
+    sent = _upstream(plan.chat_payloads[1])
+    assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
 
 
 def test_datetime_advertised_without_weather_key(client, mock_models, monkeypatch):
@@ -1002,9 +1015,9 @@ def test_stream_download_tool_loop(client, mock_models, monkeypatch):
     assert response.status_code == 200
     assert "Скачал страницу" in response.text
     assert plan.stream_calls == 2
-    roles = [m["role"] for m in plan.stream_payloads[1]["messages"]]
-    assert roles == ["user", "assistant", "tool"]
-    tool_msg = plan.stream_payloads[1]["messages"][2]
+    sent = _upstream(plan.stream_payloads[1])
+    assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
+    tool_msg = sent[2]
     assert json.loads(tool_msg["content"])["filename"] == "page.txt"
 
 
