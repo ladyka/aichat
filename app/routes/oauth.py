@@ -18,11 +18,9 @@ from app.oauth import (
     exchange_apple_code,
     exchange_github_code,
     exchange_google_code,
-    exchange_vk_code,
     exchange_yandex_code,
     github_authorize_url,
     google_authorize_url,
-    vk_authorize_url,
     yandex_authorize_url,
 )
 from app.routes.pages import render
@@ -198,37 +196,6 @@ async def yandex_callback(
         error=error,
         error_description=error_description,
     )
-
-
-@router.get("/auth/vk")
-def vk_login():
-    return _start_oauth(get_settings().vk_oauth_enabled, vk_authorize_url())
-
-
-@router.get("/auth/vk/callback")
-async def vk_callback(
-    request: Request,
-    code: str = "",
-    state: str = "",
-    device_id: str = "",
-    error: str = "",
-    error_description: str = "",
-    db: Session = Depends(get_db),
-):
-    if error:
-        return _oauth_error_page(request, error_description or error)
-    try:
-        extra = consume_oauth_state(state, "vk")
-        profile = await exchange_vk_code(
-            code,
-            device_id=device_id,
-            code_verifier=extra.get("code_verifier", ""),
-            state=state,
-        )
-        user = _upsert_oauth_user(db, "vk", profile["subject"], profile.get("email"))
-    except OAuthError as exc:
-        return _oauth_error_page(request, str(exc))
-    return _set_session_cookie(user, db)
 
 
 @router.get("/auth/github")

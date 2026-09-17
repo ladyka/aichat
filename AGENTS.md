@@ -46,12 +46,12 @@
 | `app/skills.py` | CRUD skills, публикация/каталог/копия, дефолты, набор чата |
 | `app/routes/skills.py` | `/api/skills*`, `/api/catalog/skills*` |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
-| `app/oauth.py` | OAuth2/OIDC: Google, Apple, Яндекс, VK ID, GitHub (authorize-URL, token exchange, id_token / userinfo) |
+| `app/oauth.py` | OAuth2/OIDC: Google, Apple, Яндекс, GitHub (authorize-URL, token exchange, id_token / userinfo) |
 | `app/telemetry.py` | Arize/Phoenix OTLP tracing |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |
 | `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens, `/sw.js` + `/manifest.webmanifest` (PWA-файлы из `frontend/dist`, из корня — иначе у SW нет scope `/`) |
 | `app/routes/skill_pages.py` | `/skills`, `/catalog` (Jinja) |
-| `app/routes/oauth.py` | `/auth/{google,apple,yandex,vk,github}` и callback'и |
+| `app/routes/oauth.py` | `/auth/{google,apple,yandex,github}` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
 | `app/routes/conversations.py` | `/api/conversations*`, `/api/settings` (модель + `default_skill_ids`) |
 | `app/routes/notes.py` | `/api/conversations/{id}/note` (GET/PUT) и download |

@@ -63,7 +63,7 @@ class User(Base):
 
 
 class OAuthIdentity(Base):
-    """One external identity (Google / Apple / Yandex / VK / GitHub sub) linked to a User."""
+    """One external identity (Google / Apple / Yandex / GitHub sub) linked to a User."""
 
     __tablename__ = "oauth_identities"
     __table_args__ = (UniqueConstraint("provider", "subject", name="uq_oauth_provider_subject"),)

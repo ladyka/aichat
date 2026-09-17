@@ -150,9 +150,6 @@ class Settings:
         self.apple_private_key = (_env("APPLE_PRIVATE_KEY", "") or "").replace("\\n", "\n")
         self.yandex_client_id = _env("YANDEX_CLIENT_ID", "") or ""
         self.yandex_client_secret = _env("YANDEX_CLIENT_SECRET", "") or ""
-        self.vk_client_id = _env("VK_CLIENT_ID", "") or ""
-        # Service token from VK ID app settings (also accepted as VK_SERVICE_TOKEN).
-        self.vk_client_secret = _env("VK_CLIENT_SECRET", "") or _env("VK_SERVICE_TOKEN", "") or ""
         self.github_client_id = _env("GITHUB_CLIENT_ID", "") or ""
         self.github_client_secret = _env("GITHUB_CLIENT_SECRET", "") or ""
 
@@ -238,10 +235,6 @@ class Settings:
         return f"{self.public_base_url}/auth/yandex/callback" if self.public_base_url else ""
 
     @property
-    def vk_redirect_uri(self) -> str:
-        return f"{self.public_base_url}/auth/vk/callback" if self.public_base_url else ""
-
-    @property
     def github_redirect_uri(self) -> str:
         return f"{self.public_base_url}/auth/github/callback" if self.public_base_url else ""
 
@@ -267,10 +260,6 @@ class Settings:
         return self._oauth_pair_enabled(self.yandex_client_id, self.yandex_client_secret)
 
     @property
-    def vk_oauth_enabled(self) -> bool:
-        return self._oauth_pair_enabled(self.vk_client_id, self.vk_client_secret)
-
-    @property
     def github_oauth_enabled(self) -> bool:
         return self._oauth_pair_enabled(self.github_client_id, self.github_client_secret)
 
@@ -280,6 +269,5 @@ class Settings:
             self.google_oauth_enabled
             or self.apple_oauth_enabled
             or self.yandex_oauth_enabled
-            or self.vk_oauth_enabled
             or self.github_oauth_enabled
         )

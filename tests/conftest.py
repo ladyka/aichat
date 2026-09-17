@@ -35,9 +35,6 @@ for _oauth_var in (
     "APPLE_PRIVATE_KEY",
     "YANDEX_CLIENT_ID",
     "YANDEX_CLIENT_SECRET",
-    "VK_CLIENT_ID",
-    "VK_CLIENT_SECRET",
-    "VK_SERVICE_TOKEN",
     "GITHUB_CLIENT_ID",
     "GITHUB_CLIENT_SECRET",
 ):

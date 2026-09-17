@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import secrets
 import time
 from typing import Any
@@ -31,11 +30,6 @@ YANDEX_TOKEN_URL = "https://oauth.yandex.ru/token"
 YANDEX_USERINFO_URL = "https://login.yandex.ru/info"
 YANDEX_SCOPE = "login:info login:email"
 
-VK_AUTH_URL = "https://id.vk.ru/authorize"
-VK_TOKEN_URL = "https://id.vk.ru/oauth2/auth"
-VK_USERINFO_URL = "https://id.vk.ru/oauth2/user_info"
-VK_SCOPE = "email"
-
 GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_USER_URL = "https://api.github.com/user"
@@ -55,7 +49,7 @@ class OAuthError(Exception):
 
 
 # In-memory CSRF state store. Fine for a single-process app: the flow lasts seconds.
-_pending_states: dict[str, dict[str, str]] = {}
+_pending_states: dict[str, str] = {}
 _jwks_cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
 
 
@@ -63,25 +57,15 @@ def _build_url(base: str, params: dict[str, str]) -> str:
     return f"{base}?{urlencode(params)}"
 
 
-def create_oauth_state(provider: str, **extra: str) -> str:
-    # VK ID requires state of at least 32 chars from [A-Za-z0-9_-].
+def create_oauth_state(provider: str) -> str:
     state = secrets.token_urlsafe(32)
-    _pending_states[state] = {"provider": provider, **extra}
+    _pending_states[state] = provider
     return state
 
 
-def consume_oauth_state(state: str | None, provider: str) -> dict[str, str]:
-    payload = _pending_states.pop(state, None) if state else None
-    if not isinstance(payload, dict) or payload.get("provider") != provider:
+def consume_oauth_state(state: str | None, provider: str) -> None:
+    if _pending_states.pop(state, None) != provider:
         raise OAuthError("Ошибка проверки state (попробуйте ещё раз)")
-    return payload
-
-
-def _pkce_pair() -> tuple[str, str]:
-    verifier = secrets.token_urlsafe(64)
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-    return verifier, challenge
 
 
 def google_authorize_url() -> str:
@@ -303,23 +287,6 @@ def yandex_authorize_url() -> str:
     )
 
 
-def vk_authorize_url() -> str:
-    settings = get_settings()
-    verifier, challenge = _pkce_pair()
-    return _build_url(
-        VK_AUTH_URL,
-        {
-            "response_type": "code",
-            "client_id": settings.vk_client_id,
-            "redirect_uri": settings.vk_redirect_uri,
-            "state": create_oauth_state("vk", code_verifier=verifier),
-            "code_challenge": challenge,
-            "code_challenge_method": "S256",
-            "scope": VK_SCOPE,
-        },
-    )
-
-
 def github_authorize_url() -> str:
     settings = get_settings()
     return _build_url(
@@ -375,49 +342,6 @@ async def exchange_yandex_code(code: str) -> dict[str, str]:
     if not email:
         raise OAuthError("Яндекс не вернул email")
     return {"email": email, "subject": subject, "name": info.get("real_name") or ""}
-
-
-async def exchange_vk_code(
-    code: str,
-    *,
-    device_id: str,
-    code_verifier: str,
-    state: str,
-) -> dict[str, str]:
-    settings = get_settings()
-    if not code or not device_id or not code_verifier:
-        raise OAuthError("VK не вернул данные для обмена кода")
-    tokens = await _post_form(
-        VK_TOKEN_URL,
-        {
-            "grant_type": "authorization_code",
-            "code": code,
-            "code_verifier": code_verifier,
-            "client_id": settings.vk_client_id,
-            "device_id": device_id,
-            "redirect_uri": settings.vk_redirect_uri,
-            "state": state,
-            "service_token": settings.vk_client_secret,
-        },
-    )
-    _token_error(tokens, "VK")
-    access_token = tokens.get("access_token")
-    if not access_token:
-        raise OAuthError("VK не вернул access_token")
-    info = await _post_form(
-        VK_USERINFO_URL,
-        {"client_id": settings.vk_client_id, "access_token": access_token},
-    )
-    _token_error(info, "VK")
-    user = info.get("user") if isinstance(info.get("user"), dict) else info
-    subject = str(user.get("user_id") or user.get("id") or "")
-    email = (user.get("email") or "").strip()
-    if not subject:
-        raise OAuthError("VK не вернул идентификатор пользователя")
-    if not email:
-        raise OAuthError("VK не вернул email — разрешите доступ к почте")
-    name = " ".join(part for part in (user.get("first_name"), user.get("last_name")) if part)
-    return {"email": email, "subject": subject, "name": name}
 
 
 def _github_pick_email(emails: Any, public_email: str) -> str:

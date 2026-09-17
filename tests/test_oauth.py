@@ -38,13 +38,6 @@ def _enable_yandex(settings, monkeypatch, client_id="yandex-client"):
     return settings
 
 
-def _enable_vk(settings, monkeypatch, client_id="vk-client"):
-    monkeypatch.setattr(settings, "public_base_url", "https://example.test")
-    monkeypatch.setattr(settings, "vk_client_id", client_id)
-    monkeypatch.setattr(settings, "vk_client_secret", "vk-service-token")
-    return settings
-
-
 def _enable_github(settings, monkeypatch, client_id="github-client"):
     monkeypatch.setattr(settings, "public_base_url", "https://example.test")
     monkeypatch.setattr(settings, "github_client_id", client_id)
@@ -92,7 +85,6 @@ def test_oauth_disabled_by_default(client):
         "/auth/google",
         "/auth/apple",
         "/auth/yandex",
-        "/auth/vk",
         "/auth/github",
     ):
         assert client.get(path, follow_redirects=False).status_code == 303
@@ -100,7 +92,6 @@ def test_oauth_disabled_by_default(client):
     assert "Войти через Google" not in page
     assert "Войти через Apple" not in page
     assert "Войти через Яндекс" not in page
-    assert "Войти через VK" not in page
     assert "Войти через GitHub" not in page
 
 
@@ -109,13 +100,11 @@ def test_oauth_buttons_shown_when_enabled(client, monkeypatch):
     _enable_google(settings, monkeypatch)
     _enable_apple(settings, monkeypatch)
     _enable_yandex(settings, monkeypatch)
-    _enable_vk(settings, monkeypatch)
     _enable_github(settings, monkeypatch)
     page = client.get("/login").text
     assert "Войти через Google" in page
     assert "Войти через Apple" in page
     assert "Войти через Яндекс" in page
-    assert "Войти через VK" in page
     assert "Войти через GitHub" in page
     register_page = client.get("/register").text
     assert "Войти через Яндекс" in register_page
@@ -360,16 +349,6 @@ def test_yandex_start_redirects(client, monkeypatch):
     assert response.headers["location"].startswith(oauth_mod.YANDEX_AUTH_URL)
 
 
-def test_vk_start_redirects_with_pkce(client, monkeypatch):
-    _enable_vk(get_settings(), monkeypatch)
-    response = client.get("/auth/vk", follow_redirects=False)
-    assert response.status_code == 302
-    location = response.headers["location"]
-    assert location.startswith(oauth_mod.VK_AUTH_URL)
-    assert "code_challenge=" in location
-    assert "code_challenge_method=S256" in location
-
-
 def test_github_start_redirects(client, monkeypatch):
     _enable_github(get_settings(), monkeypatch)
     response = client.get("/auth/github", follow_redirects=False)
@@ -390,26 +369,6 @@ def test_yandex_callback_creates_user(client, db, monkeypatch):
     identity = db.scalar(select(OAuthIdentity).where(OAuthIdentity.provider == "yandex"))
     assert identity is not None
     assert identity.subject == "yandex-sub-1"
-
-
-def test_vk_callback_creates_user(client, db, monkeypatch):
-    _enable_vk(get_settings(), monkeypatch)
-    state = oauth_mod.create_oauth_state("vk", code_verifier="verifier-value")
-
-    async def fake_exchange(code, *, device_id, code_verifier, state):
-        assert device_id == "dev-1"
-        assert code_verifier == "verifier-value"
-        return {"email": email(), "subject": "vk-sub-1", "name": "Vk User"}
-
-    monkeypatch.setattr("app.routes.oauth.exchange_vk_code", fake_exchange)
-    response = client.get(
-        f"/auth/vk/callback?code=code1&state={state}&device_id=dev-1",
-        follow_redirects=False,
-    )
-    assert response.status_code == 303
-    identity = db.scalar(select(OAuthIdentity).where(OAuthIdentity.provider == "vk"))
-    assert identity is not None
-    assert identity.subject == "vk-sub-1"
 
 
 def test_github_callback_creates_user(client, db, monkeypatch):
@@ -450,32 +409,6 @@ def test_exchange_yandex_code(monkeypatch):
     profile = asyncio.run(oauth_mod.exchange_yandex_code("code"))
     assert profile["subject"] == "1001"
     assert "@" in profile["email"]
-
-
-def test_exchange_vk_code(monkeypatch):
-    _enable_vk(get_settings(), monkeypatch)
-
-    async def fake_post(url, data, headers=None):
-        if url == oauth_mod.VK_TOKEN_URL:
-            assert data["code_verifier"] == "ver"
-            assert data["service_token"] == "vk-service-token"
-            return {"access_token": "vk-token"}
-        assert url == oauth_mod.VK_USERINFO_URL
-        return {
-            "user": {
-                "user_id": "777",
-                "email": "vk-user@example.com",
-                "first_name": "A",
-                "last_name": "B",
-            }
-        }
-
-    monkeypatch.setattr(oauth_mod, "_post_form", fake_post)
-    profile = asyncio.run(
-        oauth_mod.exchange_vk_code("code", device_id="dev", code_verifier="ver", state="st")
-    )
-    assert profile["subject"] == "777"
-    assert profile["email"] == "vk-user@example.com"
 
 
 def test_exchange_github_prefers_primary_email(monkeypatch):

@@ -9,7 +9,7 @@
 ## Что умеет
 
 - Регистрация и вход почтой с паролем; сессия — cookie.
-- Google, Apple, Яндекс, VK ID, GitHub. Каждый включается своими переменными: пока ключей нет, кнопки нет.
+- Google, Apple, Яндекс, GitHub. Каждый включается своими переменными: пока ключей нет, кнопки нет.
 - У OAuth-аккаунта пароля нет — вход почтой для него недоступен.
 - Привязка провайдера к человеку лежит в `oauth_identities`, так что почта остаётся одним аккаунтом.
 - `/profile` — что за аккаунт и чем он вошёл.
@@ -17,7 +17,7 @@
 
 ## Где в коде
 
-`app/auth.py` — пароли, cookie-сессии, API-токены; `app/oauth.py` — authorize-URL, обмен кода, разбор `id_token` и userinfo; `app/routes/oauth.py` — `/auth/{google,apple,yandex,vk,github}` и callback'и; `app/routes/pages.py` — `/login`, `/register`, `/logout`, `/profile`; `templates/login.html`, `templates/register.html`, `templates/profile.html`, `templates/_oauth_buttons.html`; таблицы `users`, `oauth_identities`, `sessions`.
+`app/auth.py` — пароли, cookie-сессии, API-токены; `app/oauth.py` — authorize-URL, обмен кода, разбор `id_token` и userinfo; `app/routes/oauth.py` — `/auth/{google,apple,yandex,github}` и callback'и; `app/routes/pages.py` — `/login`, `/register`, `/logout`, `/profile`; `templates/login.html`, `templates/register.html`, `templates/profile.html`, `templates/_oauth_buttons.html`; таблицы `users`, `oauth_identities`, `sessions`.
 
 Как завести приложение у провайдера и какие поля куда копировать — [OAuth-провайдеры](../../dev/oauth-providers.md).
 

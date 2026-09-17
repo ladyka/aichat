@@ -1,6 +1,6 @@
 # Креды OAuth-провайдеров
 
-Вход через Google, Apple, Яндекс, VK и GitHub включается **по отдельности**: кнопка на `/login` и `/register` появляется, только если заданы `PUBLIC_BASE_URL` и переменные **этого** провайдера (см. `.env.example`).
+Вход через Google, Apple, Яндекс и GitHub включается **по отдельности**: кнопка на `/login` и `/register` появляется, только если заданы `PUBLIC_BASE_URL` и переменные **этого** провайдера (см. `.env.example`).
 
 Общее:
 
@@ -8,7 +8,7 @@
 2. Redirect URI должен **точно** совпасть с тем, что указано в кабинете провайдера (схема, хост, путь, без лишнего `/`).
 3. Секреты только в `.env`, файл не коммитить и не заливать по FTP (`.uploadignore`).
 
-Локально OAuth обычно не заводится на `http://127.0.0.1:8080`: у провайдеров нужен зарегистрированный HTTPS-домен (исключения — см. разделы Google, GitHub, VK).
+Локально OAuth обычно не заводится на `http://127.0.0.1:8080`: у провайдеров нужен зарегистрированный HTTPS-домен (исключения — см. разделы Google, GitHub).
 
 Redirect URI aichat:
 
@@ -17,7 +17,6 @@ Redirect URI aichat:
 | Google | `{PUBLIC_BASE_URL}/auth/google/callback` |
 | Apple | `{PUBLIC_BASE_URL}/auth/apple/callback` |
 | Яндекс | `{PUBLIC_BASE_URL}/auth/yandex/callback` |
-| VK | `{PUBLIC_BASE_URL}/auth/vk/callback` |
 | GitHub | `{PUBLIC_BASE_URL}/auth/github/callback` |
 
 После сохранения `.env` перезапустите процесс приложения (`get_settings()` кешируется на старте).
@@ -86,27 +85,6 @@ APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIGT...\n-----END PRIVATE KEY---
 5. Сохраните приложение. **ClientID** → `YANDEX_CLIENT_ID`, **Client secret** → `YANDEX_CLIENT_SECRET` (секрет можно перевыпустить в карточке приложения).
 
 Документация: [Регистрация приложения](https://yandex.ru/dev/id/doc/ru/register-client), [получение кода](https://yandex.ru/dev/id/doc/ru/codes/code-url).
-
----
-
-## VK ID
-
-Кабинет: [сервис авторизации VK ID](https://id.vk.ru/about/business/go) → приложения. Создание: [документация](https://id.vk.ru/about/business/go/docs/ru/vkid/latest/vk-id/connection/create-application).
-
-Нужны: `VK_CLIENT_ID` (ID приложения) и `VK_CLIENT_SECRET` (**сервисный ключ**, не «защищённый ключ»). Синоним секрета: `VK_SERVICE_TOKEN`.
-
-1. Войдите через **VK Бизнес ID** и подтвердите профиль бизнеса (без этого ключи и настройки ограничивают / приложения могут отключить).
-2. **Мои приложения → Добавить приложение**.
-3. Платформа **Web**. Название и иконка — то, что увидит пользователь.
-4. **Базовый домен**: хост сайта, например `aichat.example.com` (без `https://`; для локальных проб VK допускает `localhost` без порта).
-5. **Доверенный redirect URL**: `https://ваш-домен/auth/vk/callback` — тот же URL, что в `PUBLIC_BASE_URL`. Домен в этом URL должен совпадать с базовым (регистр важен). Для localhost в доке VK: `http://localhost` без порта.
-6. В доступах / scopes включите **email** (aichat запрашивает `email`; без почты вход отклоняется).
-7. После создания в параметрах приложения:
-   - **ID приложения** (`client_id` / `app_id`) → `VK_CLIENT_ID`;
-   - **сервисный ключ доступа** → `VK_CLIENT_SECRET`.
-   - «Защищённый ключ» (`client_secret` для клиентских SDK) в `.env` **не** кладите: обмен кода на бэкенде идёт с `service_token`.
-
-aichat ходит в VK ID без JS SDK (`/authorize` + PKCE + `POST /oauth2/auth`).
 
 ---
 

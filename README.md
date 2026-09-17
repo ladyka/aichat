@@ -7,7 +7,7 @@
 - Публичный лендинг без авторизации
 - Страница о сервисе (`/about`)
 - Регистрация / вход (email + пароль, cookie-сессия)
-- Вход через **Google**, **Apple**, **Яндекс**, **VK** и **GitHub** (OAuth 2.0 / OIDC; каждый провайдер включается своими переменными в `.env`)
+- Вход через **Google**, **Apple**, **Яндекс** и **GitHub** (OAuth 2.0 / OIDC; каждый провайдер включается своими переменными в `.env`)
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
 - Модель чата в **/settings** (не на экране чата)
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
@@ -162,7 +162,6 @@ cd frontend && npm run dev   # :5173
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth-клиент Google (выкл., пока не заполнены оба) |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | «Sign in with Apple» (выкл., пока не заполнены все) |
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | Яндекс ID (выкл., пока не заполнены оба) |
-| `VK_CLIENT_ID` / `VK_CLIENT_SECRET` | VK ID; секрет — сервисный ключ (`VK_SERVICE_TOKEN` как синоним) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App (выкл., пока не заполнены оба) |
 | `FTP_*` | Деплой через `make update-prod` |
 | `ARIZE_SPACE_ID` / `ARIZE_API_KEY` | Включить OTLP-трейсы (Arize / Phoenix) |
@@ -172,7 +171,7 @@ cd frontend && npm run dev   # :5173
 | `NEW_RELIC_USER_KEY` | Ключ пользователя New Relic для запросов к API (GraphQL); самому агенту не нужен |
 | `NEW_RELIC_APP_NAME` | Имя приложения в New Relic (по умолчанию `aichat`) |
 
-### OAuth-вход (Google / Apple / Яндекс / VK / GitHub)
+### OAuth-вход (Google / Apple / Яндекс / GitHub)
 
 Каждый провайдер включается **отдельно**: кнопка на `/login` и `/register` появляется, только если заданы `PUBLIC_BASE_URL` и переменные этого провайдера.
 
@@ -183,7 +182,6 @@ Redirect URI (прописать в кабинете 1:1):
 - Google: `{PUBLIC_BASE_URL}/auth/google/callback`
 - Apple: `{PUBLIC_BASE_URL}/auth/apple/callback`
 - Яндекс: `{PUBLIC_BASE_URL}/auth/yandex/callback`
-- VK: `{PUBLIC_BASE_URL}/auth/vk/callback`
 - GitHub: `{PUBLIC_BASE_URL}/auth/github/callback`
 
 Новые пользователи создаются автоматически по email из провайдера; если email совпадает с существующим — вход в тот же аккаунт. Привязка провайдера хранится в таблице `oauth_identities`. OAuth-аккаунты пароль не имеют — вход по email+пароль для них недоступен.
