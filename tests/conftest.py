@@ -20,6 +20,28 @@ os.environ["S3_BUCKET"] = ""
 os.environ["S3_SA_KEY_ID"] = ""
 os.environ["S3_SA_KEY_SECRET"] = ""
 os.environ["S3_PUBLIC_BASE_URL"] = ""
+# OAuth is per-deployment as well. With the local .env in play, a real
+# GOOGLE_CLIENT_ID + PUBLIC_BASE_URL would light up buttons on /login that
+# tests/test_oauth.py expects to be absent (it enables one provider at a time on
+# the cached settings instance), and a stray PUBLIC_BASE_URL would leak into
+# redirect URIs and absolute og: URLs.
+os.environ["PUBLIC_BASE_URL"] = ""
+for _oauth_var in (
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "APPLE_CLIENT_ID",
+    "APPLE_TEAM_ID",
+    "APPLE_KEY_ID",
+    "APPLE_PRIVATE_KEY",
+    "YANDEX_CLIENT_ID",
+    "YANDEX_CLIENT_SECRET",
+    "VK_CLIENT_ID",
+    "VK_CLIENT_SECRET",
+    "VK_SERVICE_TOKEN",
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+):
+    os.environ[_oauth_var] = ""
 # pzz flags are per-deployment: PZZ_ORDERS_ENABLED=0 in the local .env would turn
 # every "order submitted" assertion into "submitted: false".
 os.environ["PZZ_ENABLED"] = "1"
