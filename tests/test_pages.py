@@ -137,6 +137,24 @@ def test_settings_page(client, mock_models):
     assert "Модель" in response.text
 
 
+def test_settings_curl_example_uses_public_base_url(client, mock_models, monkeypatch):
+    """Пример в разделе токенов зовёт настоящий адрес сервиса, а не заглушку."""
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "public_base_url", "https://aichat.example.com")
+    register(client, email())
+    page = client.get("/settings")
+    assert "curl https://aichat.example.com/v1/chat/completions" in page.text
+    assert "YOUR_HOST" not in page.text
+
+
+def test_settings_page_points_back_to_the_chat(client, mock_models):
+    """Ссылка «К чату» стоит выше заголовка, а не в середине карточки."""
+    register(client, email())
+    page = client.get("/settings").text
+    assert page.index('href="/chat"') < page.index("<h1>")
+
+
 def test_settings_save_model(client, mock_models):
     register(client, email())
     response = client.post("/settings", data={"preferred_model": "default"})

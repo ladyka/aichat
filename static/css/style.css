@@ -264,6 +264,12 @@ textarea { resize: vertical; min-height: 64px; }
   word-break: break-all;
   font-size: 0.92rem;
 }
+.example summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+.example[open] summary { margin-bottom: 0.6rem; }
 .example pre {
   overflow: auto;
   background: #132019;
@@ -308,16 +314,17 @@ textarea { resize: vertical; min-height: 64px; }
   border-radius: 10px;
   padding: 0.7rem 0.85rem;
 }
-.divider {
-  border: none;
-  border-top: 1px solid var(--line);
-  margin: 1.6rem 0;
-}
 .section-title {
   font-size: 1.1rem;
   font-weight: 600;
   margin: 0 0 0.5rem;
 }
+.subsection-title {
+  font-size: 0.98rem;
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+.settings-section + .settings-section { margin-top: 2.4rem; }
 .narrow-card {
   width: min(520px, 100%);
   margin: 2rem auto;

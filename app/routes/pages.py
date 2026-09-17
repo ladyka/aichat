@@ -22,7 +22,7 @@ from app.auth import (
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, User, get_db, get_user_by_email
 from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
-from app.og import og_context
+from app.og import og_context, public_origin
 from app.skills import default_skill_ids, list_owned_skills, set_default_skill_ids, skill_payload
 
 router = APIRouter()
@@ -284,6 +284,7 @@ def _settings_render(
         new_token=new_token,
         tokens=tokens,
         token_usage=usage,
+        public_origin=public_origin(request),
         api_daily_limit=settings.api_daily_limit,
         max_tokens_per_user=settings.max_tokens_per_user,
         active_tokens=len(tokens),

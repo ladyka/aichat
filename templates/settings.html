@@ -1,92 +1,96 @@
 {% extends "base.html" %}
-{% block title %}Свойства — aichat{% endblock %}
+{% block title %}Настройки — aichat{% endblock %}
 {% block body_class %}page-auth{% endblock %}
 {% block content %}
-<section class="auth-panel narrow-card">
-  <h1>Свойства</h1>
-  <p class="lede">Модель для чата. На странице чата выбор модели скрыт.</p>
+<section class="auth-panel skill-card">
+  <p class="back-link"><a href="/chat">← К чату</a> · <a href="/skills">Навыки</a> · <a href="/profile">Профиль</a></p>
+  <h1>Настройки</h1>
+  <p class="lede">Модель и навыки для чата, токены для внешнего API. На странице чата выбор модели скрыт.</p>
   {% if error %}
   <p class="error">{{ error }}</p>
   {% endif %}
   {% if saved %}
   <p class="ok">Сохранено.</p>
   {% endif %}
-  <form method="post" action="/settings" class="stack">
-    <label>Модель
-      <select name="preferred_model" id="preferred-model" required>
-        <option value="{{ preferred_model }}" selected>{{ preferred_model }}</option>
-      </select>
-    </label>
-    <div>
-      <p class="section-title">Навыки в новых чатах</p>
-      <p class="muted">Выбранные навыки подключатся при создании чата. Набор можно изменить в самом чате.</p>
-      {% if skill_items %}
-      <div class="check-list">
-        {% for item in skill_items %}
-        <label class="check-row">
-          <input type="checkbox" name="default_skill_ids" value="{{ item.id }}" {% if item.id in default_skill_ids %}checked{% endif %}>
-          {{ item.title }}
-          {% if item.public %}<span class="muted">каталог</span>{% endif %}
-        </label>
-        {% endfor %}
+
+  <section class="settings-section">
+    <h2 class="section-title" id="chat">Чат</h2>
+    <form method="post" action="/settings" class="stack">
+      <label>Модель
+        <select name="preferred_model" id="preferred-model" required>
+          <option value="{{ preferred_model }}" selected>{{ preferred_model }}</option>
+        </select>
+      </label>
+      <div>
+        <h3 class="subsection-title">Навыки в новых чатах</h3>
+        <p class="muted">Выбранные навыки подключатся при создании чата. Набор можно изменить в самом чате.</p>
+        {% if skill_items %}
+        <div class="check-list">
+          {% for item in skill_items %}
+          <label class="check-row">
+            <input type="checkbox" name="default_skill_ids" value="{{ item.id }}" {% if item.id in default_skill_ids %}checked{% endif %}>
+            {{ item.title }}
+            {% if item.public %}<span class="muted">каталог</span>{% endif %}
+          </label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="muted">Пока нет навыков. <a href="/skills">Создайте навык</a> или скопируйте из <a href="/catalog">каталога</a>.</p>
+        {% endif %}
+        <p class="muted"><a href="/skills">Управлять навыками</a></p>
       </div>
-      {% else %}
-      <p class="muted">Пока нет навыков. <a href="/skills">Создайте навык</a> или скопируйте из <a href="/catalog">каталога</a>.</p>
-      {% endif %}
-      <p class="muted"><a href="/skills">Управлять навыками</a></p>
+      <button class="btn" type="submit">Сохранить</button>
+    </form>
+  </section>
+
+  <section class="settings-section">
+    <h2 class="section-title" id="api">API-токены</h2>
+    <p class="muted">Используйте токен как Bearer для <code>POST /v1/chat/completions</code> (OpenAI-совместимый формат). Каждый токен — до <strong>{{ api_daily_limit }}</strong> запросов в сутки; чат в браузере не учитывается. Активных токенов: <strong>{{ active_tokens }}/{{ max_tokens_per_user }}</strong>.</p>
+
+    {% if token_error %}
+    <p class="error">{{ token_error }}</p>
+    {% endif %}
+
+    {% if new_token %}
+    <div class="token-reveal">
+      <p><strong>Скопируйте токен сейчас</strong> — больше он не будет показан.</p>
+      <code class="token-value">{{ new_token }}</code>
     </div>
-    <button class="btn" type="submit">Сохранить</button>
-  </form>
-  <p class="muted"><a href="/chat">← К чату</a></p>
+    {% endif %}
 
-  <hr class="divider">
+    <form method="post" action="/tokens" class="token-create">
+      <label>Имя токена
+        <input type="text" name="name" value="default" maxlength="100">
+      </label>
+      <button class="btn" type="submit">Создать токен</button>
+    </form>
 
-  <h2 class="section-title">API-токены</h2>
-  <p class="muted">Используйте токен как Bearer для <code>POST /v1/chat/completions</code> (OpenAI-совместимый формат). Каждый токен — до <strong>{{ api_daily_limit }}</strong> запросов в сутки; чат в браузере не учитывается. Активных токенов: <strong>{{ active_tokens }}/{{ max_tokens_per_user }}</strong>.</p>
-
-  {% if token_error %}
-  <p class="error">{{ token_error }}</p>
-  {% endif %}
-
-  {% if new_token %}
-  <div class="token-reveal">
-    <p><strong>Скопируйте токен сейчас</strong> — больше он не будет показан.</p>
-    <code class="token-value">{{ new_token }}</code>
-  </div>
-  {% endif %}
-
-  <form method="post" action="/tokens" class="token-create">
-    <label>Имя токена
-      <input type="text" name="name" value="default" maxlength="100">
-    </label>
-    <button class="btn" type="submit">Создать токен</button>
-  </form>
-
-  <div class="example">
-    <p class="muted">Пример:</p>
-    <pre>curl https://YOUR_HOST/v1/chat/completions \
+    <details class="example">
+      <summary>Как пользоваться токеном</summary>
+      <pre>curl {{ public_origin }}/v1/chat/completions \
   -H "Authorization: Bearer aichat_…" \
   -H "Content-Type: application/json" \
   -d '{"model":"{{ default_model }}","messages":[{"role":"user","content":"Привет"}]}'</pre>
-  </div>
+    </details>
 
-  <ul class="token-list">
-    {% for t in tokens %}
-    <li>
-      <div>
-        <strong>{{ t.name }}</strong>
-        <span class="muted">{{ t.prefix }}…</span>
-        <span class="muted">{{ t.created_at }}</span>
-        <span class="muted">сегодня: {{ token_usage.get(t.id, 0) }}/{{ api_daily_limit }}</span>
-      </div>
-      <form method="post" action="/tokens/{{ t.id }}/revoke">
-        <button type="submit" class="btn btn-ghost btn-small">Отозвать</button>
-      </form>
-    </li>
-    {% else %}
-    <li class="muted">Активных токенов пока нет.</li>
-    {% endfor %}
-  </ul>
+    <ul class="token-list">
+      {% for t in tokens %}
+      <li>
+        <div>
+          <strong>{{ t.name }}</strong>
+          <span class="muted">{{ t.prefix }}…</span>
+          <span class="muted">{{ t.created_at }}</span>
+          <span class="muted">сегодня: {{ token_usage.get(t.id, 0) }}/{{ api_daily_limit }}</span>
+        </div>
+        <form method="post" action="/tokens/{{ t.id }}/revoke">
+          <button type="submit" class="btn btn-ghost btn-small">Отозвать</button>
+        </form>
+      </li>
+      {% else %}
+      <li class="muted">Активных токенов пока нет.</li>
+      {% endfor %}
+    </ul>
+  </section>
 </section>
 {% endblock %}
 {% block scripts %}
