@@ -25,7 +25,7 @@
 - Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`docs/product/v2/billing.md`). Эту строку менять только вместе с эпиком и его страницей.
 - **Витрина этого репозитория — для обычных людей** (простой чат, бытовые tools). Не заменять её на LibreChat и не тащить сюда корпоративный ACL/агентский зоопарк.
 - **Компании — отдельный деплой LibreChat** (OAuth/SSO, роли, агенты). Бытовые tools витрины туда не вырезать; при необходимости — обёртка снаружи (MCP/OpenAPI). См. `docs/product/audiences.md`.
-- **Версия 1 выпускается** (план исполнен, идёт выкладка на прод): факт — витрина (чат, tools, API, PWA) и **skills с каталогом навыков**; новых функций в v1 не будет. По функциям — `docs/product/v1/`.
+- **Версия 1 выпущена** (план исполнен, работает на проде): факт — витрина (чат, tools, API, PWA) и **skills с каталогом навыков**; новых функций в v1 не будет. По функциям — `docs/product/v1/`.
 - **Версия 2 — в планах** (`docs/product/v2/`): решённое, но не сделанное; на витрине — **ИИ-диктофон** (`/dictaphone`, план — `docs/product/v2/dictaphone.md`), голосовой чат, заметки 2, веб-поиск, биллинг, приложение на телефон (вторая часть офлайна и магазины); **отдельной выкладкой** — LibreChat для компаний. Порядка внутри нет, очередь не выбрана. В коде из этого нет ничего. См. `docs/product/roadmap.md`.
 
 ### Where things live
@@ -67,7 +67,7 @@
 | `scripts/deploy_ftp.py` | `make update-prod` |
 | `api_check.py` | проверка API-токена против хоста |
 | `tests/` | pytest + `integration_weather.py` (интеграционный тест погоды)  / `integration_s3.py` |
-| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime, OAuth-креды; продукт — `docs/product/v1/` (выпускаемая версия по функциям), `docs/product/v2/` (планы второй версии), `docs/product/v999.backlog/` (видение) |
+| `docs/`, `mkdocs.yml` | документация (MkDocs Material): runtime, OAuth-креды; продукт — `docs/product/v1/` (выпущенная версия по функциям), `docs/product/v2/` (планы второй версии), `docs/product/v999.backlog/` (видение) |
 | `.githooks/pre-commit` | тесты бэкенда + фронтенда перед коммитом (включается `make hooks`) |
 | `.python-version` | pin CPython 3.13 |
 | `.nvmrc` | pin Node.js 24 |

@@ -43,7 +43,7 @@ nav:
     - О сервисе: product/about.md
     - Дорожная карта: product/roadmap.md
     - Две аудитории: product/audiences.md
-    - Версия 1 (выпускается):
+    - Версия 1 (выпущена):
       - План и факт: product/v1/index.md
       - Чат: product/v1/chat.md
       - Модели: product/v1/models.md
