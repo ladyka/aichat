@@ -41,8 +41,27 @@ nav:
     - OAuth-провайдеры: dev/oauth-providers.md
   - Продукт:
     - О сервисе: product/about.md
-    - Roadmap: product/roadmap.md
-    - Версия 1 (план и факт): product/v1.md
+    - Дорожная карта: product/roadmap.md
     - Две аудитории: product/audiences.md
-    - Видение (Беларусь): product/vision-belarus.md
-    - MVP и следующие шаги: product/mvp-next-steps.md
+    - Версия 1 (выпускается):
+      - План и факт: product/v1/index.md
+      - Чат: product/v1/chat.md
+      - Модели: product/v1/models.md
+      - Вход: product/v1/auth.md
+      - API: product/v1/api.md
+      - Руки: product/v1/tools.md
+      - Навыки: product/v1/skills.md
+      - Шаринг: product/v1/sharing.md
+      - Установка на телефон: product/v1/pwa.md
+    - Версия 2 (в планах):
+      - План и факт: product/v2/index.md
+      - ИИ-диктофон: product/v2/dictaphone.md
+      - Голосовой чат: product/v2/voice.md
+      - Заметки 2: product/v2/notes2.md
+      - Веб-поиск: product/v2/websearch.md
+      - Биллинг: product/v2/billing.md
+      - Приложение на телефон: product/v2/pwa.md
+      - LibreChat для организаций: product/v2/librechat.md
+    - 999. Бэклог:
+      - Как читать бэклог: product/v999.backlog/index.md
+      - Видение (Беларусь): product/v999.backlog/vision-belarus.md

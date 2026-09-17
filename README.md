@@ -224,7 +224,7 @@ python3 api_check.py --host https://YOUR_HOST --token aichat_…
 
 ## Документация
 
-Продуктовые заметки: каталог [`docs/`](docs/) (MkDocs Material). О сервисе, roadmap, версия 1 (план и факт) — [`docs/product/about.md`](docs/product/about.md), [`docs/product/roadmap.md`](docs/product/roadmap.md), [`docs/product/v1.md`](docs/product/v1.md). Витрина — для обычных людей; LibreChat — версия 2, см. [`docs/product/audiences.md`](docs/product/audiences.md).
+Продуктовые заметки: каталог [`docs/`](docs/) (MkDocs Material). Начинать с [дорожной карты](docs/product/roadmap.md) — там карта и состояния: первая версия выпускается и разобрана по функциям ([`docs/product/v1/`](docs/product/v1/index.md)), вторая — в планах ([`docs/product/v2/`](docs/product/v2/index.md): диктофон, голосовой чат, заметки 2, веб-поиск, биллинг, приложение на телефон, LibreChat), [999. Бэклог](docs/product/v999.backlog/index.md) — видение. Вокруг: [о сервисе](docs/product/about.md), [две аудитории](docs/product/audiences.md). Витрина — для обычных людей; LibreChat — отдельная выкладка, см. [`docs/product/v2/librechat.md`](docs/product/v2/librechat.md).
 
 ```bash
 make docs-serve   # http://127.0.0.1:8000/  (нужен Docker)
