@@ -236,9 +236,68 @@ body,
   word-break: break-word;
 }
 
+/* «Изменить» и «Повторить» под последними сообщениями. */
+.msg-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+.msg-action {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--chat-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.msg-action:hover:not(:disabled) {
+  color: var(--chat-ink);
+  background: color-mix(in srgb, var(--chat-line) 60%, transparent);
+}
+
+.msg-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.msg-action.primary {
+  color: var(--chat-accent);
+  font-weight: 500;
+}
+
+/* Правка последнего вопроса: поле на месте пузыря. */
+.msg-edit {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.msg-edit-input {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--chat-line);
+  border-radius: 14px;
+  padding: 0.85rem 1rem;
+  font: inherit;
+  line-height: 1.5;
+  background: #fff;
+}
+
+.msg-edit-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--chat-accent) 35%, transparent);
+  border-color: var(--chat-accent);
+}
+
 @media (max-width: 768px) {
   /* Prevent iOS Safari auto-zoom on focus */
-  .aui-composer-input {
+  .aui-composer-input,
+  .msg-edit-input {
     font-size: 16px;
   }
 

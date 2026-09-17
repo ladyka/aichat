@@ -21,6 +21,10 @@ def _create_conversation(client, title=None):
 def test_requires_auth(client):
     assert client.get("/api/conversations").status_code == 401
     assert client.post("/api/conversations", json={}).status_code == 401
+    assert (
+        client.request("DELETE", "/api/conversations/1/messages", json={"ids": [1]}).status_code
+        == 401
+    )
     assert client.get("/api/settings").status_code == 401
     assert client.put("/api/settings", json={"preferred_model": "default"}).status_code == 401
 
@@ -95,6 +99,70 @@ def test_append_messages_invalid_role(client):
         json={"messages": [{"role": "admin", "content": "x"}]},
     )
     assert response.status_code == 400
+
+
+def test_delete_messages_replaces_the_tail(client):
+    """«Изменить» и «Повторить» в чате убирают прежние строки, а не дописывают ветку."""
+    _auth(client)
+    conv = _create_conversation(client).json()
+    appended = client.post(
+        f"/api/conversations/{conv['id']}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "Первый вопрос"},
+                {"role": "assistant", "content": "Первый ответ"},
+            ]
+        },
+    ).json()["data"]
+    ids = [m["id"] for m in appended]
+
+    deleted = client.request(
+        "DELETE",
+        f"/api/conversations/{conv['id']}/messages",
+        json={"ids": ids},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] == 2
+    assert client.get(f"/api/conversations/{conv['id']}").json()["messages"] == []
+
+    # Повторный вызов безвреден: чат зовёт удаление перед каждой отправкой.
+    again = client.request(
+        "DELETE",
+        f"/api/conversations/{conv['id']}/messages",
+        json={"ids": ids},
+    )
+    assert again.json()["deleted"] == 0
+
+
+def test_delete_messages_is_scoped_to_the_conversation(client):
+    _auth(client)
+    conv = _create_conversation(client).json()
+    message_id = client.post(
+        f"/api/conversations/{conv['id']}/messages",
+        json={"messages": [{"role": "user", "content": "вопрос"}]},
+    ).json()["data"][0]["id"]
+
+    # Тот же человек, но другой диалог: чужую строку не задеть.
+    other = _create_conversation(client).json()
+    assert (
+        client.request(
+            "DELETE",
+            f"/api/conversations/{other['id']}/messages",
+            json={"ids": [message_id]},
+        ).json()["deleted"]
+        == 0
+    )
+    assert len(client.get(f"/api/conversations/{conv['id']}").json()["messages"]) == 1
+
+    register(client, email())
+    assert (
+        client.request(
+            "DELETE",
+            f"/api/conversations/{conv['id']}/messages",
+            json={"ids": [message_id]},
+        ).status_code
+        == 404
+    )
 
 
 def test_conversations_are_owned(client):

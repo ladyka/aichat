@@ -87,6 +87,10 @@ class MessagesAppend(BaseModel):
     messages: list[MessageCreate] = Field(default_factory=list)
 
 
+class MessagesDelete(BaseModel):
+    ids: list[int] = Field(default_factory=list)
+
+
 class SettingsUpdate(BaseModel):
     preferred_model: str | None = None
     default_skill_ids: list[str] | None = None
@@ -267,6 +271,42 @@ def append_messages(
         background_tasks.add_task(update_conversation_title, conv.id)
 
     return {"data": [_message_item(m) for m in created]}
+
+
+@router.delete("/api/conversations/{conversation_id}/messages")
+def delete_messages(
+    conversation_id: int,
+    request: Request,
+    body: MessagesDelete,
+    db: Session = Depends(get_db),
+):
+    """Убрать названные сообщения диалога.
+
+    Переписка хранится плоским списком, который только дописывается, а чат умеет
+    заменить последний вопрос («Изменить») и переспросить («Повторить») — оба
+    действия сначала убирают прежние строки и лишь потом дописывают новые. Поэтому
+    удалять можно любые сообщения диалога, но чат называет только хвост.
+
+    Вызов безвреден повторно: уже удалённые строки просто не находятся.
+    """
+    user = _require_user(request, db)
+    if isinstance(user, JSONResponse):
+        return user
+    conv = _get_owned_conversation(db, user, conversation_id)
+    if not conv:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+
+    deleted = 0
+    for message in db.scalars(
+        select(Message).where(Message.conversation_id == conv.id, Message.id.in_(body.ids))
+    ):
+        db.delete(message)
+        deleted += 1
+
+    if deleted:
+        conv.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"deleted": deleted}
 
 
 @router.get("/api/settings")

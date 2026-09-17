@@ -208,6 +208,8 @@ Redirect URI (прописать в кабинете 1:1):
 | `GET` | `/api/models` | cookie-сессия (UI) |
 | `GET/PUT` | `/api/settings` | cookie-сессия |
 | `*` | `/api/conversations…` | cookie-сессия |
+| `POST` | `/api/conversations/{id}/messages` | cookie-сессия (дописать сообщения; в ответе — созданные строки с их id) |
+| `DELETE` | `/api/conversations/{id}/messages` | cookie-сессия, тело `{"ids": […]}` — убрать сообщения («Изменить» и «Повторить» в чате заменяют прежнюю пару, а не оставляют второй вариант) |
 | `GET/PUT` | `/api/conversations/{id}/note` | cookie-сессия |
 | `GET` | `/api/conversations/{id}/note/download` | cookie-сессия (файл `.md`) |
 | `GET/POST` | `/api/conversations/{id}/share` | cookie-сессия |

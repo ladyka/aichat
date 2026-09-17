@@ -21,6 +21,7 @@ import {
   appendMessages,
   createConversation,
   deleteConversation,
+  deleteMessages,
   getConversation,
   listConversations,
   patchConversation,
@@ -45,8 +46,15 @@ function textFromThreadMessage(message: ThreadMessage): string {
     .join("");
 }
 
-class AichatHistoryAdapter implements ThreadHistoryAdapter {
+export class AichatHistoryAdapter implements ThreadHistoryAdapter {
   private getAui: () => ReturnType<typeof useAui>;
+  /**
+   * id сообщения на экране → id строки в базе (вместе с диалогом, которому она
+   * принадлежит: адаптер живёт дольше одного диалога). У загруженных сообщений
+   * это один и тот же id, а у только что отправленных клиент придумывает свой —
+   * сервер возвращает настоящий, и без этой карты удалять было бы нечего.
+   */
+  private stored = new Map<string, { remoteId: string; dbId: string }>();
 
   constructor(getAui: () => ReturnType<typeof useAui>) {
     this.getAui = getAui;
@@ -98,6 +106,7 @@ class AichatHistoryAdapter implements ThreadHistoryAdapter {
       }
       messages.push({ parentId, message });
       parentId = m.id;
+      this.stored.set(m.id, { remoteId, dbId: m.id });
     }
     return { messages };
   }
@@ -107,7 +116,22 @@ class AichatHistoryAdapter implements ThreadHistoryAdapter {
     const role = item.message.role;
     if (role !== "user" && role !== "assistant" && role !== "system") return;
     const content = textFromThreadMessage(item.message);
-    await appendMessages(remoteId, [{ role, content }]);
+    const [created] = await appendMessages(remoteId, [{ role, content }]);
+    if (created) this.stored.set(item.message.id, { remoteId, dbId: created.id });
+  }
+
+  async delete(items: ExportedMessageRepositoryItem[]): Promise<void> {
+    const remoteId = this.getAui().threadListItem.getState().remoteId;
+    if (!remoteId) return;
+
+    const ids = new Set<string>();
+    for (const item of items) {
+      const known = this.stored.get(item.message.id);
+      if (!known || known.remoteId !== remoteId) continue;
+      ids.add(known.dbId);
+      this.stored.delete(item.message.id);
+    }
+    await deleteMessages(remoteId, [...ids]);
   }
 }
 

@@ -93,12 +93,28 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function appendMessages(
   id: string,
   messages: { role: string; content: string }[],
-): Promise<void> {
+): Promise<ConversationMessage[]> {
   const res = await fetch(`/api/conversations/${id}/messages`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messages }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = await res.json();
+  return Array.isArray(data?.data) ? data.data : [];
+}
+
+export async function deleteMessages(
+  id: string,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return;
+  const res = await fetch(`/api/conversations/${id}/messages`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
   });
   if (!res.ok) throw new Error(await parseError(res));
 }
