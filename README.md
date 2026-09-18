@@ -9,7 +9,7 @@
 - Регистрация / вход (email + пароль, cookie-сессия)
 - Вход через **Google**, **Apple**, **Яндекс** и **GitHub** (OAuth 2.0 / OIDC; каждый провайдер включается своими переменными в `.env`)
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй
-- Модель чата в **/settings** (не на экране чата)
+- Модель чата в **/settings** (не на экране чата); там же навыки для новых чатов и API-токены — разделы `/settings#chat` и `/settings#api`
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
 - `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, модели e7 как `e7/<имя>` и облачные модели ollama.com как `ol/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
@@ -158,7 +158,7 @@ cd frontend && npm run dev   # :5173
 | `DEBUG` | `true` — локально копировать `generate_image` на диск (`data/aichat/generated/…`, каталог в `.gitignore`) |
 | `LOG_LEVEL` | Уровень логов приложения и uvicorn: `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL` (по умолчанию `INFO`). Нужен `INFO`, чтобы в консоль шли вызовы моделей (`aichat_model=…`) |
 | `INSTANCE_HOST` / `PORT` / `SOCKET` | Слушатель (порт или unix socket для хостинга) |
-| `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); redirect URI OAuth и абсолютные URL превью ссылок (`og:image`, `og:url`) |
+| `PUBLIC_BASE_URL` | Публичный https-адрес сервиса (например `https://aichat.example.com`); redirect URI OAuth, абсолютные URL превью ссылок (`og:image`, `og:url`) и адрес в примере вызова на `/settings#api`. Пусто — берётся хост запроса (`app/og.py::public_origin`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth-клиент Google (выкл., пока не заполнены оба) |
 | `APPLE_CLIENT_ID` / `APPLE_TEAM_ID` / `APPLE_KEY_ID` / `APPLE_PRIVATE_KEY` | «Sign in with Apple» (выкл., пока не заполнены все) |
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | Яндекс ID (выкл., пока не заполнены оба) |
@@ -219,7 +219,7 @@ Redirect URI (прописать в кабинете 1:1):
 Проверка токена против хоста:
 
 ```bash
-python3 api_check.py --host https://YOUR_HOST --token aichat_…
+python3 api_check.py --host https://aichat.by --token aichat_…
 ```
 
 ## Документация
