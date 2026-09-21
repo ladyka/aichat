@@ -18,6 +18,7 @@ def test_settings_defaults(monkeypatch):
         "DEFAULT_MODEL",
         "SYSTEM_PROMPT",
         "TITLE_MODEL",
+        "FEEDBACK_WEBHOOK_URL",
         "OLLAMA_API_KEY",
         "OLL_HOST",
         "S3_ENDPOINT",
@@ -45,6 +46,7 @@ def test_settings_defaults(monkeypatch):
     assert settings.e7_by_base_url == ""
     assert not settings.s3_enabled
     assert not settings.image_generation_enabled
+    assert settings.feedback_webhook_url == ""
     assert settings.image_generation_daily_limit == 5
     assert settings.image_generation_model == "black-forest-labs/flux.2-klein-4b"
     assert settings.log_level_name == "INFO"
@@ -122,6 +124,11 @@ def test_settings_pzz_flags(monkeypatch):
     settings = Settings()
     assert not settings.pzz_enabled
     assert not settings.pzz_orders_enabled
+
+
+def test_settings_feedback_webhook(monkeypatch):
+    monkeypatch.setenv("FEEDBACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/x")
+    assert Settings().feedback_webhook_url == "https://hooks.slack.com/services/T/B/x"
 
 
 def test_settings_e7_by_base_url(monkeypatch):

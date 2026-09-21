@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from app import storage
 from app.config import get_settings
 from app.db import Download, GeneratedImage
+from app.feedback import send_feedback
 from app.model_providers.openrouter import generate_image as openrouter_generate_image
 from app.notes import (
     NOTE_TOO_LARGE,
@@ -282,6 +283,55 @@ _PZZ_ADDRESS_TOOL: dict[str, Any] = {
     },
 }
 
+_FEEDBACK_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "send_feedback",
+        "description": (
+            "Передать команде aichat жалобу, идею или вопрос о самом сервисе. "
+            "Вызывай, когда пользователь недоволен чатом, сайтом, руками, входом "
+            "или ответами модели; предлагает улучшение; просит связаться с людьми "
+            "сервиса. Не вызывай из-за погоды, пиццы, сторонних сайтов и бытовых тем. "
+            "Жалоба: сначала уточни, что именно не понравилось (какой ответ, какая рука, "
+            "какая ошибка, чего ждали). Не отправляй расплывчатое «всё плохо». "
+            "Если можно помочь в этом чате — помоги; к команде отправляй, когда "
+            "пользователь хочет, чтобы о проблеме узнали люди сервиса. "
+            "Сначала вызови с confirm=false: получишь превью. Покажи его пользователю "
+            "и спроси, отправлять ли. confirm=true — только после явного согласия. "
+            "Команда увидит email аккаунта."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["complaint", "idea", "question", "other"],
+                    "description": (
+                        "complaint — жалоба, idea — идея, question — вопрос к команде, "
+                        "other — иное обращение."
+                    ),
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Что передать команде, словами пользователя.",
+                },
+                "objection": {
+                    "type": "string",
+                    "description": (
+                        "Для жалобы обязательно: что именно не понравилось — конкретный "
+                        "ответ, рука, ошибка, ожидание."
+                    ),
+                },
+                "confirm": {
+                    "type": "boolean",
+                    "description": "true только после явного согласия пользователя.",
+                },
+            },
+            "required": ["category", "message"],
+        },
+    },
+}
+
 _PZZ_ORDER_TOOL: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -374,7 +424,7 @@ _PRIVATE_NETWORKS = [
 
 
 def enabled_tools() -> list[dict[str, Any]]:
-    """Tools бота: дата, скачивание и заметка чата всегда; pzz, погода, картинки — по настройкам."""
+    """Tools бота: дата, скачивание, заметка всегда; остальные — по настройкам."""
     settings = get_settings()
     tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL, _READ_NOTE_TOOL, _WRITE_NOTE_TOOL]
     if settings.pzz_enabled:
@@ -383,6 +433,8 @@ def enabled_tools() -> list[dict[str, Any]]:
         tools.extend([_WEATHER_TOOL, _USER_LOCATION_TOOL])
     if settings.image_generation_enabled:
         tools.append(_GENERATE_IMAGE_TOOL)
+    if settings.feedback_webhook_url:
+        tools.append(_FEEDBACK_TOOL)
     return tools
 
 
@@ -544,6 +596,8 @@ async def _call_tool_impl(
         return await _generate_image(args, user=user, db=db)
     if name in {"pzz_search_menu", "pzz_lookup_address", "pzz_place_order"}:
         return await _pzz_tool(name, args)
+    if name == "send_feedback":
+        return await send_feedback(args, user=user, db=db, conversation_id=conversation_id)
     if name != "get_weather":
         return json.dumps({"error": f"Unknown tool: {name}"}, ensure_ascii=False)
     city = str(args.get("city") or "").strip()

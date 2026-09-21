@@ -120,6 +120,7 @@ def test_enabled_tools_without_key(monkeypatch):
     settings = get_settings()
     settings.openweather_api_key = ""
     monkeypatch.setattr(settings, "pzz_enabled", True)
+    monkeypatch.setattr(settings, "feedback_webhook_url", "")
     assert [t["function"]["name"] for t in enabled_tools()] == [
         "get_current_datetime",
         "download_file",
@@ -135,6 +136,7 @@ def test_enabled_tools_with_key(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "openweather_api_key", "ow-test")
     monkeypatch.setattr(settings, "pzz_enabled", True)
+    monkeypatch.setattr(settings, "feedback_webhook_url", "")
     tools = enabled_tools()
     assert [t["function"]["name"] for t in tools] == [
         "get_current_datetime",
@@ -595,6 +597,7 @@ def test_datetime_advertised_without_weather_key(client, mock_models, monkeypatc
     assert "get_current_datetime" in tools
     assert "get_weather" not in tools
     assert "generate_image" not in tools
+    assert "send_feedback" not in tools
 
 
 def test_v1_proxies_tools(client, mock_models, monkeypatch, api_key):
