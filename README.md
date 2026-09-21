@@ -16,6 +16,7 @@
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
 - Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
+- Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
 - Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
 - Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
 - Skills: свои markdown-навыки (приватные по умолчанию), публикация в каталог `/catalog`, копия чужого с `parent_id`, дефолты в `/settings`, набор чата в панели «Навыки»
@@ -144,6 +145,7 @@ cd frontend && npm run dev   # :5173
 | `OPENWEATHER_API_KEY` | Ключ OpenWeatherMap: включает инструменты погоды `get_weather` и `get_user_location` в `/api/chat`. Пусто — инструменты отключены |
 | `PZZ_ENABLED` | Инструменты pzz.by в `/api/chat` (`pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order`). По умолчанию включены (`1`) |
 | `PZZ_ORDERS_ENABLED` | Разрешить реальную отправку заказа на pzz.by (`confirm=true`). `0` — только черновик и ссылка на сайт |
+| `FEEDBACK_WEBHOOK_URL` | Incoming Webhook Slack (или Discord / любой POST JSON с полем `text`): включает `send_feedback` в `/api/chat`. Пусто — инструмент выключен |
 | `DOWNLOADS_MAX_BYTES` | Лимит размера файла для `download_file` (по умолчанию `2097152` = 2 МБ) |
 | `S3_ENDPOINT` | S3 API, прод Cloud.ru: `https://s3.cloud.ru`. Вместе с bucket и ключами включает `generate_image` |
 | `S3_REGION` | Регион SigV4 (по умолчанию `ru-central-1`) |
@@ -195,6 +197,8 @@ Redirect URI (прописать в кабинете 1:1):
 Заметка чата: на ПК экран делится (чат слева, markdown справа: исходник / просмотр, скачивание `.md`). Модель в `/api/chat` может читать и писать заметку текущего диалога (`read_chat_note`, `write_chat_note`); в публичный `/v1` эти tools не попадают.
 
 Картинки (`generate_image`) только в `/api/chat`: модель вызывает tool, бэкенд ходит в OpenRouter `POST /api/v1/images` (`black-forest-labs/flux.2-klein-4b`) и кладёт PNG в S3. В ответ пользователю — markdown с публичным URL. Без S3 tool не рекламируется. Биллинга нет; есть суточный лимит. API-токены (`/v1/chat/completions`) этот tool не получают.
+
+Обратная связь (`send_feedback`) только в `/api/chat`. Если пользователь жалуется на сервис, предлагает идею или просит связаться с командой, модель сначала уточняет, что именно не так, показывает черновик и после согласия отправляет его на `FEEDBACK_WEBHOOK_URL`. Slack Incoming Webhook принимает JSON с полем `text`; Discord — с полем `content` (адрес `discord.com` определяется сам). Без переменной инструмент не рекламируется. В сообщение попадают email аккаунта, номер и тема чата. В `/v1` инструмент не отдаётся.
 
 ## API (кратко)
 

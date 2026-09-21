@@ -41,7 +41,8 @@
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
-| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image` |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`) |
+| `app/feedback.py` | `send_feedback`: Incoming Webhook Slack/Discord (`FEEDBACK_WEBHOOK_URL`) |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
 | `app/skills.py` | CRUD skills, публикация/каталог/копия, дефолты, набор чата |
 | `app/routes/skills.py` | `/api/skills*`, `/api/catalog/skills*` |
