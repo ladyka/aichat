@@ -41,6 +41,7 @@ def test_settings_defaults(monkeypatch):
     assert settings.max_tokens_per_user == 10
     assert not settings.arize_enabled
     assert not settings.new_relic_enabled
+    assert not settings.openrouter_enabled
     assert not settings.e7_by_enabled
     assert settings.e7_by_base_url == ""
     assert not settings.s3_enabled

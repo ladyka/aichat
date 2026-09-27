@@ -389,6 +389,45 @@ textarea { resize: vertical; min-height: 64px; }
   margin-top: 2rem;
 }
 .page-chat .site-footer { display: none; }
+
+.cookie-consent {
+  position: fixed;
+  z-index: 1000;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem 1.15rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  animation: cookie-consent-in 280ms ease;
+}
+.cookie-consent[hidden] { display: none; }
+.cookie-consent-text {
+  margin: 0;
+  flex: 1 1 14rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.cookie-consent-accept {
+  flex: 0 0 auto;
+}
+@keyframes cookie-consent-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .footer-nav {
   display: flex;
   flex-wrap: wrap;

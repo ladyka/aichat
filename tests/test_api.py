@@ -155,6 +155,32 @@ def test_v1_completions_normalizes_model(client, mock_models, monkeypatch):
     assert response.json()["model"] == "default"
 
 
+def test_response_model_id_reveals_routed_default():
+    from app.models_catalog import ModelRoute, PROVIDER_OPENROUTER, PUBLIC_DEFAULT_ID
+    from app.routes.api import _response_model_id
+
+    route = ModelRoute(
+        public_id=PUBLIC_DEFAULT_ID,
+        provider=PROVIDER_OPENROUTER,
+        upstream_id="openrouter/free",
+    )
+    assert _response_model_id(route, "openrouter/free") == "default"
+    assert _response_model_id(route, "google/gemini-2.0-flash-exp:free") == (
+        "google/gemini-2.0-flash-exp"
+    )
+    assert _response_model_id(route, None) == "default"
+
+
+def test_payload_from_body_asks_openrouter_for_stream_usage():
+    from app.routes.api import _payload_from_body
+
+    _, payload = _payload_from_body(
+        {"model": "default", "messages": [{"role": "user", "content": "hi"}], "stream": True}
+    )
+    assert payload["stream"] is True
+    assert payload["stream_options"] == {"include_usage": True}
+
+
 def test_daily_api_limit_per_token(client, mock_models, monkeypatch):
     register(client, email())
     token, _ = create_token(client)

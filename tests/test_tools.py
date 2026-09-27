@@ -543,6 +543,38 @@ def test_stream_tool_loop(client, mock_models, monkeypatch):
     assert second["stream"] is True
 
 
+def test_stream_tool_loop_after_thinking_content(client, mock_models, monkeypatch):
+    """Thinking-модель может писать в content до tool_calls — инструмент всё равно вызывается."""
+    _auth(client)
+    settings = get_settings()
+    monkeypatch.setattr(settings, "openweather_api_key", "ow-test")
+    first_turn = [_sse_text("Сначала подумаю…")] + _sse_tool_call(
+        "get_weather", '{"city": "Minsk"}', "call_think"
+    )
+    plan = StreamPlan(
+        stream_responses=[
+            first_turn,
+            _sse_text("В Минске 15 градусов"),
+        ],
+    )
+    _patch(monkeypatch, plan, _fake_weather)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "model": "default",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Погода в Минске?"}],
+        },
+    )
+    assert response.status_code == 200
+    assert "В Минске 15 градусов" in response.text
+    assert plan.stream_calls == 2
+    sent = _upstream(plan.stream_payloads[1])
+    assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
+    assert sent[2]["tool_call_id"] == "call_think"
+
+
 def test_non_stream_tool_loop(client, mock_models, monkeypatch):
     """Non-stream /api/chat answers with final JSON after the tool run."""
     _auth(client)

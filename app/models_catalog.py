@@ -119,6 +119,64 @@ def _created_int(raw: dict[str, Any]) -> int | None:
         return None
 
 
+def _default_route() -> ModelRoute | None:
+    """Маршрут публичного id `default` по `DEFAULT_MODEL`.
+
+    `DEFAULT_MODEL=default` (или пусто) → openrouter/free, только если OpenRouter
+    включён. Иначе `DEFAULT_MODEL` может быть конкретным публичным id
+    (`ol/…`, `e7/…`, модель OpenRouter) — тогда `default` указывает на него.
+    """
+    settings = get_settings()
+    target = (settings.default_model or "").strip() or PUBLIC_DEFAULT_ID
+
+    if target in (PUBLIC_DEFAULT_ID, UPSTREAM_DEFAULT_ID):
+        if not settings.openrouter_enabled:
+            return None
+        return ModelRoute(
+            public_id=PUBLIC_DEFAULT_ID,
+            provider=PROVIDER_OPENROUTER,
+            upstream_id=UPSTREAM_DEFAULT_ID,
+        )
+
+    if target.startswith(OL_PREFIX):
+        if not settings.ol_enabled:
+            logger.warning("DEFAULT_MODEL=%r, но провайдер ol выключен", target)
+            return None
+        upstream = to_ol_upstream_id(target)
+        if not upstream:
+            return None
+        return ModelRoute(
+            public_id=PUBLIC_DEFAULT_ID,
+            provider=PROVIDER_OL,
+            upstream_id=upstream,
+        )
+
+    if target.startswith(E7_BY_PREFIX):
+        if not settings.e7_by_enabled:
+            logger.warning("DEFAULT_MODEL=%r, но провайдер e7 выключен", target)
+            return None
+        upstream = to_e7_upstream_id(target)
+        if not upstream:
+            return None
+        return ModelRoute(
+            public_id=PUBLIC_DEFAULT_ID,
+            provider=PROVIDER_E7_BY,
+            upstream_id=upstream,
+        )
+
+    if not settings.openrouter_enabled:
+        logger.warning(
+            "DEFAULT_MODEL=%r требует OpenRouter, но OPENROUTER_API_KEY не задан",
+            target,
+        )
+        return None
+    return ModelRoute(
+        public_id=PUBLIC_DEFAULT_ID,
+        provider=PROVIDER_OPENROUTER,
+        upstream_id=to_upstream_id(target),
+    )
+
+
 def _build_models_response(
     openrouter_raw: list[dict[str, Any]],
     e7_raw: list[dict[str, Any]] | None = None,
@@ -137,14 +195,12 @@ def _build_models_catalog(
     seen: set[str] = set()
     routes: dict[str, ModelRoute] = {}
 
-    items.append(_openai_model_item(PUBLIC_DEFAULT_ID, owned_by="aichat"))
-    seen.add(PUBLIC_DEFAULT_ID)
-    seen.add(UPSTREAM_DEFAULT_ID)
-    routes[PUBLIC_DEFAULT_ID] = ModelRoute(
-        public_id=PUBLIC_DEFAULT_ID,
-        provider=PROVIDER_OPENROUTER,
-        upstream_id=UPSTREAM_DEFAULT_ID,
-    )
+    default_route = _default_route()
+    if default_route is not None:
+        items.append(_openai_model_item(PUBLIC_DEFAULT_ID, owned_by="aichat"))
+        seen.add(PUBLIC_DEFAULT_ID)
+        seen.add(UPSTREAM_DEFAULT_ID)
+        routes[PUBLIC_DEFAULT_ID] = default_route
 
     for raw in openrouter_raw:
         upstream_id = str(raw.get("id") or "")
@@ -222,11 +278,13 @@ async def _fetch_provider_models() -> tuple[
     list[dict[str, Any]],
 ]:
     settings = get_settings()
-    openrouter_task = asyncio.create_task(_fetch_openrouter_models())
+    openrouter_task = (
+        asyncio.create_task(_fetch_openrouter_models()) if settings.openrouter_enabled else None
+    )
     e7_task = asyncio.create_task(e7by.list_models()) if settings.e7_by_enabled else None
     ol_task = asyncio.create_task(ol.list_models()) if settings.ol_enabled else None
     openrouter_raw, e7_raw, ol_raw = await asyncio.gather(
-        openrouter_task,
+        openrouter_task or _empty_models(),
         e7_task or _empty_models(),
         ol_task or _empty_models(),
         return_exceptions=True,
@@ -284,6 +342,18 @@ def resolve_model(public_id: str | None) -> ModelRoute:
     if requested in _cache_routes:
         return _cache_routes[requested]
 
+    if requested in (PUBLIC_DEFAULT_ID, UPSTREAM_DEFAULT_ID):
+        route = _default_route()
+        if route is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Модель default недоступна: задайте DEFAULT_MODEL на ol/… или e7/… "
+                    "либо укажите OPENROUTER_API_KEY"
+                ),
+            )
+        return route
+
     if requested.startswith(E7_BY_PREFIX):
         if not settings.e7_by_enabled:
             raise HTTPException(status_code=503, detail="E7_BY_BASE_URL is not configured")
@@ -321,14 +391,10 @@ def resolve_model(public_id: str | None) -> ModelRoute:
             upstream_id=upstream,
         )
 
-    upstream = to_upstream_id(requested)
-    if upstream == UPSTREAM_DEFAULT_ID:
-        return ModelRoute(
-            public_id=PUBLIC_DEFAULT_ID,
-            provider=PROVIDER_OPENROUTER,
-            upstream_id=UPSTREAM_DEFAULT_ID,
-        )
+    if not settings.openrouter_enabled:
+        raise HTTPException(status_code=503, detail="OPENROUTER_API_KEY is not configured")
 
+    upstream = to_upstream_id(requested)
     public = to_public_id(upstream)
     if _cache_public_ids and public not in _cache_public_ids and requested not in _cache_public_ids:
         raise HTTPException(

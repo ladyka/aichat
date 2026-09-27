@@ -1,15 +1,117 @@
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
+  useAui,
+  useAuiState,
 } from "@assistant-ui/react";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
+
+const TITLE_MAX = 200;
+
+function ThreadTitleEditor({
+  title,
+  onSave,
+  onCancel,
+  className,
+}: {
+  title: string;
+  onSave: (next: string) => void;
+  onCancel: () => void;
+  className?: string;
+}) {
+  const [draft, setDraft] = useState(title);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const skipBlurSave = useRef(false);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  function commit() {
+    const next = draft.trim().slice(0, TITLE_MAX);
+    if (next) onSave(next);
+    else onCancel();
+  }
+
+  return (
+    <form
+      className={className}
+      onSubmit={(event) => {
+        event.preventDefault();
+        commit();
+      }}
+    >
+      <input
+        ref={inputRef}
+        className="thread-title-input"
+        value={draft}
+        maxLength={TITLE_MAX}
+        aria-label="Название чата"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => {
+          if (skipBlurSave.current) {
+            skipBlurSave.current = false;
+            return;
+          }
+          commit();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            skipBlurSave.current = true;
+            onCancel();
+          }
+        }}
+      />
+    </form>
+  );
+}
 
 function ThreadListItem() {
+  const aui = useAui();
+  const title = useAuiState((s) => s.threadListItem.title?.trim() || "");
+  const [editing, setEditing] = useState(false);
+
+  function startEdit(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    setEditing(true);
+  }
+
+  if (editing) {
+    return (
+      <ThreadListItemPrimitive.Root className="group flex items-center gap-1 rounded-lg px-2 py-1.5 data-[active]:bg-[color-mix(in_srgb,var(--chat-accent)_12%,transparent)]">
+        <ThreadTitleEditor
+          title={title || "Новый чат"}
+          className="min-w-0 flex-1"
+          onSave={(next) => {
+            if (next !== title) aui.threadListItem.rename(next);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </ThreadListItemPrimitive.Root>
+    );
+  }
+
   return (
     <ThreadListItemPrimitive.Root className="group flex items-center gap-1 rounded-lg px-2 py-1.5 data-[active]:bg-[color-mix(in_srgb,var(--chat-accent)_12%,transparent)] hover:bg-black/5">
-      <ThreadListItemPrimitive.Trigger className="min-w-0 flex-1 truncate text-left text-sm">
+      <ThreadListItemPrimitive.Trigger
+        className="min-w-0 flex-1 truncate text-left text-sm"
+        onDoubleClick={startEdit}
+      >
         <ThreadListItemPrimitive.Title fallback="Новый чат" />
       </ThreadListItemPrimitive.Trigger>
+      <button
+        type="button"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--chat-muted)] opacity-0 hover:bg-black/5 hover:text-[var(--chat-ink)] group-hover:opacity-100 focus-visible:opacity-100"
+        aria-label="Переименовать чат"
+        onClick={startEdit}
+      >
+        <Pencil className="h-3.5 w-3.5" aria-hidden />
+      </button>
     </ThreadListItemPrimitive.Root>
   );
 }
@@ -25,5 +127,41 @@ export function ThreadList() {
         <ThreadListPrimitive.Items components={{ ThreadListItem }} />
       </div>
     </ThreadListPrimitive.Root>
+  );
+}
+
+/** Заголовок открытого чата в шапке: клик — переименовать. */
+export function ActiveThreadTitle() {
+  const aui = useAui();
+  const title = useAuiState((s) => s.threadListItem.title?.trim() || "");
+  const remoteId = useAuiState((s) => s.threadListItem.remoteId);
+  const [editing, setEditing] = useState(false);
+
+  if (!remoteId) return null;
+
+  if (editing) {
+    return (
+      <ThreadTitleEditor
+        title={title || "Новый чат"}
+        className="min-w-0 flex-1"
+        onSave={(next) => {
+          if (next !== title) aui.threadListItem.rename(next);
+          setEditing(false);
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="thread-title-button min-w-0 flex-1 truncate text-left text-sm font-medium text-[var(--chat-ink)] hover:text-[var(--chat-accent)]"
+      onClick={() => setEditing(true)}
+      aria-label="Переименовать чат"
+      title="Переименовать"
+    >
+      {title || "Новый чат"}
+    </button>
   );
 }

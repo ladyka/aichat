@@ -23,6 +23,7 @@ from app.model_providers.openrouter import chat_completions, stream_chat_complet
 from app.models_catalog import (
     PROVIDER_E7_BY,
     PROVIDER_OL,
+    PROVIDER_OPENROUTER,
     PUBLIC_DEFAULT_ID,
     UPSTREAM_DEFAULT_ID,
     ModelRoute,
@@ -38,7 +39,10 @@ from app.tools import call_tool, enabled_tools, extract_tool_calls
 router = APIRouter()
 logger = logging.getLogger("aichat.completions")
 
-MAX_TOOL_STEPS = 5
+MAX_TOOL_STEPS = 30
+TOOL_LOOP_LIMIT_ERROR = (
+    "Слишком много шагов с инструментами за один ответ. Упростите запрос или продолжите диалог."
+)
 
 
 def _trace_user(user: User, session_id: str):
@@ -56,14 +60,20 @@ def _normalize_public_model(model: str | None) -> str:
 
 
 def _response_model_id(route: ModelRoute, reported: str | None) -> str:
-    if route.public_id == PUBLIC_DEFAULT_ID:
-        return PUBLIC_DEFAULT_ID
+    """Публичный id модели в ответе клиенту.
+
+    Для алиаса `default` подставляем фактическую модель из upstream, если
+    провайдер её сообщил — иначе оставляем `default` (когда цель — openrouter/free).
+    """
     if reported:
         if route.provider == PROVIDER_E7_BY:
             return to_e7_public_id(reported) or route.public_id
         if route.provider == PROVIDER_OL:
             return to_ol_public_id(reported) or route.public_id
-        return to_public_id(reported)
+        public = to_public_id(reported)
+        if route.public_id == PUBLIC_DEFAULT_ID and public == PUBLIC_DEFAULT_ID:
+            return PUBLIC_DEFAULT_ID
+        return public
     return route.public_id
 
 
@@ -102,6 +112,9 @@ def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]
             payload[key] = body[key]
     if body.get("stream"):
         payload["stream"] = True
+        # OpenRouter отдаёт usage в финальном SSE-чанке только по запросу.
+        if route.provider == PROVIDER_OPENROUTER:
+            payload["stream_options"] = {"include_usage": True}
     return route, payload
 
 
@@ -245,7 +258,7 @@ async def _tool_chat_response(
     messages = list(payload.get("messages") or [])
     location = _known_location(messages, known_location)
     if not payload.get("stream"):
-        for _ in range(MAX_TOOL_STEPS):
+        for step in range(MAX_TOOL_STEPS):
             response = await _call_chat(route, payload)
             try:
                 data = response.json()
@@ -262,10 +275,18 @@ async def _tool_chat_response(
             if not isinstance(message, dict) or not message.get("tool_calls"):
                 _log_usage(db, user, route.public_id, source, data.get("usage"))
                 return JSONResponse(content=data, status_code=response.status_code)
-            requests_location = any(
-                call.get("function", {}).get("name") == "get_user_location"
+            tool_names = [
+                str(call.get("function", {}).get("name") or "")
                 for call in message["tool_calls"]
+            ]
+            logger.info(
+                "tool loop step=%s/%s tools=%s user_id=%s",
+                step + 1,
+                MAX_TOOL_STEPS,
+                ",".join(name for name in tool_names if name) or "-",
+                user.id,
             )
+            requests_location = any(name == "get_user_location" for name in tool_names)
             if requests_location and not location:
                 return JSONResponse(
                     content={
@@ -294,23 +315,39 @@ async def _tool_chat_response(
                 )
             location = _known_location(messages, known_location)
             payload = {**payload, "messages": messages}
+        logger.warning(
+            "tool loop limit exceeded source=%s user_id=%s steps=%s stream=false",
+            source,
+            user.id,
+            MAX_TOOL_STEPS,
+        )
         return JSONResponse(
             status_code=502,
-            content={"error": "Tool loop limit exceeded"},
+            content={"error": TOOL_LOOP_LIMIT_ERROR},
         )
 
-    for _ in range(MAX_TOOL_STEPS):
+    for step in range(MAX_TOOL_STEPS):
         stream = _stream_completions(route, payload)
         prefix = b""
         classified: str | None = None
+        # Если модели доступны tools, не обрываем буфер на первом content:
+        # thinking-модели (glm и др.) часто пишут рассуждение в content до tool_calls.
+        # Иначе петля принимает ответ за обычный текст и не вызывает инструмент
+        # (например write_chat_note) — заметка не сохраняется.
+        wait_for_tools = bool(payload.get("tools"))
         async for chunk in stream:
             prefix += chunk
             if extract_tool_calls(prefix):
                 classified = "tool"
                 break
-            if _sse_has_content(prefix):
+            if not wait_for_tools and _sse_has_content(prefix):
                 classified = "text"
                 break
+        if classified is None:
+            if extract_tool_calls(prefix):
+                classified = "tool"
+            elif _sse_has_content(prefix):
+                classified = "text"
         if classified is None:
             # Stream finished with no content and no tool calls.
             return StreamingResponse(
@@ -328,6 +365,13 @@ async def _tool_chat_response(
         async for chunk in stream:
             raw += chunk
         calls = extract_tool_calls(raw)
+        logger.info(
+            "tool loop step=%s/%s tools=%s user_id=%s",
+            step + 1,
+            MAX_TOOL_STEPS,
+            ",".join(call["name"] for call in calls) or "-",
+            user.id,
+        )
         requests_location = any(call["name"] == "get_user_location" for call in calls)
         if requests_location and not location:
             assistant_message = _tool_call_messages(calls)[0]
@@ -351,9 +395,15 @@ async def _tool_chat_response(
         location = _known_location(messages, known_location)
         payload = {**payload, "messages": messages, "stream": True}
 
+    logger.warning(
+        "tool loop limit exceeded source=%s user_id=%s steps=%s stream=true",
+        source,
+        user.id,
+        MAX_TOOL_STEPS,
+    )
     return JSONResponse(
         status_code=502,
-        content={"error": "Tool loop limit exceeded"},
+        content={"error": TOOL_LOOP_LIMIT_ERROR},
     )
 
 

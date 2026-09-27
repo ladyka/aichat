@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   ComposerPrimitive,
   MessagePrimitive,
@@ -8,8 +8,10 @@ import {
   type ReasoningMessagePartProps,
   type TextMessagePartProps,
 } from "@assistant-ui/react";
+import { Info } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { responseInfoFromCustom } from "@/lib/response-info";
 
 type ThreadAui = ReturnType<typeof useAui>;
 
@@ -47,6 +49,88 @@ async function repeatRequest(aui: ThreadAui, targetId: string): Promise<void> {
     await aui.thread.deleteMessage(m.id);
   }
   aui.thread.startRun({ parentId: question.id });
+}
+
+function formatTokens(n: number | undefined): string | null {
+  if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  return String(Math.round(n));
+}
+
+function formatCost(cost: number | undefined): string | null {
+  if (typeof cost !== "number" || !Number.isFinite(cost)) return null;
+  if (cost === 0) return "0";
+  if (cost < 0.0001) return cost.toExponential(2);
+  return cost.toFixed(4);
+}
+
+function ResponseInfoButton() {
+  const info = useAuiState((s) =>
+    responseInfoFromCustom(
+      s.message.metadata?.custom as Record<string, unknown> | undefined,
+    ),
+  );
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  if (!info) return null;
+
+  const rows: { label: string; value: string }[] = [];
+  if (info.model) rows.push({ label: "Модель", value: info.model });
+  const prompt = formatTokens(info.usage?.prompt_tokens);
+  const completion = formatTokens(info.usage?.completion_tokens);
+  const total = formatTokens(info.usage?.total_tokens);
+  if (prompt) rows.push({ label: "Токены запроса", value: prompt });
+  if (completion) rows.push({ label: "Токены ответа", value: completion });
+  if (total) rows.push({ label: "Всего токенов", value: total });
+  const cost = formatCost(info.usage?.cost);
+  if (cost) rows.push({ label: "Стоимость, $", value: cost });
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="msg-info" ref={rootRef}>
+      <button
+        type="button"
+        className="msg-action msg-action-icon"
+        aria-label="Сведения об ответе"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Info size={14} strokeWidth={2} aria-hidden />
+      </button>
+      {open ? (
+        <div id={panelId} className="msg-info-panel" role="dialog" aria-label="Сведения об ответе">
+          <dl className="msg-info-list">
+            {rows.map((row) => (
+              <div key={row.label} className="msg-info-row">
+                <dt>{row.label}</dt>
+                <dd>{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function UserMessage() {
@@ -209,7 +293,15 @@ function AssistantMessage() {
   const messageId = useAuiState((s) => s.message.id);
   const isLast = useAuiState((s) => s.message.isLast);
   const isRunning = useAuiState((s) => s.thread.isRunning);
+  const hasInfo = useAuiState((s) =>
+    Boolean(
+      responseInfoFromCustom(
+        s.message.metadata?.custom as Record<string, unknown> | undefined,
+      ),
+    ),
+  );
   const [busy, setBusy] = useState(false);
+  const showActions = hasInfo || (isLast && !isRunning);
 
   return (
     <MessagePrimitive.Root className="flex w-full flex-col items-start">
@@ -221,19 +313,22 @@ function AssistantMessage() {
           components={{ Text: MarkdownText, Reasoning: ReasoningText }}
         />
       </div>
-      {isLast && !isRunning ? (
+      {showActions ? (
         <div className="msg-actions">
-          <button
-            type="button"
-            className="msg-action"
-            disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              void repeatRequest(aui, messageId).finally(() => setBusy(false));
-            }}
-          >
-            Повторить
-          </button>
+          <ResponseInfoButton />
+          {isLast && !isRunning ? (
+            <button
+              type="button"
+              className="msg-action"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void repeatRequest(aui, messageId).finally(() => setBusy(false));
+              }}
+            >
+              Повторить
+            </button>
+          ) : null}
         </div>
       ) : null}
     </MessagePrimitive.Root>

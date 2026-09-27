@@ -13,10 +13,11 @@
 
 ### Product facts (не ломать без явной просьбы)
 
-- Бэкенд LLM: **OpenRouter** (серверный `OPENROUTER_API_KEY`) и опционально **e7** (Ollama, `E7_BY_BASE_URL`).
+- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **e7** (`E7_BY_BASE_URL`) и **ol** (`OLLAMA_API_KEY`). Без ключа OpenRouter провайдер не вызывается.
+- Публичный id `default` указывает на цель из `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash`).
 - Пользователям показываем только **free**-модели OpenRouter; в публичных id **нет** суффикса `:free`.
-- Публичная модель `default` → upstream `openrouter/free`.
 - Модели e7 в публичных id: `e7/<ollama-model>` (`owned_by`: `e7`).
+- Модели ol в публичных id: `ol/<ollama-model>` (`owned_by`: `ol`).
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата. Страница — одна карточка с двумя разделами: «Чат» (`/settings#chat`: модель и навыки для новых чатов) и «API-токены» (`/settings#api`). Адрес в примере `curl` берётся из `public_origin()` (`PUBLIC_BASE_URL`, иначе хост запроса), а не пишется в шаблоне руками.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).

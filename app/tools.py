@@ -470,6 +470,13 @@ def _chat_note_tool(
         return json.dumps({"error": err or "Не удалось сохранить заметку."}, ensure_ascii=False)
     db.commit()
     db.refresh(note)
+    logger.info(
+        "write_chat_note ok conversation_id=%s note_id=%s mode=%s body_chars=%s",
+        conv.id,
+        note.id,
+        str(args.get("mode") or "replace"),
+        len(note.body or ""),
+    )
     return json.dumps(
         {"ok": True, "title": note.title, "body": note.body},
         ensure_ascii=False,
