@@ -39,7 +39,10 @@ from app.tools import call_tool, enabled_tools, extract_tool_calls
 router = APIRouter()
 logger = logging.getLogger("aichat.completions")
 
-MAX_TOOL_STEPS = 5
+MAX_TOOL_STEPS = 30
+TOOL_LOOP_LIMIT_ERROR = (
+    "Слишком много шагов с инструментами за один ответ. Упростите запрос или продолжите диалог."
+)
 
 
 def _trace_user(user: User, session_id: str):
@@ -255,7 +258,7 @@ async def _tool_chat_response(
     messages = list(payload.get("messages") or [])
     location = _known_location(messages, known_location)
     if not payload.get("stream"):
-        for _ in range(MAX_TOOL_STEPS):
+        for step in range(MAX_TOOL_STEPS):
             response = await _call_chat(route, payload)
             try:
                 data = response.json()
@@ -272,10 +275,18 @@ async def _tool_chat_response(
             if not isinstance(message, dict) or not message.get("tool_calls"):
                 _log_usage(db, user, route.public_id, source, data.get("usage"))
                 return JSONResponse(content=data, status_code=response.status_code)
-            requests_location = any(
-                call.get("function", {}).get("name") == "get_user_location"
+            tool_names = [
+                str(call.get("function", {}).get("name") or "")
                 for call in message["tool_calls"]
+            ]
+            logger.info(
+                "tool loop step=%s/%s tools=%s user_id=%s",
+                step + 1,
+                MAX_TOOL_STEPS,
+                ",".join(name for name in tool_names if name) or "-",
+                user.id,
             )
+            requests_location = any(name == "get_user_location" for name in tool_names)
             if requests_location and not location:
                 return JSONResponse(
                     content={
@@ -304,12 +315,18 @@ async def _tool_chat_response(
                 )
             location = _known_location(messages, known_location)
             payload = {**payload, "messages": messages}
+        logger.warning(
+            "tool loop limit exceeded source=%s user_id=%s steps=%s stream=false",
+            source,
+            user.id,
+            MAX_TOOL_STEPS,
+        )
         return JSONResponse(
             status_code=502,
-            content={"error": "Tool loop limit exceeded"},
+            content={"error": TOOL_LOOP_LIMIT_ERROR},
         )
 
-    for _ in range(MAX_TOOL_STEPS):
+    for step in range(MAX_TOOL_STEPS):
         stream = _stream_completions(route, payload)
         prefix = b""
         classified: str | None = None
@@ -348,6 +365,13 @@ async def _tool_chat_response(
         async for chunk in stream:
             raw += chunk
         calls = extract_tool_calls(raw)
+        logger.info(
+            "tool loop step=%s/%s tools=%s user_id=%s",
+            step + 1,
+            MAX_TOOL_STEPS,
+            ",".join(call["name"] for call in calls) or "-",
+            user.id,
+        )
         requests_location = any(call["name"] == "get_user_location" for call in calls)
         if requests_location and not location:
             assistant_message = _tool_call_messages(calls)[0]
@@ -371,9 +395,15 @@ async def _tool_chat_response(
         location = _known_location(messages, known_location)
         payload = {**payload, "messages": messages, "stream": True}
 
+    logger.warning(
+        "tool loop limit exceeded source=%s user_id=%s steps=%s stream=true",
+        source,
+        user.id,
+        MAX_TOOL_STEPS,
+    )
     return JSONResponse(
         status_code=502,
-        content={"error": "Tool loop limit exceeded"},
+        content={"error": TOOL_LOOP_LIMIT_ERROR},
     )
 
 
