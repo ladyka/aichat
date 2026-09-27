@@ -116,6 +116,8 @@ class Settings:
         # Пицца Лисицца (pzz.by): публичный каталог в чате. Заказы — через их SPA API.
         self.pzz_enabled = _flag(_env("PZZ_ENABLED", "1"), default=True)
         self.pzz_orders_enabled = _flag(_env("PZZ_ORDERS_ENABLED", "1"), default=True)
+        # Incoming Webhook Slack / Discord / любой POST JSON. Пусто — send_feedback выключен.
+        self.feedback_webhook_url = (_env("FEEDBACK_WEBHOOK_URL", "") or "").strip()
 
         # Download tool (see app/tools.py): per-user storage + hard size cap.
         self.downloads_root = ROOT / "data" / "customers"
