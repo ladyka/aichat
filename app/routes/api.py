@@ -313,14 +313,24 @@ async def _tool_chat_response(
         stream = _stream_completions(route, payload)
         prefix = b""
         classified: str | None = None
+        # Если модели доступны tools, не обрываем буфер на первом content:
+        # thinking-модели (glm и др.) часто пишут рассуждение в content до tool_calls.
+        # Иначе петля принимает ответ за обычный текст и не вызывает инструмент
+        # (например write_chat_note) — заметка не сохраняется.
+        wait_for_tools = bool(payload.get("tools"))
         async for chunk in stream:
             prefix += chunk
             if extract_tool_calls(prefix):
                 classified = "tool"
                 break
-            if _sse_has_content(prefix):
+            if not wait_for_tools and _sse_has_content(prefix):
                 classified = "text"
                 break
+        if classified is None:
+            if extract_tool_calls(prefix):
+                classified = "tool"
+            elif _sse_has_content(prefix):
+                classified = "text"
         if classified is None:
             # Stream finished with no content and no tool calls.
             return StreamingResponse(
