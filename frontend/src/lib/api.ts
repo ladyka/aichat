@@ -12,6 +12,7 @@ export type ConversationMessage = {
   role: string;
   content: string;
   created_at: string | null;
+  meta?: Record<string, unknown> | null;
 };
 
 export type ConversationDetail = ConversationSummary & {
@@ -92,7 +93,7 @@ export async function deleteConversation(id: string): Promise<void> {
 
 export async function appendMessages(
   id: string,
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: string; meta?: Record<string, unknown> | null }[],
 ): Promise<ConversationMessage[]> {
   const res = await fetch(`/api/conversations/${id}/messages`, {
     method: "POST",

@@ -208,6 +208,11 @@ class Settings:
         return f"{value}/v1"
 
     @property
+    def openrouter_enabled(self) -> bool:
+        """OpenRouter активен только при наличии ключа."""
+        return bool(self.openrouter_api_key)
+
+    @property
     def s3_access_key_id(self) -> str:
         """Access key for SigV4. Cloud.ru needs tenant_id:key_id; other S3 uses key_id as-is."""
         return compose_s3_access_key(self.s3_tenant_id, self.s3_sa_key_id)

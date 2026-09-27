@@ -127,14 +127,14 @@ cd frontend && npm run dev   # :5173
 
 | Переменная | Назначение |
 |------------|------------|
-| `OPENROUTER_API_KEY` | Серверный ключ OpenRouter |
+| `OPENROUTER_API_KEY` | Серверный ключ OpenRouter. Пусто — провайдер выключен |
 | `E7_BY_BASE_URL` | Ollama e7: хост или `.../v1`. Пусто — провайдер выключен |
 | `E7_BY_API_KEY` | Опциональный ключ для e7 |
 | `E7_BY_TIMEOUT` | Таймаут completions e7 (сек, по умолчанию 300) |
 | `OLLAMA_API_KEY` | Ключ Ollama Cloud для провайдера ol. Пусто — провайдер выключен |
 | `OLL_HOST` | Хост ollama для ol (по умолчанию `https://ollama.com`) |
 | `OLL_TIMEOUT` | Таймаут completions ol (сек, по умолчанию 300) |
-| `DEFAULT_MODEL` | Публичная модель по умолчанию (`default`) |
+| `DEFAULT_MODEL` | Куда указывает публичный id `default`: `default` → openrouter/free, или конкретный id (`ol/…`, `e7/…`, модель OpenRouter) |
 | `SYSTEM_PROMPT` | Системный промпт всех диалогов. Не задан — дефолт из `app/config.py`, пустой — отключён |
 | `TITLE_MODEL` | Модель фонового определения темы диалога (после 1-го, 2-го, 5-го ответа робота). Пусто — дефолтная из `DEFAULT_MODEL` (id `default`) |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |

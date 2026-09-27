@@ -28,7 +28,11 @@ def test_openai_model_item():
     assert item["owned_by"] == "openrouter"
 
 
-def test_build_models_response_filters_and_dedupes():
+def test_build_models_response_filters_and_dedupes(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
+    monkeypatch.setattr(get_settings(), "default_model", "default")
     raw = [
         {"id": "openrouter/auto:free", "created": 1},
         {"id": "vendor/paid-model", "created": 2},
@@ -44,7 +48,11 @@ def test_build_models_response_filters_and_dedupes():
     assert "openrouter/free" not in ids
 
 
-def test_build_models_response_includes_e7_ids():
+def test_build_models_response_includes_e7_ids(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
+    monkeypatch.setattr(get_settings(), "default_model", "default")
     raw = [{"id": "vendor/paid-model:free", "created": 1}]
     e7 = [{"id": "llama3.2:latest"}]
     payload = mc._build_models_response(raw, e7)
@@ -74,6 +82,10 @@ def test_get_models_list_cache_and_refresh(monkeypatch):
         calls["n"] += 1
         return [{"id": "openrouter/auto:free", "created": 5}]
 
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
+    monkeypatch.setattr(get_settings(), "default_model", "default")
     monkeypatch.setattr(mc, "_fetch_openrouter_models", fake_fetch)
     monkeypatch.setattr(mc, "_cache_payload", None)
     monkeypatch.setattr(mc, "_cache_expires_at", 0)
@@ -90,6 +102,65 @@ def test_get_models_list_cache_and_refresh(monkeypatch):
     assert forced is not None
     assert calls["n"] == 2
     assert any(i["id"] == "openrouter/auto" for i in first["data"])
+
+
+def test_fetch_provider_models_skips_openrouter_without_key(monkeypatch):
+    from app.config import get_settings
+
+    called = {"or": False}
+
+    async def boom():
+        called["or"] = True
+        raise AssertionError("OpenRouter must not be contacted")
+
+    async def empty():
+        return []
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "")
+    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
+    monkeypatch.setattr(get_settings(), "ol_enabled", True)
+    monkeypatch.setattr(mc, "_fetch_openrouter_models", boom)
+    monkeypatch.setattr(mc.ol, "list_models", empty)
+
+    openrouter_raw, e7_raw, ol_raw = asyncio.run(mc._fetch_provider_models())
+    assert called["or"] is False
+    assert openrouter_raw == []
+    assert e7_raw == []
+    assert ol_raw == []
+
+
+def test_default_route_follows_default_model(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "")
+    monkeypatch.setattr(get_settings(), "ol_enabled", True)
+    monkeypatch.setattr(get_settings(), "default_model", "ol/glm-5.3-flash")
+    monkeypatch.setattr(mc, "_cache_routes", {})
+    monkeypatch.setattr(mc, "_cache_public_ids", set())
+
+    route = mc.resolve_model("default")
+    assert route.provider == mc.PROVIDER_OL
+    assert route.public_id == "default"
+    assert route.upstream_id == "glm-5.3-flash:cloud"
+
+    payload, routes = mc._build_models_catalog([], [], [{"id": "glm-5.3-flash"}])
+    assert routes["default"].upstream_id == "glm-5.3-flash:cloud"
+    assert routes["default"].provider == mc.PROVIDER_OL
+    assert any(item["id"] == "default" for item in payload["data"])
+
+
+def test_default_unavailable_without_openrouter_or_target(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "")
+    monkeypatch.setattr(get_settings(), "ol_enabled", False)
+    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
+    monkeypatch.setattr(get_settings(), "default_model", "default")
+    monkeypatch.setattr(mc, "_cache_routes", {})
+
+    with pytest.raises(HTTPException) as exc:
+        mc.resolve_model("default")
+    assert exc.value.status_code == 503
 
 
 def test_fetch_openrouter_models_error(monkeypatch):
@@ -113,7 +184,12 @@ def test_fetch_openrouter_models_error(monkeypatch):
 
 
 def test_resolve_upstream_model(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
+    monkeypatch.setattr(get_settings(), "default_model", "default")
     monkeypatch.setattr(mc, "_cache_public_ids", set())
+    monkeypatch.setattr(mc, "_cache_routes", {})
     assert mc.resolve_upstream_model("default") == mc.UPSTREAM_DEFAULT_ID
 
     monkeypatch.setattr(mc, "_cache_public_ids", {"openrouter/auto"})
@@ -151,7 +227,11 @@ def test_to_ol_public_and_upstream_id():
     assert mc.to_ol_upstream_id("deepseek-v4.1-flash:cloud") == "deepseek-v4.1-flash:cloud"
 
 
-def test_build_models_response_includes_ol_ids():
+def test_build_models_response_includes_ol_ids(monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
+    monkeypatch.setattr(get_settings(), "default_model", "default")
     raw = [{"id": "vendor/paid-model:free", "created": 1}]
     ol_raw = [{"id": "deepseek-v4.1-flash", "created": 2}]
     payload = mc._build_models_response(raw, [], ol_raw)

@@ -111,6 +111,79 @@ def test_to_openai_response_wraps_content():
     }
 
 
+def test_to_openai_response_accepts_ollama_tool_call_objects():
+    """Библиотека ollama отдаёт Message.ToolCall, а не dict — раньше вызовы терялись."""
+    from ollama._types import Message
+
+    tool_call = Message.ToolCall(
+        function=Message.ToolCall.Function(
+            name="get_current_datetime",
+            arguments={"timezone": "Europe/Minsk"},
+        )
+    )
+    response = FakeChatResponse(content="")
+    response.message.tool_calls = [tool_call]
+    response.message.thinking = "Нужна дата"
+
+    data = ol._to_openai_response("glm-5.3-flash:cloud", response)
+    choice = data["choices"][0]
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["content"] == ""
+    assert choice["message"]["reasoning"] == "Нужна дата"
+    calls = choice["message"]["tool_calls"]
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "get_current_datetime"
+    assert json.loads(calls[0]["function"]["arguments"]) == {"timezone": "Europe/Minsk"}
+
+
+def test_stream_emits_tool_calls_from_ollama_objects(monkeypatch):
+    _enable(monkeypatch)
+    from ollama._types import Message
+
+    class FakeChunk:
+        def __init__(self, content="", thinking=None, tool_calls=None, done=False):
+            self.message = _Message(content=content, tool_calls=tool_calls)
+            self.message.thinking = thinking
+            self.done = done
+            self.prompt_eval_count = 2
+            self.eval_count = 4
+
+    tool_call = Message.ToolCall(
+        function=Message.ToolCall.Function(name="get_current_datetime", arguments={})
+    )
+
+    async def fake_stream(**kw):
+        yield FakeChunk(thinking="Сначала узнаю дату")
+        yield FakeChunk(tool_calls=[tool_call])
+        yield FakeChunk(done=True)
+
+    class FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def chat(self, **kw):
+            return fake_stream(**kw)
+
+    monkeypatch.setattr(ol, "_client", FakeClient)
+
+    async def collect():
+        chunks = []
+        async for chunk in ol.stream_chat_completions(
+            {"model": "glm-5.3-flash:cloud", "stream": True, "tools": []}
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    raw = b"".join(asyncio.run(collect()))
+    from app.tools import extract_tool_calls
+
+    calls = extract_tool_calls(raw)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "get_current_datetime"
+    assert "Сначала узнаю дату".encode("utf-8") in raw
+    assert b'"finish_reason": "tool_calls"' in raw
+
+
 def test_chat_completions_returns_openai_response(monkeypatch):
     _enable(monkeypatch)
 

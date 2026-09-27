@@ -5,6 +5,8 @@ import tempfile
 _tmpdir = tempfile.mkdtemp(prefix="aichat_tests_")
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmpdir}/test.db"
 os.environ["OPENROUTER_BASE_URL"] = "https://openrouter.test/api/v1"
+# Тестовый ключ: без него `default` и OpenRouter-маршруты недоступны.
+os.environ["OPENROUTER_API_KEY"] = "sk-test"
 os.environ["MODELS_CACHE_TTL"] = "3600"
 # Fix the default model so tests don't follow DEFAULT_MODEL from the local .env.
 os.environ["DEFAULT_MODEL"] = "default"

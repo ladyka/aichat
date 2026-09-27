@@ -217,4 +217,35 @@ describe("ChatModelAdapter reasoning and errors", () => {
       "Дневной лимит исчерпан",
     );
   });
+
+  it("should attach real model and usage to message metadata", async () => {
+    const adapter = createChatModelAdapter(() => "conv_123");
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(
+        sseResponse(
+          `data: ${JSON.stringify({
+            model: "google/gemini-2.0-flash-exp",
+            choices: [{ delta: { content: "Ответ" } }],
+          })}`,
+          `data: ${JSON.stringify({
+            model: "google/gemini-2.0-flash-exp",
+            choices: [],
+            usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+          })}`,
+        ),
+      );
+
+    const results: { content: { type: string; text: string }[]; metadata?: unknown }[] = [];
+    for await (const res of adapter.run(runOptions([userMessage("hi")]))) {
+      results.push(res as never);
+    }
+    const last = results[results.length - 1] as {
+      metadata?: { custom?: { response?: { model?: string; usage?: { total_tokens?: number } } } };
+    };
+    expect(last.metadata?.custom?.response).toEqual({
+      model: "google/gemini-2.0-flash-exp",
+      usage: { prompt_tokens: 12, completion_tokens: 3, total_tokens: 15 },
+    });
+  });
 });

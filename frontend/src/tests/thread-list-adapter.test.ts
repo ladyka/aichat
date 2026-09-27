@@ -88,15 +88,36 @@ describe("история чата", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("не удаляет сообщения другого диалога", async () => {
-    let remoteId = "7";
-    fetchMock.mockResolvedValueOnce(detailResponse([{ id: "12", role: "user", content: "вопрос" }]));
-    const adapter = new AichatHistoryAdapter(() => fakeAui(() => remoteId));
-    await adapter.load();
+  it("сохраняет сведения об ответе при дописывании сообщения", async () => {
+    fetchMock.mockResolvedValueOnce(appendedResponse("55"));
+    const adapter = new AichatHistoryAdapter(() => fakeAui(() => "7"));
+    await adapter.append({
+      parentId: null,
+      message: {
+        id: "клиентский",
+        role: "assistant",
+        createdAt: new Date(),
+        content: [{ type: "text", text: "ответ" }],
+        status: { type: "complete", reason: "stop" },
+        metadata: {
+          unstable_state: null,
+          unstable_annotations: [],
+          unstable_data: [],
+          steps: [],
+          custom: {
+            response: {
+              model: "google/gemini-2.0-flash-exp",
+              usage: { total_tokens: 9 },
+            },
+          },
+        },
+      },
+    } as unknown as ExportedMessageRepositoryItem);
 
-    remoteId = "8";
-    await adapter.delete([item("12")]);
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.messages[0].meta).toEqual({
+      model: "google/gemini-2.0-flash-exp",
+      usage: { total_tokens: 9 },
+    });
   });
 });

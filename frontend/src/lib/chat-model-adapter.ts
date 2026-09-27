@@ -5,6 +5,7 @@ import type {
 } from "@assistant-ui/react";
 import { fetchSettings } from "@/lib/api";
 import { notifyNoteChanged } from "@/lib/note-events";
+import type { ResponseInfo } from "@/lib/response-info";
 
 type Location = { lat: number; lon: number };
 
@@ -25,6 +26,8 @@ type LocationRequestEvent = {
   type: "location_request";
   assistant_tool_call: OpenAIMessage;
 };
+
+type UsageInfo = NonNullable<ResponseInfo["usage"]>;
 
 const LOCATION_KEY = "aichat_location_v1";
 const LOCATION_TTL_MS = 2 * 60 * 60 * 1000;
@@ -127,9 +130,50 @@ function buildParts(
   return content;
 }
 
+function parseUsage(raw: unknown): UsageInfo | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const u = raw as Record<string, unknown>;
+  const usage: UsageInfo = {};
+  if (typeof u.prompt_tokens === "number") usage.prompt_tokens = u.prompt_tokens;
+  if (typeof u.completion_tokens === "number") {
+    usage.completion_tokens = u.completion_tokens;
+  }
+  if (typeof u.total_tokens === "number") usage.total_tokens = u.total_tokens;
+  if (typeof u.cost === "number") usage.cost = u.cost;
+  return Object.keys(usage).length > 0 ? usage : undefined;
+}
+
+function buildResponseInfo(
+  requestedModel: string,
+  reportedModel: string | null,
+  usage: UsageInfo | undefined,
+): ResponseInfo | null {
+  const model =
+    reportedModel && reportedModel !== "default"
+      ? reportedModel
+      : requestedModel !== "default"
+        ? requestedModel
+        : reportedModel || undefined;
+  if (!model && !usage) return null;
+  return { ...(model ? { model } : {}), ...(usage ? { usage } : {}) };
+}
+
+function runResult(
+  content: ThreadAssistantMessagePart[],
+  info: ResponseInfo | null,
+) {
+  if (!info) return { content };
+  return {
+    content,
+    metadata: {
+      custom: { response: info },
+    },
+  };
+}
+
 async function* postAndStream(
   options: PostOptions,
-): AsyncGenerator<{ content: ThreadAssistantMessagePart[] }> {
+): AsyncGenerator<ReturnType<typeof runResult>> {
   const { model, conversationId, location, history, abortSignal, state } = options;
   const res = await fetch("/api/chat", {
     method: "POST",
@@ -165,6 +209,8 @@ async function* postAndStream(
   let buffer = "";
   let text = "";
   let reasoning = "";
+  let reportedModel: string | null = null;
+  let usage: UsageInfo | undefined;
   let failed: Error | null = null;
 
   while (true) {
@@ -193,9 +239,21 @@ async function* postAndStream(
         failed = new Error(errorMessage(obj.error));
         continue;
       }
+      if (typeof obj.model === "string" && obj.model) {
+        reportedModel = obj.model;
+      }
+      const parsedUsage = parseUsage(obj.usage);
+      if (parsedUsage) usage = parsedUsage;
+
       const delta = (obj?.choices as { delta?: Record<string, unknown> }[] | undefined)?.[0]
         ?.delta;
-      if (!delta) continue;
+      if (!delta) {
+        const info = buildResponseInfo(model, reportedModel, usage);
+        if (info && (text || reasoning)) {
+          yield runResult(buildParts(reasoning, text), info);
+        }
+        continue;
+      }
       const contentDelta = delta.content;
       if (typeof contentDelta === "string" && contentDelta) {
         text += contentDelta;
@@ -208,14 +266,21 @@ async function* postAndStream(
             : undefined;
       if (reasoningDelta) reasoning += reasoningDelta;
       if (text || reasoning) {
-        yield { content: buildParts(reasoning, text) };
+        yield runResult(
+          buildParts(reasoning, text),
+          buildResponseInfo(model, reportedModel, usage),
+        );
       }
     }
   }
 
   if (failed) throw failed;
+  const info = buildResponseInfo(model, reportedModel, usage);
   if (!text && !reasoning && !state.locationRequest) {
-    yield { content: [{ type: "text" as const, text: "" }] };
+    yield runResult([{ type: "text" as const, text: "" }], info);
+  } else if (info && (text || reasoning)) {
+    // Финальный кадр с полным usage (часто приходит после последнего текста).
+    yield runResult(buildParts(reasoning, text), info);
   }
 }
 

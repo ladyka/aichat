@@ -26,6 +26,7 @@ import {
   listConversations,
   patchConversation,
 } from "@/lib/api";
+import { isResponseInfo, type ResponseInfo } from "@/lib/response-info";
 
 function emptyTitleStream(): ReadableStream<AssistantStreamChunk> {
   return new ReadableStream<AssistantStreamChunk>({
@@ -44,6 +45,25 @@ function textFromThreadMessage(message: ThreadMessage): string {
     .filter((part): part is { type: "text"; text: string } => part.type === "text")
     .map((part) => part.text)
     .join("");
+}
+
+function responseMetaFromMessage(message: ThreadMessage): ResponseInfo | null {
+  if (message.role !== "assistant") return null;
+  const custom = message.metadata?.custom as Record<string, unknown> | undefined;
+  const raw = custom?.response;
+  return isResponseInfo(raw) && (raw.model || raw.usage) ? raw : null;
+}
+
+function assistantMetadata(meta: Record<string, unknown> | null | undefined) {
+  const response =
+    isResponseInfo(meta) && (meta.model || meta.usage) ? meta : null;
+  return {
+    unstable_state: null,
+    unstable_annotations: [],
+    unstable_data: [],
+    steps: [],
+    custom: response ? { response } : {},
+  };
 }
 
 export class AichatHistoryAdapter implements ThreadHistoryAdapter {
@@ -78,13 +98,7 @@ export class AichatHistoryAdapter implements ThreadHistoryAdapter {
           createdAt,
           content: [textPart],
           status: { type: "complete", reason: "stop" },
-          metadata: {
-            unstable_state: null,
-            unstable_annotations: [],
-            unstable_data: [],
-            steps: [],
-            custom: {},
-          },
+          metadata: assistantMetadata(m.meta),
         };
       } else if (m.role === "system") {
         message = {
@@ -116,7 +130,14 @@ export class AichatHistoryAdapter implements ThreadHistoryAdapter {
     const role = item.message.role;
     if (role !== "user" && role !== "assistant" && role !== "system") return;
     const content = textFromThreadMessage(item.message);
-    const [created] = await appendMessages(remoteId, [{ role, content }]);
+    const response = responseMetaFromMessage(item.message);
+    const [created] = await appendMessages(remoteId, [
+      {
+        role,
+        content,
+        ...(response ? { meta: response } : {}),
+      },
+    ]);
     if (created) this.stored.set(item.message.id, { remoteId, dbId: created.id });
   }
 

@@ -23,6 +23,7 @@ from app.model_providers.openrouter import chat_completions, stream_chat_complet
 from app.models_catalog import (
     PROVIDER_E7_BY,
     PROVIDER_OL,
+    PROVIDER_OPENROUTER,
     PUBLIC_DEFAULT_ID,
     UPSTREAM_DEFAULT_ID,
     ModelRoute,
@@ -56,14 +57,20 @@ def _normalize_public_model(model: str | None) -> str:
 
 
 def _response_model_id(route: ModelRoute, reported: str | None) -> str:
-    if route.public_id == PUBLIC_DEFAULT_ID:
-        return PUBLIC_DEFAULT_ID
+    """Публичный id модели в ответе клиенту.
+
+    Для алиаса `default` подставляем фактическую модель из upstream, если
+    провайдер её сообщил — иначе оставляем `default` (когда цель — openrouter/free).
+    """
     if reported:
         if route.provider == PROVIDER_E7_BY:
             return to_e7_public_id(reported) or route.public_id
         if route.provider == PROVIDER_OL:
             return to_ol_public_id(reported) or route.public_id
-        return to_public_id(reported)
+        public = to_public_id(reported)
+        if route.public_id == PUBLIC_DEFAULT_ID and public == PUBLIC_DEFAULT_ID:
+            return PUBLIC_DEFAULT_ID
+        return public
     return route.public_id
 
 
@@ -102,6 +109,9 @@ def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]
             payload[key] = body[key]
     if body.get("stream"):
         payload["stream"] = True
+        # OpenRouter отдаёт usage в финальном SSE-чанке только по запросу.
+        if route.provider == PROVIDER_OPENROUTER:
+            payload["stream_options"] = {"include_usage": True}
     return route, payload
 
 

@@ -80,15 +80,27 @@ def test_append_messages_sets_title(client):
         json={
             "messages": [
                 {"role": "user", "content": "Первый вопрос"},
-                {"role": "assistant", "content": "Ответ"},
+                {
+                    "role": "assistant",
+                    "content": "Ответ",
+                    "meta": {
+                        "model": "google/gemini-2.0-flash-exp",
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14},
+                    },
+                },
             ]
         },
     )
     assert response.status_code == 200
-    assert len(response.json()["data"]) == 2
+    data = response.json()["data"]
+    assert len(data) == 2
+    assert data[1]["meta"]["model"] == "google/gemini-2.0-flash-exp"
+    assert data[1]["meta"]["usage"]["total_tokens"] == 14
 
     fetched = client.get(f"/api/conversations/{conv['id']}")
-    assert fetched.json()["title"] == "Первый вопрос"
+    body = fetched.json()
+    assert body["title"] == "Первый вопрос"
+    assert body["messages"][1]["meta"]["model"] == "google/gemini-2.0-flash-exp"
 
 
 def test_append_messages_invalid_role(client):

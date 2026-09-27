@@ -70,6 +70,45 @@ def _tool_arguments(raw: Any) -> dict[str, Any]:
     return {}
 
 
+def _tool_call_parts(call: Any) -> tuple[str, dict[str, Any]] | None:
+    """Достать (name, arguments) из dict или Message.ToolCall библиотеки ollama."""
+    if isinstance(call, dict):
+        function = call.get("function") or {}
+        if not isinstance(function, dict):
+            return None
+        name = str(function.get("name") or "")
+        arguments = _tool_arguments(function.get("arguments"))
+        return name, arguments
+
+    function = getattr(call, "function", None)
+    if function is None:
+        return None
+    name = str(getattr(function, "name", None) or "")
+    arguments = _tool_arguments(getattr(function, "arguments", None))
+    return name, arguments
+
+
+def _openai_tool_calls(raw_calls: Any) -> list[dict[str, Any]]:
+    """tool_calls ollama (объекты или dict) → OpenAI-формат с id и JSON-arguments."""
+    openai_calls: list[dict[str, Any]] = []
+    for call in raw_calls or []:
+        parts = _tool_call_parts(call)
+        if not parts:
+            continue
+        name, arguments = parts
+        openai_calls.append(
+            {
+                "id": f"call_{uuid4().hex[:12]}",
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": json.dumps(arguments, ensure_ascii=False),
+                },
+            }
+        )
+    return openai_calls
+
+
 def _to_ollama_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """OpenAI-сообщения → ollama: tool_calls без id, tool-сообщение с tool_name."""
     result: list[dict[str, Any]] = []
@@ -148,25 +187,12 @@ def _to_openai_response(model: str, response: Any) -> dict[str, Any]:
     """ChatResponse ollama → OpenAI-совместимый chat.completion."""
     message = getattr(response, "message", None)
     content = getattr(message, "content", None) or ""
-    raw_calls = getattr(message, "tool_calls", None) or []
-    openai_calls = []
-    for call in raw_calls:
-        function = call.get("function") if isinstance(call, dict) else None
-        if not function:
-            continue
-        arguments = function.get("arguments")
-        arguments = arguments if isinstance(arguments, dict) else {}
-        openai_calls.append(
-            {
-                "id": f"call_{uuid4().hex[:12]}",
-                "type": "function",
-                "function": {
-                    "name": function.get("name") or "",
-                    "arguments": json.dumps(arguments, ensure_ascii=False),
-                },
-            }
-        )
+    openai_calls = _openai_tool_calls(getattr(message, "tool_calls", None))
     assistant_message: dict[str, Any] = {"role": "assistant", "content": content}
+    thinking = getattr(message, "thinking", None)
+    if isinstance(thinking, str) and thinking:
+        # OpenRouter-совместимое поле; UI читает reasoning / reasoning_content.
+        assistant_message["reasoning"] = thinking
     if openai_calls:
         assistant_message["tool_calls"] = openai_calls
     prompt_tokens = int(getattr(response, "prompt_eval_count", 0) or 0)
@@ -216,36 +242,33 @@ async def _stream_raw(payload: dict[str, Any]) -> AsyncIterator[bytes]:
     request = _to_ollama_request(payload)
     request["stream"] = True
     chunk_id = f"chatcmpl-{uuid4().hex}"
+    saw_tool_calls = False
     yield _sse_chunk(chunk_id, model, {"role": "assistant", "content": ""})
     try:
         stream = await _client().chat(**request)
         async for chunk in stream:
             message = getattr(chunk, "message", None)
-            tool_calls = getattr(message, "tool_calls", None) or []
-            if tool_calls:
-                for call in tool_calls:
-                    function = call.get("function") if isinstance(call, dict) else None
-                    if not function:
-                        continue
-                    arguments = function.get("arguments")
-                    arguments = arguments if isinstance(arguments, dict) else {}
+            openai_calls = _openai_tool_calls(getattr(message, "tool_calls", None))
+            if openai_calls:
+                saw_tool_calls = True
+                for index, call in enumerate(openai_calls):
                     yield _sse_chunk(
                         chunk_id,
                         model,
                         {
                             "tool_calls": [
                                 {
-                                    "index": 0,
-                                    "id": f"call_{uuid4().hex[:12]}",
+                                    "index": index,
+                                    "id": call["id"],
                                     "type": "function",
-                                    "function": {
-                                        "name": function.get("name") or "",
-                                        "arguments": json.dumps(arguments, ensure_ascii=False),
-                                    },
+                                    "function": call["function"],
                                 }
                             ]
                         },
                     )
+            thinking = getattr(message, "thinking", None)
+            if isinstance(thinking, str) and thinking:
+                yield _sse_chunk(chunk_id, model, {"reasoning": thinking})
             content = getattr(message, "content", None)
             if content:
                 yield _sse_chunk(chunk_id, model, {"content": content})
@@ -257,7 +280,8 @@ async def _stream_raw(payload: dict[str, Any]) -> AsyncIterator[bytes]:
                     "completion_tokens": completion_tokens,
                     "total_tokens": prompt_tokens + completion_tokens,
                 }
-                yield _sse_chunk(chunk_id, model, {}, "stop", usage)
+                finish = "tool_calls" if saw_tool_calls else "stop"
+                yield _sse_chunk(chunk_id, model, {}, finish, usage)
     except ResponseError as exc:
         raise HTTPException(status_code=502, detail={"error": exc.error}) from exc
     yield b"data: [DONE]\n\n"
