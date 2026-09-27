@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -53,22 +52,6 @@ def _conversation_summary(c: Conversation) -> dict[str, Any]:
     }
 
 
-def _parse_meta(raw: str | None) -> dict[str, Any] | None:
-    if not raw:
-        return None
-    try:
-        value = json.loads(raw)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    return value if isinstance(value, dict) else None
-
-
-def _dump_meta(meta: dict[str, Any] | None) -> str | None:
-    if not meta:
-        return None
-    return json.dumps(meta, ensure_ascii=False)
-
-
 def _message_item(m: Message) -> dict[str, Any]:
     item: dict[str, Any] = {
         "id": str(m.id),
@@ -76,9 +59,8 @@ def _message_item(m: Message) -> dict[str, Any]:
         "content": m.content,
         "created_at": _iso(m.created_at),
     }
-    parsed = _parse_meta(m.meta)
-    if parsed is not None:
-        item["meta"] = parsed
+    if isinstance(m.meta, dict):
+        item["meta"] = m.meta
     return item
 
 
@@ -269,7 +251,7 @@ def append_messages(
             conversation_id=conv.id,
             role=role,
             content=content,
-            meta=_dump_meta(item.meta),
+            meta=item.meta if item.meta else None,
         )
         db.add(msg)
         created.append(msg)

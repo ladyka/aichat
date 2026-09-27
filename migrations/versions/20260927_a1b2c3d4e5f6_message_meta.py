@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("messages", sa.Column("meta", sa.Text(), nullable=True))
+    op.add_column("messages", sa.Column("meta", sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:
