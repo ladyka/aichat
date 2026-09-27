@@ -48,6 +48,35 @@ body,
   border-color: var(--chat-accent);
 }
 
+.thread-title-input {
+  width: 100%;
+  border: 1px solid var(--chat-line);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  color: var(--chat-ink);
+  background: #fff;
+}
+
+.thread-title-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--chat-accent) 35%, transparent);
+  border-color: var(--chat-accent);
+}
+
+.thread-title-button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+}
+
+.thread-title-button:hover {
+  background: color-mix(in srgb, var(--chat-line) 55%, transparent);
+}
+
 .msg-bubble {
   max-width: 100%;
   padding: 0.85rem 1.05rem;

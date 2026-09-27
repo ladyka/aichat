@@ -19,7 +19,7 @@ import { RuntimeProvider } from "@/components/RuntimeProvider";
 import { ShareDialog } from "@/components/ShareDialog";
 import { SkillsDialog } from "@/components/SkillsDialog";
 import { Thread } from "@/components/Thread";
-import { ThreadList } from "@/components/ThreadList";
+import { ActiveThreadTitle, ThreadList } from "@/components/ThreadList";
 import { getConversation } from "@/lib/api";
 import { useConversationId } from "@/lib/conversation-id";
 
@@ -214,6 +214,7 @@ function ChatLayout() {
             )}
             {sidebarOpen ? "Скрыть" : "Истории"}
           </button>
+          {conversationId ? <ActiveThreadTitle /> : null}
           {conversationId && (
             <div className="ml-auto flex items-center gap-2">
               <button
