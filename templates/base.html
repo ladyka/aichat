@@ -39,6 +39,27 @@
     </nav>
     <p class="footer-disclaimer">Чатбот может ошибаться и галлюцинировать — проверяйте ответы на реальность.</p>
   </footer>
+  <div id="cookie-consent" class="cookie-consent" role="dialog" aria-live="polite" aria-label="Уведомление о файлах cookie" hidden>
+    <p class="cookie-consent-text">
+      Мы используем файлы cookie для входа в аккаунт и работы сервиса.
+      Подробнее — в <a href="/privacy">политике конфиденциальности</a>.
+    </p>
+    <button type="button" class="btn btn-small cookie-consent-accept" id="cookie-consent-accept">Понятно</button>
+  </div>
+  <script>
+    (function () {
+      var key = "aichat_cookie_consent";
+      if (window.localStorage.getItem(key) === "1") return;
+      var banner = document.getElementById("cookie-consent");
+      var accept = document.getElementById("cookie-consent-accept");
+      if (!banner || !accept) return;
+      banner.hidden = false;
+      accept.addEventListener("click", function () {
+        window.localStorage.setItem(key, "1");
+        banner.hidden = true;
+      });
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

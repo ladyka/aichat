@@ -18,6 +18,9 @@ def test_landing(client):
     assert "/static/og/share.png" in response.text
     assert 'property="og:type" content="website"' in response.text
     assert 'property="og:url" content="http://testserver/"' in response.text
+    assert 'id="cookie-consent"' in response.text
+    assert "aichat_cookie_consent" in response.text
+    assert "файлы cookie" in response.text
 
 
 def test_og_image_is_served(client):
