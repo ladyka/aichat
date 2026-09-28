@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useAui } from "@assistant-ui/react";
 import {
   Archive,
@@ -33,6 +33,29 @@ const userEmail: string | undefined =
 
 function isMobileViewport(): boolean {
   return typeof window !== "undefined" && window.matchMedia(MOBILE_QUERY).matches;
+}
+
+function ChatHeaderButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--chat-line)] p-2 text-sm hover:bg-black/5 md:px-2.5 md:py-1.5"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
+      {children}
+      <span className="hidden md:inline">{label}</span>
+    </button>
+  );
 }
 
 function ChatLayout() {
@@ -97,8 +120,14 @@ function ChatLayout() {
     }
   }, [sidebarOpen]);
 
+  const closeMobileSidebar = useCallback(() => {
+    if (!isMobileViewport()) return;
+    setSidebarOpen(false);
+    setUserMenuOpen(false);
+  }, []);
+
   return (
-    <div className="relative flex h-full min-h-0 bg-[var(--chat-bg)] text-[var(--chat-ink)]">
+    <div className="relative flex h-full min-h-0 overflow-hidden bg-[var(--chat-bg)] text-[var(--chat-ink)]">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-30 bg-black/25 md:hidden"
@@ -124,7 +153,7 @@ function ChatLayout() {
           </a>
         </div>
         <div className="min-h-0 flex-1">
-          <ThreadList />
+          <ThreadList onNavigate={closeMobileSidebar} />
         </div>
         <div className="relative border-t border-[var(--chat-line)] p-2">
           <button
@@ -199,77 +228,65 @@ function ChatLayout() {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-[var(--chat-line)] bg-[var(--chat-panel)] px-3 py-2">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-w-0 items-center gap-1 overflow-hidden border-b border-[var(--chat-line)] bg-[var(--chat-panel)] px-2 py-2 md:gap-2 md:px-3">
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+            className="inline-flex shrink-0 items-center justify-center gap-1 rounded-lg border border-[var(--chat-line)] p-2 text-sm hover:bg-black/5 md:px-2.5 md:py-1.5"
             onClick={() => setSidebarOpen((v) => !v)}
             aria-label={sidebarOpen ? "Скрыть истории" : "Показать истории"}
+            title={sidebarOpen ? "Скрыть истории" : "Показать истории"}
           >
             {sidebarOpen ? (
               <PanelLeftClose className="h-4 w-4" />
             ) : (
               <PanelLeftOpen className="h-4 w-4" />
             )}
-            {sidebarOpen ? "Скрыть" : "Истории"}
+            <span className="hidden md:inline">
+              {sidebarOpen ? "Скрыть" : "Истории"}
+            </span>
           </button>
           {conversationId ? <ActiveThreadTitle /> : null}
           {conversationId && (
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+            <div className="ml-auto flex shrink-0 items-center gap-0.5 md:gap-2">
+              <ChatHeaderButton
+                label={skillCount > 0 ? `Навыки · ${skillCount}` : "Навыки"}
                 onClick={() => setSkillsOpen(true)}
-                aria-label="Навыки"
               >
                 <Sparkles className="h-4 w-4" />
-                {skillCount > 0 ? `Навыки · ${skillCount}` : "Навыки"}
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+              </ChatHeaderButton>
+              <ChatHeaderButton
+                label="Заметка"
                 onClick={() => {
                   setNoteCollapsed(false);
                   setNoteForcedOpen(true);
                 }}
-                aria-label="Заметка"
               >
                 <StickyNote className="h-4 w-4" />
-                Заметка
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+              </ChatHeaderButton>
+              <ChatHeaderButton
+                label="Архив"
                 onClick={() => setConfirm("archive")}
-                aria-label="Архивировать диалог"
               >
                 <Archive className="h-4 w-4" />
-                Архив
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+              </ChatHeaderButton>
+              <ChatHeaderButton
+                label="Удалить"
                 onClick={() => setConfirm("delete")}
-                aria-label="Удалить диалог"
               >
                 <Trash2 className="h-4 w-4" />
-                Удалить
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--chat-line)] px-2.5 py-1.5 text-sm hover:bg-black/5"
+              </ChatHeaderButton>
+              <ChatHeaderButton
+                label="Поделиться"
                 onClick={() => setShareOpen(true)}
-                aria-label="Поделиться диалогом"
               >
                 <Link2 className="h-4 w-4" />
-                Поделиться
-              </button>
+              </ChatHeaderButton>
             </div>
           )}
         </div>
-        <div className="relative flex min-h-0 flex-1">
-          <div className="min-w-0 flex-1">
+        <div className="relative flex min-h-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <Thread />
           </div>
           {conversationId && (

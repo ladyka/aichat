@@ -339,8 +339,8 @@ export function Thread() {
   const isEmpty = useAuiState((s) => s.thread.messages.length === 0);
 
   return (
-    <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col">
-      <ThreadPrimitive.Viewport className="aui-thread-viewport flex flex-1 flex-col gap-3 px-4 py-4">
+    <ThreadPrimitive.Root className="flex h-full min-h-0 flex-col overflow-hidden">
+      <ThreadPrimitive.Viewport className="aui-thread-viewport flex min-h-0 flex-1 flex-col gap-3 px-4 py-4">
         {isEmpty ? (
           <div className="m-auto max-w-md text-center text-[var(--chat-muted)]">
             <p className="text-lg font-medium text-[var(--chat-ink)]">
@@ -359,10 +359,10 @@ export function Thread() {
         />
       </ThreadPrimitive.Viewport>
 
-      <div className="border-t border-[var(--chat-line)] bg-[var(--chat-panel)] px-2 py-2 sm:px-4 sm:py-3">
+      <div className="shrink-0 border-t border-[var(--chat-line)] bg-[var(--chat-panel)] px-2 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-3">
         <ComposerPrimitive.Root className="mx-auto flex max-w-3xl items-end gap-1.5 sm:gap-2">
           <ComposerPrimitive.Input
-            className="aui-composer-input"
+            className="aui-composer-input min-w-0 flex-1"
             rows={2}
             placeholder="Напишите сообщение…"
           />

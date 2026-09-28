@@ -125,6 +125,21 @@ def test_chat_page_requires_auth(client):
     assert client.get("/chat").status_code == 200
 
 
+def test_chat_page_locks_the_mobile_shell(client):
+    """На телефоне скроллится лента, а не вся страница: иначе шапка и поле ввода уезжают."""
+    register(client, email())
+    page = client.get("/chat")
+    assert page.status_code == 200
+    assert 'class="page-chat"' in page.text
+    assert "viewport-fit=cover" in page.text
+    css = client.get("/static/css/style.css")
+    assert css.status_code == 200
+    assert "body.page-chat" in css.text
+    assert "overscroll-behavior: none" in css.text
+    assert ".page-chat .chat-spa" in css.text
+    assert "overflow: hidden" in css.text
+
+
 def test_logout(client):
     register(client, email())
     response = client.get("/logout", follow_redirects=False)
