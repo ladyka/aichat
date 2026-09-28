@@ -23,4 +23,12 @@ describe("мобильная оболочка чата", () => {
     expect(app).toContain('<span className="hidden md:inline">{label}</span>');
     expect(app).toContain("min-h-0 min-w-0 flex-1 flex-col overflow-hidden");
   });
+
+  it("после выбора диалога закрывает выезжающий список на телефоне", () => {
+    const app = readSrc("App.tsx");
+    const list = readSrc("components/ThreadList.tsx");
+    expect(app).toContain("onNavigate={closeMobileSidebar}");
+    expect(app).toContain("if (!isMobileViewport()) return;");
+    expect(list).toContain("onClick={onNavigate}");
+  });
 });

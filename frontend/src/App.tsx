@@ -120,6 +120,12 @@ function ChatLayout() {
     }
   }, [sidebarOpen]);
 
+  const closeMobileSidebar = useCallback(() => {
+    if (!isMobileViewport()) return;
+    setSidebarOpen(false);
+    setUserMenuOpen(false);
+  }, []);
+
   return (
     <div className="relative flex h-full min-h-0 overflow-hidden bg-[var(--chat-bg)] text-[var(--chat-ink)]">
       {sidebarOpen && (
@@ -147,7 +153,7 @@ function ChatLayout() {
           </a>
         </div>
         <div className="min-h-0 flex-1">
-          <ThreadList />
+          <ThreadList onNavigate={closeMobileSidebar} />
         </div>
         <div className="relative border-t border-[var(--chat-line)] p-2">
           <button

@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
@@ -8,6 +15,10 @@ import {
 import { Pencil, Plus } from "lucide-react";
 
 const TITLE_MAX = 200;
+
+const ThreadListNavigateContext = createContext<(() => void) | undefined>(
+  undefined,
+);
 
 function ThreadTitleEditor({
   title,
@@ -71,6 +82,7 @@ function ThreadTitleEditor({
 
 function ThreadListItem() {
   const aui = useAui();
+  const onNavigate = useContext(ThreadListNavigateContext);
   const title = useAuiState((s) => s.threadListItem.title?.trim() || "");
   const [editing, setEditing] = useState(false);
 
@@ -100,6 +112,7 @@ function ThreadListItem() {
     <ThreadListItemPrimitive.Root className="group flex items-center gap-1 rounded-lg px-2 py-1.5 data-[active]:bg-[color-mix(in_srgb,var(--chat-accent)_12%,transparent)] hover:bg-black/5">
       <ThreadListItemPrimitive.Trigger
         className="min-w-0 flex-1 truncate text-left text-sm"
+        onClick={onNavigate}
         onDoubleClick={startEdit}
       >
         <ThreadListItemPrimitive.Title fallback="Новый чат" />
@@ -116,17 +129,22 @@ function ThreadListItem() {
   );
 }
 
-export function ThreadList() {
+export function ThreadList({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <ThreadListPrimitive.Root className="flex h-full flex-col gap-2 p-3">
-      <ThreadListPrimitive.New className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--chat-accent)] px-3 py-2 text-sm font-medium text-white">
-        <Plus className="h-4 w-4" />
-        Новый чат
-      </ThreadListPrimitive.New>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <ThreadListPrimitive.Items components={{ ThreadListItem }} />
-      </div>
-    </ThreadListPrimitive.Root>
+    <ThreadListNavigateContext.Provider value={onNavigate}>
+      <ThreadListPrimitive.Root className="flex h-full flex-col gap-2 p-3">
+        <ThreadListPrimitive.New
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-[var(--chat-accent)] px-3 py-2 text-sm font-medium text-white"
+          onClick={onNavigate}
+        >
+          <Plus className="h-4 w-4" />
+          Новый чат
+        </ThreadListPrimitive.New>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ThreadListPrimitive.Items components={{ ThreadListItem }} />
+        </div>
+      </ThreadListPrimitive.Root>
+    </ThreadListNavigateContext.Provider>
   );
 }
 
