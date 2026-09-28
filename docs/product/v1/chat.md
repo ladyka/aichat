@@ -8,7 +8,7 @@
 
 ## Что умеет
 
-- Ответ приходит потоком.
+- Ответ приходит потоком. Пока модель вызывает руки (погоду, заметку, картинку), в блоке «Рассуждение» виден ход работы — «Узнаю погоду…», — чтобы пустой пузырь не казался зависанием.
 - Последний свой вопрос можно переписать и отправить заново, а ответ — переспросить кнопкой «Повторить». Прежняя пара при этом заменяется, а не остаётся вторым вариантом: переписка хранится одним списком, и ветки в ней не помещаются.
 - Список прошлых разговоров: переименовать, убрать в архив, удалить.
 - Тема диалога определяется сама — после первого, второго и пятого ответа модель даёт короткое имя вместо «Новый чат».
@@ -19,7 +19,7 @@
 
 ## Где в коде
 
-`app/routes/api.py` — `POST /api/chat` (стриминг, петля инструментов); `app/routes/conversations.py` — истории, сообщения, `/api/settings`; `app/db.py` — таблицы `conversations`, `messages`, `notes`, `conversation_notes`; `app/title.py` — фоновая тема диалога; `templates/chat.html` и `app/routes/pages.py` — оболочка страницы.
+`app/routes/api.py` — `POST /api/chat` (стриминг, петля инструментов: пока рука работает, в поток идут дельты `reasoning`); `app/routes/conversations.py` — истории, сообщения, `/api/settings`; `app/db.py` — таблицы `conversations`, `messages`, `notes`, `conversation_notes`; `app/title.py` — фоновая тема диалога; `templates/chat.html` и `app/routes/pages.py` — оболочка страницы.
 
 Чат UI — `frontend/` на React и assistant-ui: `src/App.tsx` (страница), `src/components/` (`Thread`, `ThreadList`, `RuntimeProvider`, `NotePane`, `SkillsDialog`, `ShareDialog`, `ConfirmDialog`), `src/lib/` (`chat-model-adapter.ts` — модель и поток, `api.ts`, `thread-list-adapter.tsx`, `note-events.ts`, `conversation-id.ts`).
 

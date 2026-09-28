@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from app.config import get_settings
-from app.tools import call_tool, enabled_tools, extract_tool_calls
+from app.tools import call_tool, enabled_tools, extract_tool_calls, tool_progress_line
 from tests.conftest import register
 
 
@@ -33,6 +33,29 @@ def _upstream(payload):
 def _sse_text(text, model="openrouter/free"):
     data = {"choices": [{"delta": {"content": text}}], "model": model}
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def _sse_reasoning_text(body: str) -> str:
+    """Склеить дельты reasoning из SSE-ответа чата."""
+    pieces: list[str] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+        value = delta.get("reasoning") if isinstance(delta, dict) else None
+        if isinstance(value, str) and value:
+            pieces.append(value)
+    return "".join(pieces)
 
 
 def _sse_tool_call(name, args, call_id="call_1", index=0):
@@ -168,6 +191,13 @@ def test_extract_tool_calls_multiple():
     calls = extract_tool_calls(raw)
     assert [c["id"] for c in calls] == ["call_a", "call_b"]
     assert json.loads(calls[1]["arguments"]) == {"city": "Rome"}
+
+
+def test_tool_progress_line_known_and_unknown():
+    assert tool_progress_line("get_weather") == "Узнаю погоду…"
+    assert tool_progress_line("get_user_location") == "Запрашиваю местоположение…"
+    assert tool_progress_line("") == "Выполняю действие…"
+    assert "bogus" in tool_progress_line("bogus")
 
 
 def test_call_tool_unknown():
@@ -348,6 +378,7 @@ def test_stream_location_request(client, mock_models, monkeypatch):
     assert response.status_code == 200
     assert '"type": "location_request"' in response.text
     assert '"call_loc"' in response.text
+    assert "Запрашиваю местоположение" in _sse_reasoning_text(response.text)
     assert plan.stream_calls == 1
 
 
@@ -376,6 +407,7 @@ def test_stream_location_resolved_from_body(client, mock_models, monkeypatch):
     assert response.status_code == 200
     assert "location_request" not in response.text
     assert "У вас +15" in response.text
+    assert "Запрашиваю местоположение" in _sse_reasoning_text(response.text)
     assert plan.stream_calls == 2
 
     sent = _upstream(plan.stream_payloads[1])
@@ -534,6 +566,7 @@ def test_stream_tool_loop(client, mock_models, monkeypatch):
     )
     assert response.status_code == 200
     assert "В Минске 15 градусов" in response.text
+    assert "Узнаю погоду" in _sse_reasoning_text(response.text)
     assert plan.stream_calls == 2
 
     second = plan.stream_payloads[1]
@@ -571,6 +604,9 @@ def test_stream_tool_loop_after_thinking_content(client, mock_models, monkeypatc
     )
     assert response.status_code == 200
     assert "В Минске 15 градусов" in response.text
+    reasoning = _sse_reasoning_text(response.text)
+    assert "Сначала подумаю" in reasoning
+    assert "Узнаю погоду" in reasoning
     assert plan.stream_calls == 2
     sent = _upstream(plan.stream_payloads[1])
     assert [m["role"] for m in sent] == ["user", "assistant", "tool"]

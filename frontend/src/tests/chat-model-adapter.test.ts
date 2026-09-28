@@ -170,7 +170,7 @@ describe("ChatModelAdapter reasoning and errors", () => {
     return parts;
   };
 
-  it("should stream reasoning parts alongside text", async () => {
+    it("should stream reasoning parts alongside text", async () => {
     const adapter = createChatModelAdapter(() => "conv_123");
     fetchMock
       .mockResolvedValueOnce(settingsResponse())
@@ -188,6 +188,31 @@ describe("ChatModelAdapter reasoning and errors", () => {
       { type: "reasoning", text: "Сначала подумаю…" },
       { type: "text", text: "Вот ответ" },
     ]);
+  });
+
+  it("should show location progress in reasoning before the geo prompt", async () => {
+    Object.defineProperty(navigator, "geolocation", {
+      value: {
+        getCurrentPosition: (
+          _ok: unknown,
+          error: (err: { code: number }) => void,
+        ) => error({ code: 1 }),
+      },
+      configurable: true,
+    });
+    const adapter = createChatModelAdapter(() => "conv_123");
+    fetchMock
+      .mockResolvedValueOnce(settingsResponse())
+      .mockResolvedValueOnce(locationRequestSse())
+      .mockResolvedValueOnce(textSse("В Минске +15"));
+
+    const parts = await partsOf(adapter, [userMessage("Какая погода?")]);
+    const first = parts[0];
+    expect(first.some((p) => p.type === "reasoning" && p.text.includes("местоположение"))).toBe(
+      true,
+    );
+    const last = parts[parts.length - 1];
+    expect(last.some((p) => p.type === "text" && p.text.includes("В Минске +15"))).toBe(true);
   });
 
   it("should surface stream errors to the chat", async () => {
