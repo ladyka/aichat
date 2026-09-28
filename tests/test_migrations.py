@@ -55,70 +55,76 @@ def test_upgrade_creates_schema_on_empty_db(tmp_path):
     db_path = tmp_path / "empty.db"
     _alembic(db_path, "upgrade", "head")
     engine = create_engine(f"sqlite:///{db_path}")
-    tables = set(inspect(engine).get_table_names())
-    assert EXPECTED_TABLES <= tables
-    user_cols = {c["name"] for c in inspect(engine).get_columns("users")}
-    assert "preferred_model" in user_cols
+    try:
+        tables = set(inspect(engine).get_table_names())
+        assert EXPECTED_TABLES <= tables
+        user_cols = {c["name"] for c in inspect(engine).get_columns("users")}
+        assert "preferred_model" in user_cols
+    finally:
+        engine.dispose()
     _alembic(db_path, "upgrade", "head")
 
 
 def test_upgrade_adds_columns_on_legacy_create_all_db(tmp_path):
     db_path = tmp_path / "legacy.db"
     engine = create_engine(f"sqlite:///{db_path}")
-    with engine.begin() as conn:
-        conn.execute(text("""
-                CREATE TABLE users (
-                    id INTEGER NOT NULL PRIMARY KEY,
-                    email VARCHAR(255) NOT NULL,
-                    password_hash VARCHAR(255) NOT NULL,
-                    created_at DATETIME NOT NULL
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                    CREATE TABLE users (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        email VARCHAR(255) NOT NULL,
+                        password_hash VARCHAR(255) NOT NULL,
+                        created_at DATETIME NOT NULL
+                    )
+                    """))
+            conn.execute(text("""
+                    CREATE TABLE share_links (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        conversation_id INTEGER NOT NULL,
+                        token_hash VARCHAR(64) NOT NULL,
+                        prefix VARCHAR(20) NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        expires_at DATETIME,
+                        revoked_at DATETIME
+                    )
+                    """))
+            conn.execute(text("""
+                    CREATE TABLE share_accesses (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        share_id INTEGER NOT NULL,
+                        ip VARCHAR(64) NOT NULL,
+                        accessed_at DATETIME NOT NULL
+                    )
+                    """))
+            conn.execute(
+                text(
+                    "INSERT INTO users (id, email, password_hash, created_at)"
+                    " VALUES (1, 'a@b.c', 'x', '2020-01-01')"
                 )
-                """))
-        conn.execute(text("""
-                CREATE TABLE share_links (
-                    id INTEGER NOT NULL PRIMARY KEY,
-                    conversation_id INTEGER NOT NULL,
-                    token_hash VARCHAR(64) NOT NULL,
-                    prefix VARCHAR(20) NOT NULL,
-                    created_at DATETIME NOT NULL,
-                    expires_at DATETIME,
-                    revoked_at DATETIME
-                )
-                """))
-        conn.execute(text("""
-                CREATE TABLE share_accesses (
-                    id INTEGER NOT NULL PRIMARY KEY,
-                    share_id INTEGER NOT NULL,
-                    ip VARCHAR(64) NOT NULL,
-                    accessed_at DATETIME NOT NULL
-                )
-                """))
-        conn.execute(
-            text(
-                "INSERT INTO users (id, email, password_hash, created_at)"
-                " VALUES (1, 'a@b.c', 'x', '2020-01-01')"
             )
-        )
 
-    _alembic(db_path, "upgrade", "head")
-    insp = inspect(engine)
-    user_cols = {c["name"] for c in insp.get_columns("users")}
-    assert "preferred_model" in user_cols
-    share_cols = {c["name"] for c in insp.get_columns("share_accesses")}
-    assert {"visitor_kind", "visitor_label", "user_agent"} <= share_cols
-    assert "conversations" in insp.get_table_names()
-    assert "notes" in insp.get_table_names()
-    assert "conversation_notes" in insp.get_table_names()
-    assert "skills" in insp.get_table_names()
-    assert "user_skill_defaults" in insp.get_table_names()
-    assert "conversation_skills" in insp.get_table_names()
-    assert "skill_shares" in insp.get_table_names()
-    skill_cols = {c["name"] for c in insp.get_columns("skills")}
-    assert {"parent_id", "title", "description", "body"} <= skill_cols
+        _alembic(db_path, "upgrade", "head")
+        insp = inspect(engine)
+        user_cols = {c["name"] for c in insp.get_columns("users")}
+        assert "preferred_model" in user_cols
+        share_cols = {c["name"] for c in insp.get_columns("share_accesses")}
+        assert {"visitor_kind", "visitor_label", "user_agent"} <= share_cols
+        assert "conversations" in insp.get_table_names()
+        assert "notes" in insp.get_table_names()
+        assert "conversation_notes" in insp.get_table_names()
+        assert "skills" in insp.get_table_names()
+        assert "user_skill_defaults" in insp.get_table_names()
+        assert "conversation_skills" in insp.get_table_names()
+        assert "skill_shares" in insp.get_table_names()
+        skill_cols = {c["name"] for c in insp.get_columns("skills")}
+        assert {"parent_id", "title", "description", "body"} <= skill_cols
 
-    with engine.connect() as conn:
-        model = conn.execute(text("SELECT preferred_model FROM users WHERE id = 1")).scalar()
-    assert model == "default"
+        with engine.connect() as conn:
+            model = conn.execute(text("SELECT preferred_model FROM users WHERE id = 1")).scalar()
+        assert model == "default"
+    finally:
+        engine.dispose()
     _alembic(db_path, "upgrade", "head")
 
 
@@ -136,17 +142,20 @@ import os
 from app.db import Base
 
 engine = create_engine(os.environ["DATABASE_URL"])
-with engine.connect() as conn:
-    ctx = MigrationContext.configure(
-        conn,
-        opts={
-            "compare_type": True,
-            "compare_server_default": False,
-            "render_as_batch": True,
-        },
-    )
-    diffs = compare_metadata(ctx, Base.metadata)
-assert not diffs, diffs
+try:
+    with engine.connect() as conn:
+        ctx = MigrationContext.configure(
+            conn,
+            opts={
+                "compare_type": True,
+                "compare_server_default": False,
+                "render_as_batch": True,
+            },
+        )
+        diffs = compare_metadata(ctx, Base.metadata)
+    assert not diffs, diffs
+finally:
+    engine.dispose()
 """
     result = subprocess.run(
         [sys.executable, "-c", probe],
@@ -181,16 +190,19 @@ def test_create_index_if_missing_is_idempotent(tmp_path):
     from migrations.helpers import create_index_if_missing
 
     engine = create_engine(f"sqlite:///{tmp_path / 'idx.db'}")
-    with engine.begin() as conn:
-        conn.execute(
-            text("CREATE TABLE users (id INTEGER PRIMARY KEY, email VARCHAR(255) NOT NULL)")
-        )
-        ctx = MigrationContext.configure(conn)
-        with Operations.context(ctx):
-            create_index_if_missing("users", "ix_users_email", ["email"], unique=True)
-            create_index_if_missing("users", "ix_users_email", ["email"], unique=True)
-    names = {ix["name"] for ix in inspect(engine).get_indexes("users")}
-    assert "ix_users_email" in names
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text("CREATE TABLE users (id INTEGER PRIMARY KEY, email VARCHAR(255) NOT NULL)")
+            )
+            ctx = MigrationContext.configure(conn)
+            with Operations.context(ctx):
+                create_index_if_missing("users", "ix_users_email", ["email"], unique=True)
+                create_index_if_missing("users", "ix_users_email", ["email"], unique=True)
+        names = {ix["name"] for ix in inspect(engine).get_indexes("users")}
+        assert "ix_users_email" in names
+    finally:
+        engine.dispose()
 
 
 def test_mysql_dialect_emits_if_not_exists_when_requested():
