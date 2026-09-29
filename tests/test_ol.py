@@ -184,6 +184,85 @@ def test_stream_emits_tool_calls_from_ollama_objects(monkeypatch):
     assert b'"finish_reason": "tool_calls"' in raw
 
 
+def test_new_stream_tool_deltas_does_not_reset_index():
+    usd = {
+        "function": {
+            "name": "download_file",
+            "arguments": {"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"},
+        }
+    }
+    eur = {
+        "function": {
+            "name": "download_file",
+            "arguments": {"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"},
+        }
+    }
+    emitted: list[tuple[str, str]] = []
+    first = ol._new_stream_tool_deltas([usd], emitted)
+    second = ol._new_stream_tool_deltas([eur], emitted)
+    again = ol._new_stream_tool_deltas([usd, eur], emitted)
+    assert [d["index"] for d in first] == [0]
+    assert [d["index"] for d in second] == [1]
+    assert again == []
+    assert json.loads(first[0]["function"]["arguments"])["url"].endswith("USD?parammode=2")
+    assert json.loads(second[0]["function"]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_stream_emits_parallel_download_file_once_each(monkeypatch):
+    _enable(monkeypatch)
+
+    class FakeChunk:
+        def __init__(self, tool_calls=None, done=False):
+            self.message = _Message(content="", tool_calls=tool_calls)
+            self.done = done
+            self.prompt_eval_count = 2
+            self.eval_count = 4
+
+    usd = {
+        "function": {
+            "name": "download_file",
+            "arguments": {"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"},
+        }
+    }
+    eur = {
+        "function": {
+            "name": "download_file",
+            "arguments": {"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"},
+        }
+    }
+
+    async def fake_stream(**kw):
+        yield FakeChunk(tool_calls=[usd])
+        yield FakeChunk(tool_calls=[eur])
+        yield FakeChunk(tool_calls=[usd, eur])
+        yield FakeChunk(done=True)
+
+    class FakeClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def chat(self, **kw):
+            return fake_stream(**kw)
+
+    monkeypatch.setattr(ol, "_client", FakeClient)
+
+    async def collect():
+        chunks = []
+        async for chunk in ol.stream_chat_completions(
+            {"model": "glm-5.3-flash:cloud", "stream": True, "tools": []}
+        ):
+            chunks.append(chunk)
+        return chunks
+
+    raw = b"".join(asyncio.run(collect()))
+    from app.tools import extract_tool_calls
+
+    calls = extract_tool_calls(raw)
+    assert [c["name"] for c in calls] == ["download_file", "download_file"]
+    assert json.loads(calls[0]["arguments"])["url"].endswith("USD?parammode=2")
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
 def test_chat_completions_returns_openai_response(monkeypatch):
     _enable(monkeypatch)
 

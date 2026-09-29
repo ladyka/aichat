@@ -170,6 +170,91 @@ def test_extract_tool_calls_multiple():
     assert json.loads(calls[1]["arguments"]) == {"city": "Rome"}
 
 
+def _sse_tool_delta(delta):
+    data = {"choices": [{"delta": {"tool_calls": delta if isinstance(delta, list) else [delta]}}]}
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def test_extract_tool_calls_does_not_glue_parallel_downloads():
+    """Два download_file в потоке (как USD и EUR у НБРБ) остаются двумя вызовами."""
+    usd = '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+    eur = '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    raw = _sse_tool_delta(
+        {
+            "index": 0,
+            "id": "call_usd",
+            "function": {"name": "download_file", "arguments": usd},
+        }
+    ) + _sse_tool_delta(
+        {
+            "index": 0,
+            "id": "call_eur",
+            "function": {"name": "download_file", "arguments": eur},
+        }
+    )
+    calls = extract_tool_calls(raw)
+    assert [c["name"] for c in calls] == ["download_file", "download_file"]
+    assert json.loads(calls[0]["arguments"])["url"].endswith("USD?parammode=2")
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_extract_tool_calls_splits_complete_json_on_same_index():
+    usd = '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+    eur = '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    raw = _sse_tool_delta(
+        {"index": 0, "function": {"name": "download_file", "arguments": usd}}
+    ) + _sse_tool_delta({"index": 0, "function": {"name": "download_file", "arguments": eur}})
+    calls = extract_tool_calls(raw)
+    assert len(calls) == 2
+    assert json.loads(calls[0]["arguments"])["url"].endswith("USD?parammode=2")
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_extract_tool_calls_parallel_array_without_index():
+    usd = '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+    eur = '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    raw = _sse_tool_delta(
+        [
+            {"id": "a", "function": {"name": "download_file", "arguments": usd}},
+            {"id": "b", "function": {"name": "download_file", "arguments": eur}},
+        ]
+    )
+    calls = extract_tool_calls(raw)
+    assert [c["id"] for c in calls] == ["a", "b"]
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_extract_tool_calls_repeated_name_is_not_concatenated():
+    raw = (
+        _sse_tool_delta(
+            {
+                "index": 0,
+                "id": "call_1",
+                "function": {"name": "download_file", "arguments": ""},
+            }
+        )
+        + _sse_tool_delta(
+            {
+                "index": 0,
+                "function": {"name": "download_file", "arguments": '{"url": "'},
+            }
+        )
+        + _sse_tool_delta(
+            {
+                "index": 0,
+                "function": {
+                    "name": "download_file",
+                    "arguments": 'https://example.com"}',
+                },
+            }
+        )
+    )
+    calls = extract_tool_calls(raw)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "download_file"
+    assert json.loads(calls[0]["arguments"]) == {"url": "https://example.com"}
+
+
 def test_call_tool_unknown():
     import asyncio
 

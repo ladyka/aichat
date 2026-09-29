@@ -167,34 +167,9 @@ def _sse_output_text(raw: bytes) -> str:
 
 def _sse_tool_calls(raw: bytes) -> list[dict[str, str]]:
     """Assemble streamed tool_calls the same way as app.tools.extract_tool_calls."""
-    calls: dict[int, dict[str, str]] = {}
-    for line in raw.split(b"\n"):
-        stripped = line.strip()
-        if not stripped.startswith(b"data:"):
-            continue
-        data = stripped[5:].strip()
-        if not data or data == b"[DONE]":
-            continue
-        try:
-            obj = json.loads(data)
-        except json.JSONDecodeError:
-            continue
-        deltas = ((obj.get("choices") or [{}])[0].get("delta") or {}).get("tool_calls")
-        if not deltas:
-            continue
-        for delta in deltas:
-            if not isinstance(delta, dict):
-                continue
-            index = int(delta.get("index", 0))
-            entry = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
-            if delta.get("id"):
-                entry["id"] = str(delta["id"])
-            fn = delta.get("function") or {}
-            if fn.get("name"):
-                entry["name"] += str(fn["name"])
-            if fn.get("arguments"):
-                entry["arguments"] += str(fn["arguments"])
-    return [calls[index] for index in sorted(calls)]
+    from app.tools import extract_tool_calls
+
+    return extract_tool_calls(raw)
 
 
 def _record_llm_stream_output(span: Any, raw: bytes) -> None:

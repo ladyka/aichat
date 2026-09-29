@@ -109,6 +109,35 @@ def _openai_tool_calls(raw_calls: Any) -> list[dict[str, Any]]:
     return openai_calls
 
 
+def _new_stream_tool_deltas(
+    raw_calls: Any,
+    emitted: list[tuple[str, str]],
+) -> list[dict[str, Any]]:
+    """Дельты только для ещё не виденных вызовов; индекс не сбрасывается на каждом чанке.
+
+    Ollama/GLM часто присылает полный список tool_calls снова или по одному
+    вызову на чанк. Если каждый раз нумеровать с нуля, сборка SSE склеивает
+    ``download_file`` + ``download_file`` и два JSON аргументов в один вызов.
+    """
+    deltas: list[dict[str, Any]] = []
+    for call in _openai_tool_calls(raw_calls):
+        function = call["function"]
+        fingerprint = (str(function.get("name") or ""), str(function.get("arguments") or ""))
+        if fingerprint in emitted:
+            continue
+        index = len(emitted)
+        emitted.append(fingerprint)
+        deltas.append(
+            {
+                "index": index,
+                "id": call["id"],
+                "type": "function",
+                "function": function,
+            }
+        )
+    return deltas
+
+
 def _to_ollama_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """OpenAI-сообщения → ollama: tool_calls без id, tool-сообщение с tool_name."""
     result: list[dict[str, Any]] = []
@@ -243,29 +272,20 @@ async def _stream_raw(payload: dict[str, Any]) -> AsyncIterator[bytes]:
     request["stream"] = True
     chunk_id = f"chatcmpl-{uuid4().hex}"
     saw_tool_calls = False
+    emitted_tool_calls: list[tuple[str, str]] = []
     yield _sse_chunk(chunk_id, model, {"role": "assistant", "content": ""})
     try:
         stream = await _client().chat(**request)
         async for chunk in stream:
             message = getattr(chunk, "message", None)
-            openai_calls = _openai_tool_calls(getattr(message, "tool_calls", None))
-            if openai_calls:
+            tool_deltas = _new_stream_tool_deltas(
+                getattr(message, "tool_calls", None),
+                emitted_tool_calls,
+            )
+            if tool_deltas:
                 saw_tool_calls = True
-                for index, call in enumerate(openai_calls):
-                    yield _sse_chunk(
-                        chunk_id,
-                        model,
-                        {
-                            "tool_calls": [
-                                {
-                                    "index": index,
-                                    "id": call["id"],
-                                    "type": "function",
-                                    "function": call["function"],
-                                }
-                            ]
-                        },
-                    )
+                for delta in tool_deltas:
+                    yield _sse_chunk(chunk_id, model, {"tool_calls": [delta]})
             thinking = getattr(message, "thinking", None)
             if isinstance(thinking, str) and thinking:
                 yield _sse_chunk(chunk_id, model, {"reasoning": thinking})

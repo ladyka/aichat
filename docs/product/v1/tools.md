@@ -20,9 +20,11 @@
 | `pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order` | меню, адрес и заказ с pzz.by | выключается `PZZ_ENABLED=0`; отправка на кухню — только после явного согласия и при `PZZ_ORDERS_ENABLED=1`; через чат проходит только оплата наличными курьеру |
 | `send_feedback` | жалоба, идея или вопрос команде сервиса | нужен `FEEDBACK_WEBHOOK_URL` (Incoming Webhook Slack или аналог); отправка — только после явного согласия; для жалобы модель сначала выясняет, что именно не понравилось; в `/v1` не отдаётся |
 
+Если модель зовёт две руки сразу — два курса валют через `download_file` — сервер исполняет оба вызова. Поток не склеивает имена (`download_filedownload_file`) и JSON-аргументы в один неизвестный инструмент.
+
 ## Где в коде
 
-`app/tools.py` — описания инструментов, `enabled_tools()` и исполнение; `app/feedback.py` — отправка обращения на вебхук; `app/pzz.py` — клиент публичного API pzz.by; `app/storage.py` — S3 для картинок; `app/notes.py` — заметка; таблицы `downloads`, `generated_images`, `usage_logs`; флаги в `app/config.py`.
+`app/tools.py` — описания инструментов, `enabled_tools()`, `extract_tool_calls()` (сборка дельт потока) и исполнение; `app/model_providers/ol.py` — поток ollama отдаёт каждый вызов один раз со стабильным index; `app/feedback.py` — отправка обращения на вебхук; `app/pzz.py` — клиент публичного API pzz.by; `app/storage.py` — S3 для картинок; `app/notes.py` — заметка; таблицы `downloads`, `generated_images`, `usage_logs`; флаги в `app/config.py`.
 
 ## Что осталось
 
