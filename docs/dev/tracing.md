@@ -6,18 +6,38 @@
 
 ## Как агенту работать с трейсом
 
-Три уровня, от простого к полному. Секреты не класть в репозиторий и не печатать в ответ.
+Четыре пути, от простого к полному. Секреты не класть в репозиторий и не печатать в ответ.
 
 1. **Вставка из UI.** Ссылка на трейс или спан, JSON `input.value` / `output.value`, дерево CHAIN → LLM → TOOL. Этого достаточно для большинства правок рук и петли `/api/chat`.
 2. **Идентификаторы.** `session.id` (у нас это id диалога), `user.id`, `aichat.conversation_id`, публичная модель `aichat.model`, провайдер `aichat.provider`. По ним находят соседние спаны того же хода.
 3. **Выгрузка REST.** `POST https://api.ca-central-1a.arize.com/v2/spans` с `Authorization: Bearer …`. Ключ OTLP (`ARIZE_API_KEY`) шлёт данные; для чтения списка спанов может понадобиться отдельный developer key (`ARIZE_REST_API_KEY`). Фильтр — SQL-подобная строка, например `name = 'download_file'` или `status_code = 'ERROR'`. Скрипт: `python scripts/arize_spans.py --hours 2 --filter "aichat.tool.known = false"`.
-4. **MCP в Cursor.** Удобный путь для агента в IDE, но только если на том конце есть MCP-сервер. Подробности — ниже.
+4. **Навык `arize-trace` и CLI `ax`.** Официальный путь Arize AX для агента: [страница MCP tracing](https://arize.com/docs/ax/integrations/python-agent-frameworks/model-context-protocol/mcp-tracing) в блоке «Check from the skill, CLI, or SDK». Это не MCP-сервер и не пакет инструментации MCP. Подробности — ниже.
 
 Data Plane (ingest) и REST (чтение) — разные двери. Flight (`flight.ca-central-1a.arize.com`) нужен для выгрузки датасетов, не для разбора одного трейса в чате.
 
-## MCP
+## Навык Arize и CLI `ax`
 
-MCP здесь — чтобы агент **читал** уже записанные трейсы, а не чтобы слать OTLP. Пакет `openinference-instrumentation-mcp` к этому не относится: он только склеивает трейсы клиента и сервера MCP.
+Страница [MCP tracing](https://arize.com/docs/ax/integrations/python-agent-frameworks/model-context-protocol/mcp-tracing) описывает **две разные вещи**.
+
+Первая — `openinference-instrumentation-mcp`: склейка трейса, когда *наше приложение* само является MCP-клиентом и MCP-сервером (пример с Ocean Assistant). Пакет своих спанов не пишет: только прокидывает контекст OpenTelemetry по проводу MCP, чтобы спаны клиента и сервера стали одним деревом в AX. У витрины aichat MCP-сервера нет, руки исполняются в процессе FastAPI — этот пакет нам не нужен.
+
+Вторая — как агенту **прочитать** уже лежащие в AX трейсы чата. Это навык Cursor, не MCP-сервер:
+
+```bash
+npx skills add Arize-ai/arize-skills
+```
+
+Дальше в Cursor: «выгрузи последние ошибочные спаны проекта aichat». Навык `arize-trace` гоняет CLI:
+
+```bash
+ax spans export aichat --space "$ARIZE_SPACE_ID" --filter "status_code = 'ERROR'" --limit 50 --stdout
+```
+
+Нужны `ax` (`pip install arize-ax-cli` или `uv tool install arize-ax-cli`), профиль `ax auth login` / `ax profiles`, space и проект. В Cloud Agent — те же переменные в окружении, не ключ в git. SDK то же самое: `ArizeClient().spans.list(project=..., space=...)`.
+
+## MCP-сервер Phoenix
+
+MCP-сервер здесь — чтобы агент **читал** трейсы через протокол MCP. Это отдельный эндпоинт Phoenix, не пакет инструментации.
 
 Официальный Remote MCP у Phoenix — это эндпоинт **самого сервера Phoenix** (`https://ваш-phoenix/mcp`, с версии 19). В Cursor:
 
@@ -50,8 +70,9 @@ MCP здесь — чтобы агент **читал** уже записанн�
 
 1. Вставка спана из UI — работает сразу.
 2. REST v2 и `scripts/arize_spans.py` — чтение без MCP.
-3. Свой тонкий MCP вокруг REST v2 (те же фильтры, что у скрипта) и подключение его в Cursor / Cloud Agent с `ARIZE_REST_API_KEY` из окружения. Ключ в репозиторий не класть.
-4. Отдельный Phoenix только ради `/mcp` и второй экспорт туда же — лишний контур, для витрины не нужен.
+3. Навык `arize-trace` и CLI `ax` — официальный путь AX для агента, см. выше.
+4. Свой тонкий MCP вокруг REST v2 (те же фильтры, что у скрипта) и подключение его в Cursor / Cloud Agent с `ARIZE_REST_API_KEY` из окружения. Ключ в репозиторий не класть.
+5. Отдельный Phoenix только ради `/mcp` и второй экспорт туда же — лишний контур, для витрины не нужен.
 
 Cloud Agent видит только те MCP, что заданы в среде и уже авторизованы (как Slack в этом репозитории). Новый сервер надо добавить в настройки Cursor MCP и для облачных прогонов дать Bearer-ключ, не OAuth через браузер.
 
