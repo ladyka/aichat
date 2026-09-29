@@ -164,6 +164,12 @@ class Settings:
             _env("ARIZE_OTLP_ENDPOINT") or _env("ARIZE_COLLECTOR_ENDPOINT") or ""
         )
         self.arize_enabled = bool(self.arize_space_id and self.arize_api_key)
+        # Чтение трейсов агентом: REST v2 (не путать с OTLP ingest).
+        # Регион данных CA → https://api.ca-central-1a.arize.com
+        self.arize_rest_base_url = (
+            _env("ARIZE_REST_BASE_URL", "https://api.ca-central-1a.arize.com") or ""
+        ).rstrip("/")
+        self.arize_rest_api_key = _env("ARIZE_REST_API_KEY", "") or self.arize_api_key
 
         # Модель для фонового определения темы диалога (после 1-го, 2-го и 5-го
         # ответа ассистента). Пусто — дефолтная модель (openrouter/free).

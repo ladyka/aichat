@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from app.config import get_settings
-from app.tools import call_tool, enabled_tools, extract_tool_calls
+from app.tools import call_tool, enabled_tools, extract_tool_calls, is_known_tool_name
 from tests.conftest import register
 
 
@@ -1090,6 +1090,57 @@ def test_call_tool_emits_otel_tool_span(monkeypatch):
     assert attrs["input.mime_type"] == "application/json"
     assert json.loads(attrs["output.value"])["date"]
     assert attrs["output.mime_type"] == "application/json"
+    assert attrs["aichat.tool.known"] is True
+    assert attrs["aichat.tool.arguments_json_valid"] is True
+
+
+def test_is_known_tool_name():
+    assert is_known_tool_name("download_file")
+    assert is_known_tool_name("get_weather")
+    assert not is_known_tool_name("download_filedownload_file")
+    assert not is_known_tool_name("")
+
+
+def test_call_tool_unknown_marks_error_span(monkeypatch):
+    """Unknown tool: Phoenix видит ERROR и aichat.tool.known=false."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from opentelemetry.trace import StatusCode
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    glued = (
+        '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+        '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    )
+    result = json.loads(
+        asyncio.run(
+            call_tool(
+                "download_filedownload_file",
+                glued,
+                tool_call_id="call_glued",
+                conversation_id="conv-1",
+            )
+        )
+    )
+    provider.force_flush()
+    assert "Unknown tool" in result["error"]
+    span = exporter.get_finished_spans()[0]
+    attrs = span.attributes
+    assert attrs["aichat.tool.known"] is False
+    assert attrs["aichat.tool.arguments_json_valid"] is False
+    assert attrs["tool.id"] == "call_glued"
+    assert attrs["aichat.conversation_id"] == "conv-1"
+    assert "Unknown tool" in attrs["aichat.tool.error"]
+    assert span.status.status_code == StatusCode.ERROR
 
 
 def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
@@ -1138,6 +1189,9 @@ def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
     (chain,) = by_kind["CHAIN"]
     (tool,) = by_kind["TOOL"]
     assert chain.name == "chat.tool_loop"
+    assert chain.attributes["aichat.model"]
+    assert chain.attributes["aichat.provider"]
+    assert chain.attributes["aichat.conversation_id"] == "conv-sess-1"
     assert chain.context.trace_id == tool.context.trace_id
     assert tool.parent.span_id == chain.context.span_id
     assert tool.attributes["session.id"] == "conv-sess-1"
@@ -1291,6 +1345,7 @@ def test_compact_tool_content_other_shapes():
     traced = payload_for_trace(
         {
             "model": "default",
+            "tools": [{"type": "function", "function": {"name": "download_file"}}],
             "messages": [
                 "skip-me",
                 {"role": "user", "content": "hi"},
@@ -1299,6 +1354,7 @@ def test_compact_tool_content_other_shapes():
         }
     )
     assert traced["model"] == "default"
+    assert traced["tools"] == ["download_file"]
     assert traced["messages"][0]["role"] == "user"
     tool_payload = json.loads(traced["messages"][1]["content"])
     assert tool_payload["source"] == "pzz.by"
@@ -1339,6 +1395,9 @@ def test_llm_byte_stream_records_tool_calls(monkeypatch):
     provider.force_flush()
     llm = next(span for span in exporter.get_finished_spans() if span.name == "test.llm")
     assert "pzz_search_menu" in llm.attributes["output.value"]
+    assert '"id": "call_menu"' in llm.attributes["output.value"]
+    assert llm.attributes["aichat.llm.tool_call_count"] == 1
+    assert llm.attributes["aichat.llm.sse_bytes"] > 0
     assert any(
         value == "pzz_search_menu"
         for key, value in llm.attributes.items()

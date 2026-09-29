@@ -276,8 +276,7 @@ async def _tool_chat_response(
                 _log_usage(db, user, route.public_id, source, data.get("usage"))
                 return JSONResponse(content=data, status_code=response.status_code)
             tool_names = [
-                str(call.get("function", {}).get("name") or "")
-                for call in message["tool_calls"]
+                str(call.get("function", {}).get("name") or "") for call in message["tool_calls"]
             ]
             logger.info(
                 "tool loop step=%s/%s tools=%s user_id=%s",
@@ -305,6 +304,7 @@ async def _tool_chat_response(
                         user=user,
                         db=db,
                         conversation_id=conversation_id,
+                        tool_call_id=str(call.get("id") or ""),
                     )
                 messages.append(
                     {
@@ -390,6 +390,7 @@ async def _tool_chat_response(
                     user=user,
                     db=db,
                     conversation_id=conversation_id,
+                    tool_call_id=call.get("id") or "",
                 )
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
@@ -576,7 +577,20 @@ async def _proxy_inner(
 
     # Internal chat: run the tool loop server-side, hand back the final text.
     if source == "chat" and payload.get("tools"):
-        with telemetry_mod.chain_span("chat.tool_loop"):
+        conversation_id = body.get("conversation_id")
+        with telemetry_mod.chain_span(
+            "chat.tool_loop",
+            attributes={
+                "aichat.conversation_id": (
+                    conversation_id.strip()
+                    if isinstance(conversation_id, str) and conversation_id.strip()
+                    else str(conversation_id or "")
+                ),
+                "aichat.model": route.public_id,
+                "aichat.provider": route.provider,
+                "aichat.upstream_model": route.upstream_id,
+            },
+        ):
             return await _tool_chat_response(
                 route,
                 payload,
@@ -584,7 +598,7 @@ async def _proxy_inner(
                 db,
                 user,
                 known_location,
-                conversation_id=body.get("conversation_id"),
+                conversation_id=conversation_id,
             )
 
     if payload.get("stream"):
