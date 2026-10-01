@@ -24,7 +24,7 @@ make test-coverage
 
 ## Node.js 24
 
-Нужен только для сборки и разработки чата (`frontend/`). В runtime приложения уходит статика из `frontend/dist` (`/chat-ui/`), плюс `dist/sw.js` и `dist/manifest.webmanifest` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`), чтобы service worker получил scope `/` и покрыл `/chat`.
+Нужен только для сборки и разработки чата (`frontend/`). В runtime приложения уходит статика из `frontend/dist` (`/chat-ui/`), плюс `dist/sw.js`, `dist/manifest.webmanifest` и `dist/favicon.ico` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico`), чтобы service worker получил scope `/` и покрыл `/chat`.
 
 | Pin | Где |
 |-----|-----|

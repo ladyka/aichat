@@ -18,6 +18,7 @@
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
 - Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
+- Деплой сайта из чата (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`): домен `<имя>.mzg.by`, содержимое — заметка чата, публикуется как `<домен>.md` в `MZG_SITES_FOLDER`. Нужен `MZG_SITES_FOLDER`; без него инструментов нет
 - Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
 - Skills: свои markdown-навыки (приватные по умолчанию), публикация в каталог `/catalog`, копия чужого с `parent_id`, дефолты в `/settings`, набор чата в панели «Навыки»
 
@@ -147,7 +148,7 @@ cd frontend && npm run dev   # :5173
 | `PZZ_ORDERS_ENABLED` | Разрешить реальную отправку заказа на pzz.by (`confirm=true`). `0` — только черновик и ссылка на сайт |
 | `FEEDBACK_WEBHOOK_URL` | Incoming Webhook Slack (или Discord / любой POST JSON с полем `text`): включает `send_feedback` в `/api/chat`. Пусто — инструмент выключен |
 | `DOWNLOADS_MAX_BYTES` | Лимит размера файла для `download_file` (по умолчанию `2097152` = 2 МБ) |
-| `MZG_SITES_FOLDER` | Каталог деплоя сайтов пользователей (`create_site` / `publish_site`): каждый сайт — один файл `<домен>.md`. Пусто — инструменты выключены |
+| `MZG_SITES_FOLDER` | Каталог деплоя сайтов пользователей (`create_site`, `update_site`, `delete_site`, `publish_site`, `site_status`): каждый сайт — один файл `<домен>.md`. Пусто — инструменты выключены |
 | `S3_ENDPOINT` | S3 API, прод Cloud.ru: `https://s3.cloud.ru`. Вместе с bucket и ключами включает `generate_image` |
 | `S3_REGION` | Регион SigV4 (по умолчанию `ru-central-1`) |
 | `S3_BUCKET` | Имя bucket (создать заранее) |
@@ -245,7 +246,7 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
-frontend/public/  # PWA: manifest.webmanifest + иконки (коммитятся; генератор — scripts/generate_pwa_icons.py)
+frontend/public/  # PWA: manifest.webmanifest + иконки + favicon.ico (коммитятся; генератор — scripts/generate_pwa_icons.py)
 frontend/src/sw.ts # PWA: service worker (сборка → dist/sw.js, бэкенд отдаёт его как /sw.js)
 templates/     # Jinja2: лендинг, о сервисе, auth, settings, tokens, skills, catalog, chat shell
 static/        # CSS
@@ -272,7 +273,7 @@ make update-requirements-prod  # заливает на FTP только requirem
 
 Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
 
-PWA-артефакты (`dist/sw.js`, `dist/manifest.webmanifest`, иконки) уезжают вместе с остальной сборкой. Иконки в `frontend/public/` **коммитятся**: `scripts/deploy_ftp.py` отказывается работать на «грязном» git-дереве, так что перед `make update-prod` их нужно закоммитить. Учтите и обратную сторону: `plan_sync` удаляет на проде файлы, которых нет в локальной сборке, — если собрать фронт без PWA-плагина, `dist/sw.js` пропадёт локально и будет удалён на сервере (чат при этом продолжит работать, но без офлайна).
+PWA-артефакты (`dist/sw.js`, `dist/manifest.webmanifest`, иконки — включая `favicon.ico`, который бэкенд отдаёт из корня как `/favicon.ico`) уезжают вместе с остальной сборкой. Иконки в `frontend/public/` **коммитятся**: `scripts/deploy_ftp.py` отказывается работать на «грязном» git-дереве, так что перед `make update-prod` их нужно закоммитить. Учтите и обратную сторону: `plan_sync` удаляет на проде файлы, которых нет в локальной сборке, — если собрать фронт без PWA-плагина, `dist/sw.js` пропадёт локально и будет удалён на сервере (чат при этом продолжит работать, но без офлайна).
 
 ## Для агентов
 

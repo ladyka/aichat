@@ -13,7 +13,7 @@
 - Есть сеть — данные свежие; нет сети — прошлые ответы из кеша: `NetworkFirst` для `GET /api/conversations|settings|skills`.
 - Кеш ограничен (`maxEntries: 300`, `maxAgeSeconds: 7 дней`) и стирается при выходе из аккаунта и при 401 — чтобы чужие истории не остались на общем телефоне.
 - Офлайн-навигация на `/chat` отдаёт `/chat-ui/index.html`.
-- PWA-теги стоят только в `templates/chat.html`; файлы отдаются из корня (`/sw.js`, `/manifest.webmanifest`), иначе у service worker нет scope `/`.
+- PWA-теги стоят только в `templates/chat.html`; файлы отдаются из корня (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico`), иначе у service worker нет scope `/`. `favicon.ico` — классический фавикон в корне: браузеры запрашивают его даже без `<link>`.
 
 ## Что осталось
 
@@ -25,7 +25,7 @@
 
 ## Где в коде
 
-`frontend/src/sw.ts`, `frontend/vite.config.ts` (плагин PWA и `globPatterns`), `frontend/public/` (манифест и иконки), `app/routes/pages.py` (`/sw.js`, `/manifest.webmanifest` — из корня, не из `/chat-ui/`), `templates/chat.html`, `tests/test_pwa.py`.
+`frontend/src/sw.ts`, `frontend/vite.config.ts` (плагин PWA и `globPatterns`), `frontend/public/` (манифест и иконки), `app/routes/pages.py` (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico` — из корня, не из `/chat-ui/`), `templates/chat.html`, `tests/test_pwa.py`.
 
 ## Где это в версии
 
