@@ -5,7 +5,13 @@ import uuid
 import pytest
 
 from app.config import get_settings
-from app.tools import call_tool, enabled_tools, extract_tool_calls
+from app.tools import (
+    call_tool,
+    enabled_tools,
+    extract_tool_calls,
+    is_known_tool_name,
+    tool_progress_line,
+)
 from tests.conftest import register
 
 
@@ -33,6 +39,29 @@ def _upstream(payload):
 def _sse_text(text, model="openrouter/free"):
     data = {"choices": [{"delta": {"content": text}}], "model": model}
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def _sse_reasoning_text(body: str) -> str:
+    """Склеить дельты reasoning из SSE-ответа чата."""
+    pieces: list[str] = []
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+        value = delta.get("reasoning") if isinstance(delta, dict) else None
+        if isinstance(value, str) and value:
+            pieces.append(value)
+    return "".join(pieces)
 
 
 def _sse_tool_call(name, args, call_id="call_1", index=0):
@@ -168,6 +197,99 @@ def test_extract_tool_calls_multiple():
     calls = extract_tool_calls(raw)
     assert [c["id"] for c in calls] == ["call_a", "call_b"]
     assert json.loads(calls[1]["arguments"]) == {"city": "Rome"}
+
+
+def _sse_tool_delta(delta):
+    data = {"choices": [{"delta": {"tool_calls": delta if isinstance(delta, list) else [delta]}}]}
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode("utf-8")
+
+
+def test_extract_tool_calls_does_not_glue_parallel_downloads():
+    """Два download_file в потоке (как USD и EUR у НБРБ) остаются двумя вызовами."""
+    usd = '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+    eur = '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    raw = _sse_tool_delta(
+        {
+            "index": 0,
+            "id": "call_usd",
+            "function": {"name": "download_file", "arguments": usd},
+        }
+    ) + _sse_tool_delta(
+        {
+            "index": 0,
+            "id": "call_eur",
+            "function": {"name": "download_file", "arguments": eur},
+        }
+    )
+    calls = extract_tool_calls(raw)
+    assert [c["name"] for c in calls] == ["download_file", "download_file"]
+    assert "download_filedownload_file" not in {c["name"] for c in calls}
+    assert json.loads(calls[0]["arguments"])["url"].endswith("USD?parammode=2")
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_extract_tool_calls_splits_complete_json_on_same_index():
+    usd = '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+    eur = '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    raw = _sse_tool_delta(
+        {"index": 0, "function": {"name": "download_file", "arguments": usd}}
+    ) + _sse_tool_delta({"index": 0, "function": {"name": "download_file", "arguments": eur}})
+    calls = extract_tool_calls(raw)
+    assert len(calls) == 2
+    assert json.loads(calls[0]["arguments"])["url"].endswith("USD?parammode=2")
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_extract_tool_calls_parallel_array_without_index():
+    usd = '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+    eur = '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    raw = _sse_tool_delta(
+        [
+            {"id": "a", "function": {"name": "download_file", "arguments": usd}},
+            {"id": "b", "function": {"name": "download_file", "arguments": eur}},
+        ]
+    )
+    calls = extract_tool_calls(raw)
+    assert [c["id"] for c in calls] == ["a", "b"]
+    assert json.loads(calls[1]["arguments"])["url"].endswith("EUR?parammode=2")
+
+
+def test_extract_tool_calls_repeated_name_is_not_concatenated():
+    raw = (
+        _sse_tool_delta(
+            {
+                "index": 0,
+                "id": "call_1",
+                "function": {"name": "download_file", "arguments": ""},
+            }
+        )
+        + _sse_tool_delta(
+            {
+                "index": 0,
+                "function": {"name": "download_file", "arguments": '{"url": "'},
+            }
+        )
+        + _sse_tool_delta(
+            {
+                "index": 0,
+                "function": {
+                    "name": "download_file",
+                    "arguments": 'https://example.com"}',
+                },
+            }
+        )
+    )
+    calls = extract_tool_calls(raw)
+    assert len(calls) == 1
+    assert calls[0]["name"] == "download_file"
+    assert json.loads(calls[0]["arguments"]) == {"url": "https://example.com"}
+
+
+def test_tool_progress_line_known_and_unknown():
+    assert tool_progress_line("get_weather") == "Узнаю погоду…"
+    assert tool_progress_line("get_user_location") == "Запрашиваю местоположение…"
+    assert tool_progress_line("") == "Выполняю действие…"
+    assert "bogus" in tool_progress_line("bogus")
 
 
 def test_call_tool_unknown():
@@ -348,6 +470,7 @@ def test_stream_location_request(client, mock_models, monkeypatch):
     assert response.status_code == 200
     assert '"type": "location_request"' in response.text
     assert '"call_loc"' in response.text
+    assert "Запрашиваю местоположение" in _sse_reasoning_text(response.text)
     assert plan.stream_calls == 1
 
 
@@ -376,6 +499,7 @@ def test_stream_location_resolved_from_body(client, mock_models, monkeypatch):
     assert response.status_code == 200
     assert "location_request" not in response.text
     assert "У вас +15" in response.text
+    assert "Запрашиваю местоположение" in _sse_reasoning_text(response.text)
     assert plan.stream_calls == 2
 
     sent = _upstream(plan.stream_payloads[1])
@@ -534,6 +658,7 @@ def test_stream_tool_loop(client, mock_models, monkeypatch):
     )
     assert response.status_code == 200
     assert "В Минске 15 градусов" in response.text
+    assert "Узнаю погоду" in _sse_reasoning_text(response.text)
     assert plan.stream_calls == 2
 
     second = plan.stream_payloads[1]
@@ -571,6 +696,9 @@ def test_stream_tool_loop_after_thinking_content(client, mock_models, monkeypatc
     )
     assert response.status_code == 200
     assert "В Минске 15 градусов" in response.text
+    reasoning = _sse_reasoning_text(response.text)
+    assert "Сначала подумаю" in reasoning
+    assert "Узнаю погоду" in reasoning
     assert plan.stream_calls == 2
     sent = _upstream(plan.stream_payloads[1])
     assert [m["role"] for m in sent] == ["user", "assistant", "tool"]
@@ -1056,6 +1184,149 @@ def test_stream_download_tool_loop(client, mock_models, monkeypatch):
     assert json.loads(tool_msg["content"])["filename"] == "page.txt"
 
 
+_NBRB_USD_URL = "https://api.nbrb.by/exrates/rates/USD?parammode=2"
+_NBRB_EUR_URL = "https://api.nbrb.by/exrates/rates/EUR?parammode=2"
+
+
+def _nbrb_parallel_download_stream(*, with_ids: bool):
+    """Поток как в Phoenix: два полных download_file на одном index."""
+    usd = {
+        "index": 0,
+        "function": {
+            "name": "download_file",
+            "arguments": json.dumps({"url": _NBRB_USD_URL}, ensure_ascii=False),
+        },
+    }
+    eur = {
+        "index": 0,
+        "function": {
+            "name": "download_file",
+            "arguments": json.dumps({"url": _NBRB_EUR_URL}, ensure_ascii=False),
+        },
+    }
+    if with_ids:
+        usd["id"] = "call_usd"
+        eur["id"] = "call_eur"
+    return [_sse_tool_delta(usd), _sse_tool_delta(eur), b"data: [DONE]\n\n"]
+
+
+def _recording_download():
+    fetched: list[str] = []
+
+    async def fake(arguments, user=None, db=None):
+        payload = json.loads(arguments)
+        fetched.append(str(payload.get("url") or ""))
+        return json.dumps(
+            {
+                "filename": "rates.json",
+                "content": payload.get("url"),
+                "size_bytes": 8,
+            },
+            ensure_ascii=False,
+        )
+
+    return fetched, fake
+
+
+def _assert_nbrb_tool_loop(plan, fetched):
+    assert fetched == [_NBRB_USD_URL, _NBRB_EUR_URL]
+    assert plan.stream_calls == 2
+    sent = _upstream(plan.stream_payloads[1])
+    assistant = sent[1]
+    names = [call["function"]["name"] for call in assistant["tool_calls"]]
+    assert names == ["download_file", "download_file"]
+    tool_msgs = [message for message in sent if message["role"] == "tool"]
+    assert len(tool_msgs) == 2
+    for message in tool_msgs:
+        body = json.loads(message["content"])
+        assert "error" not in body
+        assert "Unknown tool" not in message["content"]
+        assert "download_filedownload_file" not in message["content"]
+
+
+def test_stream_tool_loop_parallel_nbrb_downloads(client, mock_models, monkeypatch):
+    """Два курса НБРБ через download_file: петля не склеивает имя и не отдаёт Unknown tool."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    _auth(client)
+    fetched, fake_download = _recording_download()
+    plan = StreamPlan(
+        stream_responses=[
+            _nbrb_parallel_download_stream(with_ids=True),
+            _sse_text("USD и EUR получены"),
+        ],
+    )
+    _patch(monkeypatch, plan, _fake_weather)
+    monkeypatch.setattr("app.tools._download_file", fake_download)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "model": "default",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Курс доллара и евро?"}],
+        },
+    )
+    provider.force_flush()
+
+    assert response.status_code == 200
+    assert "USD и EUR получены" in response.text
+    assert "Unknown tool" not in response.text
+    assert "download_filedownload_file" not in response.text
+    _assert_nbrb_tool_loop(plan, fetched)
+
+    tool_spans = [
+        span
+        for span in exporter.get_finished_spans()
+        if span.attributes.get("openinference.span.kind") == "TOOL"
+    ]
+    assert [span.name for span in tool_spans] == ["download_file", "download_file"]
+    for span in tool_spans:
+        assert "download_filedownload_file" not in span.attributes["input.value"]
+        assert (
+            _NBRB_USD_URL in span.attributes["input.value"]
+            or _NBRB_EUR_URL in span.attributes["input.value"]
+        )
+        assert "Unknown tool" not in span.attributes.get("output.value", "")
+
+
+def test_stream_tool_loop_parallel_nbrb_downloads_without_ids(client, mock_models, monkeypatch):
+    """Те же два вызова без id, оба с index 0 — всё равно два download_file, не Unknown tool."""
+    _auth(client)
+    fetched, fake_download = _recording_download()
+    plan = StreamPlan(
+        stream_responses=[
+            _nbrb_parallel_download_stream(with_ids=False),
+            _sse_text("USD и EUR получены"),
+        ],
+    )
+    _patch(monkeypatch, plan, _fake_weather)
+    monkeypatch.setattr("app.tools._download_file", fake_download)
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "model": "default",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Курс доллара и евро?"}],
+        },
+    )
+    assert response.status_code == 200
+    assert "Unknown tool" not in response.text
+    _assert_nbrb_tool_loop(plan, fetched)
+
+
 def test_call_tool_emits_otel_tool_span(monkeypatch):
     """call_tool records an OpenInference TOOL span with name/input/output."""
     from openinference.instrumentation import OITracer, TraceConfig
@@ -1090,6 +1361,57 @@ def test_call_tool_emits_otel_tool_span(monkeypatch):
     assert attrs["input.mime_type"] == "application/json"
     assert json.loads(attrs["output.value"])["date"]
     assert attrs["output.mime_type"] == "application/json"
+    assert attrs["aichat.tool.known"] is True
+    assert attrs["aichat.tool.arguments_json_valid"] is True
+
+
+def test_is_known_tool_name():
+    assert is_known_tool_name("download_file")
+    assert is_known_tool_name("get_weather")
+    assert not is_known_tool_name("download_filedownload_file")
+    assert not is_known_tool_name("")
+
+
+def test_call_tool_unknown_marks_error_span(monkeypatch):
+    """Unknown tool: Phoenix видит ERROR и aichat.tool.known=false."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+    from opentelemetry.trace import StatusCode
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    glued = (
+        '{"url": "https://api.nbrb.by/exrates/rates/USD?parammode=2"}'
+        '{"url": "https://api.nbrb.by/exrates/rates/EUR?parammode=2"}'
+    )
+    result = json.loads(
+        asyncio.run(
+            call_tool(
+                "download_filedownload_file",
+                glued,
+                tool_call_id="call_glued",
+                conversation_id="conv-1",
+            )
+        )
+    )
+    provider.force_flush()
+    assert "Unknown tool" in result["error"]
+    span = exporter.get_finished_spans()[0]
+    attrs = span.attributes
+    assert attrs["aichat.tool.known"] is False
+    assert attrs["aichat.tool.arguments_json_valid"] is False
+    assert attrs["tool.id"] == "call_glued"
+    assert attrs["aichat.conversation_id"] == "conv-1"
+    assert "Unknown tool" in attrs["aichat.tool.error"]
+    assert span.status.status_code == StatusCode.ERROR
 
 
 def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
@@ -1138,6 +1460,9 @@ def test_tool_loop_wrapped_in_chain_span(client, mock_models, monkeypatch):
     (chain,) = by_kind["CHAIN"]
     (tool,) = by_kind["TOOL"]
     assert chain.name == "chat.tool_loop"
+    assert chain.attributes["aichat.model"]
+    assert chain.attributes["aichat.provider"]
+    assert chain.attributes["aichat.conversation_id"] == "conv-sess-1"
     assert chain.context.trace_id == tool.context.trace_id
     assert tool.parent.span_id == chain.context.span_id
     assert tool.attributes["session.id"] == "conv-sess-1"
@@ -1291,6 +1616,7 @@ def test_compact_tool_content_other_shapes():
     traced = payload_for_trace(
         {
             "model": "default",
+            "tools": [{"type": "function", "function": {"name": "download_file"}}],
             "messages": [
                 "skip-me",
                 {"role": "user", "content": "hi"},
@@ -1299,6 +1625,7 @@ def test_compact_tool_content_other_shapes():
         }
     )
     assert traced["model"] == "default"
+    assert traced["tools"] == ["download_file"]
     assert traced["messages"][0]["role"] == "user"
     tool_payload = json.loads(traced["messages"][1]["content"])
     assert tool_payload["source"] == "pzz.by"
@@ -1339,11 +1666,60 @@ def test_llm_byte_stream_records_tool_calls(monkeypatch):
     provider.force_flush()
     llm = next(span for span in exporter.get_finished_spans() if span.name == "test.llm")
     assert "pzz_search_menu" in llm.attributes["output.value"]
+    assert '"id": "call_menu"' in llm.attributes["output.value"]
+    assert llm.attributes["aichat.llm.tool_call_count"] == 1
+    assert llm.attributes["aichat.llm.sse_bytes"] > 0
     assert any(
         value == "pzz_search_menu"
         for key, value in llm.attributes.items()
         if "tool_call" in key and "name" in key
     )
+
+
+def test_llm_byte_stream_records_parallel_nbrb_downloads_not_glued(monkeypatch):
+    """LLM-спан Phoenix не пишет download_filedownload_file и два JSON подряд."""
+    from openinference.instrumentation import OITracer, TraceConfig
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    from app import telemetry as telemetry_mod
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = OITracer(provider.get_tracer("test"), config=TraceConfig())
+    monkeypatch.setattr(telemetry_mod, "tracer", tracer)
+
+    chunks = _nbrb_parallel_download_stream(with_ids=True)
+
+    async def raw():
+        for chunk in chunks:
+            yield chunk
+
+    asyncio.run(
+        _aiter_all(
+            telemetry_mod.llm_byte_stream(
+                "test.llm",
+                raw(),
+                input_payload={
+                    "model": "x",
+                    "messages": [{"role": "user", "content": "курс"}],
+                },
+            )
+        )
+    )
+    provider.force_flush()
+    llm = next(span for span in exporter.get_finished_spans() if span.name == "test.llm")
+    output = llm.attributes["output.value"]
+    assert "download_filedownload_file" not in output
+    assert output.count("download_file") == 2
+    assert _NBRB_USD_URL in output
+    assert _NBRB_EUR_URL in output
+    parsed = json.loads(output)
+    assert [item["name"] for item in parsed] == ["download_file", "download_file"]
+    assert json.loads(parsed[0]["arguments"])["url"] == _NBRB_USD_URL
+    assert json.loads(parsed[1]["arguments"])["url"] == _NBRB_EUR_URL
 
 
 async def _aiter_all(gen):

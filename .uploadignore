@@ -58,3 +58,4 @@ frontend/public/
 !frontend/dist/
 !frontend/dist/**
 
+.playwright-cli/

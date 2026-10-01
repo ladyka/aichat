@@ -38,6 +38,8 @@ nav:
   - Главная: index.md
   - Разработка:
     - Стек и runtime: dev/runtime.md
+    - Трейсы Phoenix: dev/tracing.md
+    - Ручной тест Playwright: dev/manual-qa-playwright.md
     - OAuth-провайдеры: dev/oauth-providers.md
   - Продукт:
     - О сервисе: product/about.md

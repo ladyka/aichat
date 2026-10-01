@@ -134,6 +134,36 @@ def write_png(path: Path, size: int, raw: bytes) -> None:
     path.write_bytes(png)
 
 
+def write_ico(path: Path, size: int, raw: bytes) -> None:
+    """ICO-контейнер с одним PNG-изображением (поддерживается с Windows Vista).
+
+    Служебный роут favicon.ico в браузерах ищется и без <link rel="icon">:
+    PNG внутри ICO читают все современные браузеры и FastAPI-StaticFiles
+    отдаст файл с корректным content-type из расширения.
+    """
+
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return (
+            struct.pack(">I", len(payload))
+            + tag
+            + payload
+            + struct.pack(">I", zlib.crc32(tag + payload) & 0xFFFFFFFF)
+        )
+
+    header = struct.pack(">IIBBBBB", size, size, 8, 6, 0, 0, 0)
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(raw, 9))
+        + chunk(b"IEND", b"")
+    )
+    # ICONDIR: reserved=0, type=1 (icon), count=1.
+    # ICONDIRENTRY: width%256, height%256, colors=0, reserved=0,
+    # planes=1, bpp=32, size, offset=6+16.
+    entry = struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(png), 22)
+    path.write_bytes(struct.pack("<HHH", 0, 1, 1) + entry + png)
+
+
 def main() -> None:
     # "any" icons are rounded; maskable/apple/favicon are full-bleed so that
     # Android (safe zone) and iOS (own mask) can crop them themselves.
@@ -148,6 +178,8 @@ def main() -> None:
         path = OUT_DIR / name
         write_png(path, size, render(size, corner))
         print(f"{path.relative_to(OUT_DIR.parent.parent)}: {size}x{size}")
+    write_ico(OUT_DIR / "favicon.ico", 32, render(32, 0.0))
+    print(f"{(OUT_DIR / 'favicon.ico').relative_to(OUT_DIR.parent.parent)}: 32x32")
 
 
 if __name__ == "__main__":

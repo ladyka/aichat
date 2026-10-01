@@ -51,9 +51,9 @@
 | `app/routes/skills.py` | `/api/skills*`, `/api/catalog/skills*` |
 | `app/pzz.py` | клиент публичного API pzz.by (меню, адрес, корзина) |
 | `app/oauth.py` | OAuth2/OIDC: Google, Apple, Яндекс, GitHub (authorize-URL, token exchange, id_token / userinfo) |
-| `app/telemetry.py` | Arize/Phoenix OTLP tracing |
+| `app/telemetry.py` | Arize/Phoenix OTLP tracing; как агенту читать спаны — `docs/dev/tracing.md` |
 | `app/newrelic_telemetry.py` | New Relic agent: APM + авто-форвардинг логов (`NEW_RELIC_*` из `.env`) |
-| `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens, `/sw.js` + `/manifest.webmanifest` (PWA-файлы из `frontend/dist`, из корня — иначе у SW нет scope `/`) |
+| `app/routes/pages.py` | лендинг, login/register, chat shell, settings, tokens, `/sw.js` + `/manifest.webmanifest` (PWA-файлы из `frontend/dist`, из корня — иначе у SW нет scope `/`), `/favicon.ico` |
 | `app/routes/skill_pages.py` | `/skills`, `/catalog` (Jinja) |
 | `app/routes/oauth.py` | `/auth/{google,apple,yandex,github}` и callback'и |
 | `app/routes/api.py` | `/api/chat`, `/v1/*` |
@@ -63,8 +63,8 @@
 | `app/visitors.py` | классификация User-Agent: human / crawler / bot |
 | `frontend/` | React + assistant-ui (чат) |
 | `frontend/src/sw.ts` | PWA: service worker (кеш API + офлайн-оболочка; сборка → `dist/sw.js`). Собирается `tsconfig.sw.json`, `tsconfig.app.json` его исключает — DOM- и WebWorker-lib несовместимы |
-| `frontend/public/` | PWA: `manifest.webmanifest` (версионируемый, `start_url` `/chat`) + иконки (генератор — `scripts/generate_pwa_icons.py`). PWA-теги — только в `templates/chat.html` |
-| `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация) |
+| `frontend/public/` | PWA: `manifest.webmanifest` (версионируемый, `start_url` `/chat`) + иконки + `favicon.ico` (генератор — `scripts/generate_pwa_icons.py`). PWA-теги — только в `templates/chat.html` |
+| `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация, markdown-ссылки, автотема) |
 | `templates/`, `static/` | Jinja лендинг/auth/tokens/settings |
 | `docker-compose.yml` | локальный MySQL 8.0.46 (`docker compose up -d`) |
 | `server.py` | entrypoint (uvicorn; `PORT` или `SOCKET`) |
@@ -89,6 +89,7 @@
 - Не тащи React/Next на весь сайт без явной просьбы.
 - Сохраняй OpenAI-совместимый контракт для `/v1/models` и `/v1/chat/completions`.
 - При completions в лог пиши: `aichat_model=…` `provider=…` `upstream_model=…`.
+- Сбой чата или руки — сначала трейс Phoenix (вставка спана, `session.id`, фильтр ERROR). Какие поля смотреть и как выгрузить — `docs/dev/tracing.md`.
 - После изменений API/конфига/запуска — обнови `README.md` (и этот файл, если меняются правила агента).
 - Перед проверкой `/chat`: `make frontend-build` (ассеты в `frontend/dist`, отдаются как `/chat-ui/`).
 

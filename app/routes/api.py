@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -34,7 +32,12 @@ from app.models_catalog import (
     to_public_id,
 )
 from app.skills import inject_conversation_skills
-from app.tools import call_tool, enabled_tools, extract_tool_calls
+from app.tools import (
+    call_tool,
+    enabled_tools,
+    extract_tool_calls,
+    tool_progress_line,
+)
 
 router = APIRouter()
 logger = logging.getLogger("aichat.completions")
@@ -232,6 +235,12 @@ async def _public_event_stream(payload: dict[str, Any], route: ModelRoute) -> As
         yield _rewrite_sse_line(buffer, route)
 
 
+def _conversation_id_attr(conversation_id: Any) -> str:
+    if isinstance(conversation_id, str) and conversation_id.strip():
+        return conversation_id.strip()
+    return str(conversation_id or "")
+
+
 async def _tool_chat_response(
     route: ModelRoute,
     payload: dict[str, Any],
@@ -240,6 +249,7 @@ async def _tool_chat_response(
     user: User,
     known_location: dict[str, float] | None = None,
     conversation_id: Any = None,
+    session_id: str | None = None,
 ) -> Response:
     """Internal chat only: loop model <-> tool execution.
 
@@ -254,78 +264,168 @@ async def _tool_chat_response(
     shared coordinates (`known_location`), the tool is resolved instantly;
     otherwise the loop pauses and asks the frontend to prompt the user via
     navigator.geolocation (`type: "location_request"` response).
+
+    Пока рука работает, в поток уходят дельты `reasoning`: иначе чат показывает
+    пустой пузырь и кажется, что ответ завис.
     """
     messages = list(payload.get("messages") or [])
     location = _known_location(messages, known_location)
     if not payload.get("stream"):
-        for step in range(MAX_TOOL_STEPS):
-            response = await _call_chat(route, payload)
-            try:
-                data = response.json()
-            except Exception:
-                return JSONResponse(
-                    status_code=502,
-                    content={"error": "Invalid response from upstream"},
-                )
-            if response.status_code >= 400:
-                return JSONResponse(status_code=response.status_code, content=data)
-            if isinstance(data, dict) and isinstance(data.get("model"), str):
-                data = {**data, "model": _response_model_id(route, data.get("model"))}
-            message = (data.get("choices") or [{}])[0].get("message") or {}
-            if not isinstance(message, dict) or not message.get("tool_calls"):
-                _log_usage(db, user, route.public_id, source, data.get("usage"))
-                return JSONResponse(content=data, status_code=response.status_code)
-            tool_names = [
-                str(call.get("function", {}).get("name") or "")
-                for call in message["tool_calls"]
-            ]
-            logger.info(
-                "tool loop step=%s/%s tools=%s user_id=%s",
-                step + 1,
-                MAX_TOOL_STEPS,
-                ",".join(name for name in tool_names if name) or "-",
-                user.id,
-            )
-            requests_location = any(name == "get_user_location" for name in tool_names)
-            if requests_location and not location:
-                return JSONResponse(
-                    content={
-                        "type": "location_request",
-                        "assistant_tool_call": message,
-                    }
-                )
-            messages.append(message)
-            for call in message["tool_calls"]:
-                if call.get("function", {}).get("name") == "get_user_location":
-                    result = json.dumps(location, ensure_ascii=False)
-                else:
-                    result = await call_tool(
-                        call["function"]["name"],
-                        call["function"]["arguments"],
-                        user=user,
-                        db=db,
-                        conversation_id=conversation_id,
+        with telemetry_mod.chain_span(
+            "chat.tool_loop",
+            attributes={
+                "aichat.conversation_id": _conversation_id_attr(conversation_id),
+                "aichat.model": route.public_id,
+                "aichat.provider": route.provider,
+                "aichat.upstream_model": route.upstream_id,
+            },
+        ):
+            for step in range(MAX_TOOL_STEPS):
+                response = await _call_chat(route, payload)
+                try:
+                    data = response.json()
+                except Exception:
+                    return JSONResponse(
+                        status_code=502,
+                        content={"error": "Invalid response from upstream"},
                     )
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call["id"],
-                        "content": result,
-                    }
+                if response.status_code >= 400:
+                    return JSONResponse(status_code=response.status_code, content=data)
+                if isinstance(data, dict) and isinstance(data.get("model"), str):
+                    data = {**data, "model": _response_model_id(route, data.get("model"))}
+                message = (data.get("choices") or [{}])[0].get("message") or {}
+                if not isinstance(message, dict) or not message.get("tool_calls"):
+                    _log_usage(db, user, route.public_id, source, data.get("usage"))
+                    return JSONResponse(content=data, status_code=response.status_code)
+                tool_names = [
+                    str(call.get("function", {}).get("name") or "")
+                    for call in message["tool_calls"]
+                ]
+                logger.info(
+                    "tool loop step=%s/%s tools=%s user_id=%s",
+                    step + 1,
+                    MAX_TOOL_STEPS,
+                    ",".join(name for name in tool_names if name) or "-",
+                    user.id,
                 )
-            location = _known_location(messages, known_location)
-            payload = {**payload, "messages": messages}
-        logger.warning(
-            "tool loop limit exceeded source=%s user_id=%s steps=%s stream=false",
-            source,
-            user.id,
-            MAX_TOOL_STEPS,
-        )
-        return JSONResponse(
-            status_code=502,
-            content={"error": TOOL_LOOP_LIMIT_ERROR},
-        )
+                requests_location = any(name == "get_user_location" for name in tool_names)
+                if requests_location and not location:
+                    return JSONResponse(
+                        content={
+                            "type": "location_request",
+                            "assistant_tool_call": message,
+                        }
+                    )
+                messages.append(message)
+                for call in message["tool_calls"]:
+                    if call.get("function", {}).get("name") == "get_user_location":
+                        result = json.dumps(location, ensure_ascii=False)
+                    else:
+                        result = await call_tool(
+                            call["function"]["name"],
+                            call["function"]["arguments"],
+                            user=user,
+                            db=db,
+                            conversation_id=conversation_id,
+                            tool_call_id=str(call.get("id") or ""),
+                        )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "content": result,
+                        }
+                    )
+                location = _known_location(messages, known_location)
+                payload = {**payload, "messages": messages}
+            logger.warning(
+                "tool loop limit exceeded source=%s user_id=%s steps=%s stream=false",
+                source,
+                user.id,
+                MAX_TOOL_STEPS,
+            )
+            return JSONResponse(
+                status_code=502,
+                content={"error": TOOL_LOOP_LIMIT_ERROR},
+            )
 
+    sid = (
+        session_id
+        if session_id
+        else (
+            conversation_id.strip()
+            if isinstance(conversation_id, str) and conversation_id.strip()
+            else uuid4().hex
+        )
+    )
+    return StreamingResponse(
+        telemetry_mod.stream_in_session(
+            sid,
+            _stream_tool_loop(
+                route=route,
+                payload=payload,
+                source=source,
+                db=db,
+                user=user,
+                conversation_id=conversation_id,
+                messages=messages,
+                location=location,
+                known_location=known_location,
+                session_id=sid,
+            ),
+        ),
+        media_type="text/event-stream",
+    )
+
+
+async def _stream_tool_loop(
+    route: ModelRoute,
+    payload: dict[str, Any],
+    source: str,
+    db: Session,
+    user: User,
+    conversation_id: Any,
+    messages: list[dict[str, Any]],
+    location: dict[str, float] | None,
+    known_location: dict[str, float] | None,
+    session_id: str,
+) -> AsyncIterator[bytes]:
+    """Stream the tool loop: progress in reasoning, then the model's answer."""
+    with _trace_user(user, session_id):
+        with telemetry_mod.chain_span(
+            "chat.tool_loop",
+            attributes={
+                "aichat.conversation_id": _conversation_id_attr(conversation_id),
+                "aichat.model": route.public_id,
+                "aichat.provider": route.provider,
+                "aichat.upstream_model": route.upstream_id,
+            },
+        ):
+            async for chunk in _stream_tool_loop_body(
+                route=route,
+                payload=payload,
+                source=source,
+                db=db,
+                user=user,
+                conversation_id=conversation_id,
+                messages=messages,
+                location=location,
+                known_location=known_location,
+            ):
+                yield chunk
+
+
+async def _stream_tool_loop_body(
+    route: ModelRoute,
+    payload: dict[str, Any],
+    source: str,
+    db: Session,
+    user: User,
+    conversation_id: Any,
+    messages: list[dict[str, Any]],
+    location: dict[str, float] | None,
+    known_location: dict[str, float] | None,
+) -> AsyncIterator[bytes]:
     for step in range(MAX_TOOL_STEPS):
         stream = _stream_completions(route, payload)
         prefix = b""
@@ -349,17 +449,14 @@ async def _tool_chat_response(
             elif _sse_has_content(prefix):
                 classified = "text"
         if classified is None:
-            # Stream finished with no content and no tool calls.
-            return StreamingResponse(
-                _rewrite_chunks(_prefix_then(prefix, stream), route),
-                media_type="text/event-stream",
-            )
+            async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
+                yield chunk
+            return
         if classified == "text":
             # Plain answer: forward the buffered prefix, stream the rest live.
-            return StreamingResponse(
-                _rewrite_chunks(_prefix_then(prefix, stream), route),
-                media_type="text/event-stream",
-            )
+            async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
+                yield chunk
+            return
 
         raw = prefix
         async for chunk in stream:
@@ -372,13 +469,14 @@ async def _tool_chat_response(
             ",".join(call["name"] for call in calls) or "-",
             user.id,
         )
+        progress = _tool_progress_sse(raw, calls, route)
+        yield progress
         requests_location = any(call["name"] == "get_user_location" for call in calls)
         if requests_location and not location:
             assistant_message = _tool_call_messages(calls)[0]
-            return StreamingResponse(
-                _location_request_stream(assistant_message),
-                media_type="text/event-stream",
-            )
+            async for chunk in _location_request_stream(assistant_message):
+                yield chunk
+            return
         messages.extend(_tool_call_messages(calls))
         for call in calls:
             if call["name"] == "get_user_location":
@@ -390,6 +488,7 @@ async def _tool_chat_response(
                     user=user,
                     db=db,
                     conversation_id=conversation_id,
+                    tool_call_id=call.get("id") or "",
                 )
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
@@ -401,10 +500,58 @@ async def _tool_chat_response(
         user.id,
         MAX_TOOL_STEPS,
     )
-    return JSONResponse(
-        status_code=502,
-        content={"error": TOOL_LOOP_LIMIT_ERROR},
+    yield (f"data: {json.dumps({'error': TOOL_LOOP_LIMIT_ERROR}, ensure_ascii=False)}\n\n").encode(
+        "utf-8"
     )
+    yield b"data: [DONE]\n\n"
+
+
+def _tool_progress_sse(raw: bytes, calls: list[dict[str, str]], route: ModelRoute) -> bytes:
+    """Кадр reasoning: мысль модели до tool_calls и строка хода работы.
+
+    После tool_calls, до их исполнения — иначе чат показывает пустой пузырь.
+    """
+    thinking = _sse_delta_concat(raw, ("reasoning", "reasoning_content", "content"))
+    names = [call["name"] for call in calls if call.get("name")]
+    status = "\n".join(tool_progress_line(name) for name in names)
+    if not status:
+        status = tool_progress_line("")
+    parts: list[str] = []
+    if thinking.strip():
+        parts.append(thinking.rstrip())
+    parts.append(status)
+    text = "\n".join(parts) + "\n"
+    payload = {"choices": [{"index": 0, "delta": {"reasoning": text}}]}
+    line = f"data: {json.dumps(payload, ensure_ascii=False)}"
+    return _rewrite_sse_line(line.encode("utf-8"), route) + b"\n\n"
+
+
+def _sse_reasoning_text(raw: bytes) -> str:
+    return _sse_delta_concat(raw, ("reasoning", "reasoning_content"))
+
+
+def _sse_delta_concat(raw: bytes, keys: tuple[str, ...]) -> str:
+    """Склеить строковые поля delta из SSE-кадров."""
+    texts: list[str] = []
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+        if not isinstance(delta, dict):
+            continue
+        for key in keys:
+            value = delta.get(key)
+            if isinstance(value, str) and value:
+                texts.append(value)
+    return "".join(texts)
 
 
 async def _prefix_then(prefix: bytes, rest: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
@@ -425,22 +572,7 @@ async def _rewrite_chunks(chunks: AsyncIterator[bytes], route: ModelRoute) -> As
 
 
 def _sse_has_content(raw: bytes) -> bool:
-    for line in raw.split(b"\n"):
-        stripped = line.strip()
-        if not stripped.startswith(b"data:"):
-            continue
-        data = stripped[5:].strip()
-        if not data or data == b"[DONE]":
-            continue
-        try:
-            obj = json.loads(data)
-        except json.JSONDecodeError:
-            continue
-        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
-        content = delta.get("content")
-        if isinstance(content, str) and content:
-            return True
-    return False
+    return bool(_sse_delta_concat(raw, ("content",)))
 
 
 def _tool_call_messages(calls: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -576,16 +708,16 @@ async def _proxy_inner(
 
     # Internal chat: run the tool loop server-side, hand back the final text.
     if source == "chat" and payload.get("tools"):
-        with telemetry_mod.chain_span("chat.tool_loop"):
-            return await _tool_chat_response(
-                route,
-                payload,
-                source,
-                db,
-                user,
-                known_location,
-                conversation_id=body.get("conversation_id"),
-            )
+        return await _tool_chat_response(
+            route,
+            payload,
+            source,
+            db,
+            user,
+            known_location,
+            conversation_id=body.get("conversation_id"),
+            session_id=session_id,
+        )
 
     if payload.get("stream"):
         return StreamingResponse(

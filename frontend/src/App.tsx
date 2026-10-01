@@ -22,6 +22,7 @@ import { Thread } from "@/components/Thread";
 import { ActiveThreadTitle, ThreadList } from "@/components/ThreadList";
 import { getConversation } from "@/lib/api";
 import { useConversationId } from "@/lib/conversation-id";
+import { useTitleSync } from "@/lib/title-sync";
 
 const SIDEBAR_KEY = "aichat.sidebarOpen";
 const MOBILE_QUERY = "(max-width: 768px)";
@@ -61,6 +62,7 @@ function ChatHeaderButton({
 function ChatLayout() {
   const conversationId = useConversationId();
   const aui = useAui();
+  useTitleSync();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
       const raw = localStorage.getItem(SIDEBAR_KEY);

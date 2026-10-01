@@ -583,13 +583,91 @@ def enabled_tools() -> list[dict[str, Any]]:
     return tools
 
 
+def _merge_streamed_text(current: str, incoming: str) -> str:
+    """Склеить фрагмент SSE: инкремент, накопленная строка или полный повтор."""
+    if not incoming:
+        return current
+    if not current:
+        return incoming
+    if incoming == current:
+        return current
+    if incoming.startswith(current):
+        return incoming
+    if current.startswith(incoming):
+        return current
+    return current + incoming
+
+
+def _is_complete_json(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    try:
+        _, end = json.JSONDecoder().raw_decode(stripped)
+    except json.JSONDecodeError:
+        return False
+    return end == len(stripped)
+
+
+def _starts_new_tool_arguments(current: str, incoming: str) -> bool:
+    """Второй целый JSON на том же index — это новый вызов, а не продолжение дельты."""
+    if not incoming or incoming == current:
+        return False
+    if incoming.startswith(current) or current.startswith(incoming):
+        return False
+    return _is_complete_json(current) and _is_complete_json(incoming)
+
+
+def _tool_delta_arguments(fn: dict[str, Any]) -> str:
+    raw = fn.get("arguments")
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw
+    if isinstance(raw, (dict, list)):
+        return json.dumps(raw, ensure_ascii=False)
+    return str(raw)
+
+
+_ALL_TOOL_DEFINITIONS = (
+    _DATETIME_TOOL,
+    _WEATHER_TOOL,
+    _USER_LOCATION_TOOL,
+    _READ_NOTE_TOOL,
+    _WRITE_NOTE_TOOL,
+    _DOWNLOAD_TOOL,
+    _GENERATE_IMAGE_TOOL,
+    _CREATE_SITE_TOOL,
+    _UPDATE_SITE_TOOL,
+    _DELETE_SITE_TOOL,
+    _PUBLISH_SITE_TOOL,
+    _SITE_STATUS_TOOL,
+    _PZZ_SEARCH_TOOL,
+    _PZZ_ADDRESS_TOOL,
+    _PZZ_ORDER_TOOL,
+    _FEEDBACK_TOOL,
+)
+
+
+def is_known_tool_name(name: str) -> bool:
+    """Имя есть в коде рук, даже если рука сейчас выключена настройкой."""
+    key = (name or "").strip()
+    return any(
+        str((tool.get("function") or {}).get("name") or "") == key for tool in _ALL_TOOL_DEFINITIONS
+    )
+
+
 def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
     """Собрать tool_calls из дельт OpenAI-совместимого SSE-стрима.
 
-    Возвращает список отсортированных по индексу вызовов
-    вида {"id", "name", "arguments"}.
+    Возвращает список вызовов вида {"id", "name", "arguments"}.
+    Параллельные руки с одним index (или без него) не склеиваются в
+    ``download_filedownload_file`` и два JSON подряд.
     """
-    calls: dict[int, dict[str, str]] = {}
+    calls: list[dict[str, str]] = []
+    by_id: dict[str, int] = {}
+    by_index: dict[int, int] = {}
+
     for line in sse_raw.split(b"\n"):
         stripped = line.strip()
         if not stripped.startswith(b"data:"):
@@ -602,21 +680,75 @@ def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
         except json.JSONDecodeError:
             continue
         deltas = ((obj.get("choices") or [{}])[0].get("delta") or {}).get("tool_calls")
-        if not deltas:
+        if not isinstance(deltas, list):
             continue
-        for delta in deltas:
+        for array_i, delta in enumerate(deltas):
             if not isinstance(delta, dict):
                 continue
-            index = int(delta.get("index", 0))
-            entry = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
-            if delta.get("id"):
-                entry["id"] = delta["id"]
+            raw_index = delta.get("index")
+            try:
+                index = int(raw_index) if raw_index is not None else array_i
+            except (TypeError, ValueError):
+                index = array_i
+            call_id = str(delta.get("id") or "")
             fn = delta.get("function") or {}
-            if fn.get("name"):
-                entry["name"] += fn["name"]
-            if fn.get("arguments"):
-                entry["arguments"] += fn["arguments"]
-    return [calls[index] for index in sorted(calls)]
+            if not isinstance(fn, dict):
+                fn = {}
+            incoming_name = str(fn.get("name") or "")
+            incoming_args = _tool_delta_arguments(fn)
+
+            pos: int | None = None
+            if call_id and call_id in by_id:
+                pos = by_id[call_id]
+            elif index in by_index:
+                pos = by_index[index]
+                current = calls[pos]
+                if call_id and current["id"] and current["id"] != call_id:
+                    pos = None
+                elif _starts_new_tool_arguments(current["arguments"], incoming_args):
+                    pos = None
+            if pos is None:
+                pos = len(calls)
+                calls.append({"id": call_id, "name": "", "arguments": ""})
+
+            entry = calls[pos]
+            if call_id:
+                entry["id"] = call_id
+                by_id[call_id] = pos
+            by_index[index] = pos
+            if incoming_name:
+                entry["name"] = _merge_streamed_text(entry["name"], incoming_name)
+            if incoming_args:
+                entry["arguments"] = _merge_streamed_text(entry["arguments"], incoming_args)
+    return calls
+
+
+_TOOL_PROGRESS = {
+    "get_current_datetime": "Смотрю дату и время…",
+    "get_weather": "Узнаю погоду…",
+    "get_user_location": "Запрашиваю местоположение…",
+    "read_chat_note": "Читаю заметку чата…",
+    "write_chat_note": "Пишу в заметку чата…",
+    "download_file": "Скачиваю файл…",
+    "generate_image": "Рисую картинку…",
+    "create_site": "Создаю сайт…",
+    "update_site": "Меняю домен сайта…",
+    "delete_site": "Удаляю сайт…",
+    "publish_site": "Публикую сайт…",
+    "site_status": "Проверяю сайт…",
+    "pzz_search_menu": "Смотрю меню pzz.by…",
+    "pzz_lookup_address": "Ищу адрес доставки…",
+    "pzz_place_order": "Оформляю заказ на pzz.by…",
+    "send_feedback": "Передаю обращение команде…",
+}
+
+
+def tool_progress_line(name: str) -> str:
+    """Короткая строка хода работы для блока рассуждения в чате."""
+    key = (name or "").strip()
+    if not key:
+        return "Выполняю действие…"
+    return _TOOL_PROGRESS.get(key, f"Вызываю инструмент {key}…")
 
 
 def _chat_note_tool(
@@ -859,13 +991,20 @@ async def call_tool(
     user: Any = None,
     db: Any = None,
     conversation_id: Any = None,
+    tool_call_id: str | None = None,
 ) -> str:
     """Исполнить инструмент и вернуть строковый результат для role:tool.
 
     Исполнение обёрнуто в OpenInference TOOL span (имя, аргументы и результат
     видны в Phoenix), когда трассировка включена.
     """
-    with tool_span(name, arguments) as span:
+    with tool_span(
+        name,
+        arguments,
+        tool_call_id=tool_call_id or "",
+        conversation_id=str(conversation_id or ""),
+        known=is_known_tool_name(name),
+    ) as span:
         result = await _call_tool_impl(
             name, arguments, user=user, db=db, conversation_id=conversation_id
         )

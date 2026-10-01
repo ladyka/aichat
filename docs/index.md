@@ -21,6 +21,7 @@ aichat — чат в браузере и, заодно, ключ к тому ж�
 | [999. Бэклог](product/v999.backlog/index.md) | Видение и размышления: вдохновение, а не обещания |
 | [Две аудитории](product/audiences.md) | Витрина `aichat` для людей; LibreChat для компаний |
 | [Стек и runtime](dev/runtime.md) | Python 3.13, Node.js 24, pin-файлы, прод |
+| [Трейсы Phoenix](dev/tracing.md) | Как агенту читать спаны Arize и какие поля туда пишем |
 | [OAuth-провайдеры](dev/oauth-providers.md) | Как получить креды Google, Apple, Яндекс, GitHub |
 
 ## Локальный просмотр

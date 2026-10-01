@@ -85,6 +85,8 @@ def test_settings_arize_enabled(monkeypatch):
     assert settings.arize_enabled
     assert settings.arize_project_name == "aichat"
     assert settings.arize_otlp_endpoint == ""
+    assert settings.arize_rest_base_url == "https://api.ca-central-1a.arize.com"
+    assert settings.arize_rest_api_key == "key"
 
 
 def test_settings_newrelic_defaults(monkeypatch):
