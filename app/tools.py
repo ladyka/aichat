@@ -255,6 +255,21 @@ _DELETE_SITE_TOOL: dict[str, Any] = {
     },
 }
 
+_SITE_STATUS_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "site_status",
+        "description": (
+            "Узнать состояние сайта пользователя на mzg.by: создан ли сайт, какой у него "
+            "домен, когда создан и опубликован ли последний вариант (publish_site). "
+            "Вызывай, когда пользователь спрашивает про свой сайт: «есть ли у меня сайт», "
+            "«какой адрес», «опубликован ли», «что на сайте сейчас». Если сайта нет — "
+            "предложи создать (create_site). Пересказывай данные словами, не выдумывай."
+        ),
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
 _PUBLISH_SITE_TOOL: dict[str, Any] = {
     "type": "function",
     "function": {
@@ -530,7 +545,15 @@ def enabled_tools() -> list[dict[str, Any]]:
     settings = get_settings()
     tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL, _READ_NOTE_TOOL, _WRITE_NOTE_TOOL]
     if settings.mzg_sites_enabled:
-        tools.extend([_CREATE_SITE_TOOL, _UPDATE_SITE_TOOL, _DELETE_SITE_TOOL, _PUBLISH_SITE_TOOL])
+        tools.extend(
+            [
+                _CREATE_SITE_TOOL,
+                _UPDATE_SITE_TOOL,
+                _DELETE_SITE_TOOL,
+                _PUBLISH_SITE_TOOL,
+                _SITE_STATUS_TOOL,
+            ]
+        )
     if settings.pzz_enabled:
         tools.extend([_PZZ_SEARCH_TOOL, _PZZ_ADDRESS_TOOL, _PZZ_ORDER_TOOL])
     if settings.openweather_api_key:
@@ -705,6 +728,10 @@ def _site_tool(
             {"ok": True, "deleted": f"{site.domain}.{mzg.MZG_SUFFIX}", "domain": None}
         )
 
+    if name == "site_status":
+        # Только чтение: состояние сайта + файл публикации на диске.
+        return _tool_json(mzg.site_status(db, user))
+
     # publish_site: тело — заметка чата, если не передан явный body.
     if mzg.user_site(db, user) is None:
         return _tool_json({"error": mzg.SITE_NOT_FOUND})
@@ -795,7 +822,7 @@ async def _call_tool_impl(
         return await _download_file(arguments, user=user, db=db)
     if name in {"read_chat_note", "write_chat_note"}:
         return _chat_note_tool(name, arguments, user=user, db=db, conversation_id=conversation_id)
-    if name in {"create_site", "update_site", "delete_site", "publish_site"}:
+    if name in {"create_site", "update_site", "delete_site", "publish_site", "site_status"}:
         return _site_tool(name, arguments, user=user, db=db, conversation_id=conversation_id)
     try:
         args = json.loads(arguments or "{}")

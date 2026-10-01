@@ -262,6 +262,7 @@ def test_sites_tools_off_without_folder(monkeypatch):
     assert "update_site" not in names
     assert "delete_site" not in names
     assert "publish_site" not in names
+    assert "site_status" not in names
 
 
 def test_sites_tools_advertised_with_folder(monkeypatch, tmp_path):
@@ -271,6 +272,7 @@ def test_sites_tools_advertised_with_folder(monkeypatch, tmp_path):
     assert "update_site" in names
     assert "delete_site" in names
     assert "publish_site" in names
+    assert "site_status" in names
 
 
 def test_sites_tools_disabled_error(monkeypatch):
@@ -323,6 +325,45 @@ def test_delete_site_tool_needs_confirm(monkeypatch, client, db, tmp_path):
     assert user_site(db, user) is None
     none = _call("delete_site", "{}", user=user, db=db)
     assert none["error"] == SITE_NOT_FOUND
+
+
+def test_site_status_lifecycle(monkeypatch, client, db, tmp_path):
+    _enable(monkeypatch, tmp_path)
+    user, _ = _user_ctx(client, db)
+
+    # Сайта нет.
+    empty = _call("site_status", "{}", user=user, db=db)
+    assert empty == {"exists": False}
+
+    # Создан, но не публиковался.
+    _call("create_site", '{"domain": "statusy"}', user=user, db=db)
+    created = _call("site_status", "{}", user=user, db=db)
+    assert created["exists"] is True
+    assert created["domain"] == "statusy.mzg.by"
+    assert created["published"] is False
+    assert created["file_exists"] is False
+    assert created["published_at"] is None
+    assert created["created_at"]
+
+    # После публикации: флаг, время и размер файла.
+    _call("publish_site", '{"body": "# Статус"}', user=user, db=db)
+    published = _call("site_status", "{}", user=user, db=db)
+    assert published["published"] is True
+    assert published["published_at"] is not None
+    assert published["file_exists"] is True
+    assert published["file_bytes"] == len("# Статус".encode("utf-8"))
+
+    # Смена домена = delete + create: публикация сброшена.
+    _call("update_site", '{"domain": "statusy2"}', user=user, db=db)
+    renamed = _call("site_status", "{}", user=user, db=db)
+    assert renamed["domain"] == "statusy2.mzg.by"
+    assert renamed["published"] is False
+    assert renamed["file_exists"] is False
+
+    # После удаления сайта снова нет.
+    _call("delete_site", '{"confirm": true}', user=user, db=db)
+    deleted = _call("site_status", "{}", user=user, db=db)
+    assert deleted == {"exists": False}
 
 
 def test_publish_site_tool_from_note(monkeypatch, client, db, tmp_path):

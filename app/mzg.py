@@ -67,6 +67,14 @@ def user_site(db: Session, user: Any) -> UserSite | None:
     return db.scalar(select(UserSite).where(UserSite.user_id == user.id))
 
 
+def _iso(dt: datetime | None) -> str | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 def get_site_by_domain(db: Session, domain: str) -> UserSite | None:
     return db.scalar(select(UserSite).where(UserSite.domain == domain))
 
@@ -146,6 +154,31 @@ def delete_site(db: Session, user: Any) -> tuple[UserSite | None, str | None]:
     db.commit()
     logger.info("site deleted user_id=%s domain=%s", user.id, site.domain)
     return site, None
+
+
+def site_status(db: Session, user: Any) -> dict[str, Any]:
+    """Состояние сайта пользователя для инструмента site_status (без изменений в БД).
+
+    сайта нет → {"exists": False}; иначе домен, отметки времени, флаг публикации
+    и сведения о файле <domain>.md на диске (file_exists/file_bytes).
+    """
+    site = user_site(db, user)
+    if site is None:
+        return {"exists": False}
+    file_path = _site_file(site.domain)
+    file_exists = bool(file_path is not None and file_path.is_file())
+    payload: dict[str, Any] = {
+        "exists": True,
+        "domain": f"{site.domain}.{MZG_SUFFIX}",
+        "created_at": _iso(site.created_at),
+        "published": site.published_at is not None,
+        "published_at": _iso(site.published_at),
+    }
+    payload["file_exists"] = file_exists
+    payload["file_bytes"] = file_path.stat().st_size if file_exists else 0
+    if not file_exists and site.published_at is not None:
+        payload["note"] = "файл публикации отсутствует на диске; опубликуйте заново"
+    return payload
 
 
 def sites_folder() -> Path:

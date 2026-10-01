@@ -43,8 +43,8 @@
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
-| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `publish_site`) |
-| `app/mzg.py` | mzg.by: сайты пользователей — домен `<имя>.mzg.by`, один сайт на пользователя (создать / сменить домен = удалить+создать / удалить), публикация заметки как `<имя>.md` в `MZG_SITES_FOLDER` |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`) |
+| `app/mzg.py` | mzg.by: сайты пользователей — домен `<имя>.mzg.by`, один сайт на пользователя (создать / сменить домен = удалить+создать / удалить / статус), публикация заметки как `<имя>.md` в `MZG_SITES_FOLDER` |
 | `app/feedback.py` | `send_feedback`: Incoming Webhook Slack/Discord (`FEEDBACK_WEBHOOK_URL`) |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
 | `app/skills.py` | CRUD skills, публикация/каталог/копия, дефолты, набор чата |
