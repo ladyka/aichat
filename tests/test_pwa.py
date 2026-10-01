@@ -58,6 +58,32 @@ def test_web_manifest_without_build_returns_404(client, monkeypatch, tmp_path):
     assert client.get("/manifest.webmanifest").status_code == 404
 
 
+def test_favicon_is_served_from_the_root(client, monkeypatch, tmp_path):
+    """`/favicon.ico` из корня: браузеры запрашивают его даже без <link>."""
+    from app.config import get_settings
+
+    dist = tmp_path / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "favicon.ico").write_bytes(
+        b"\x00\x00\x01\x00\x01\x00 \x20\x00\x00\x01\x00 \x00\x00\x00\x00\x22\x00"
+    )
+    monkeypatch.setattr(get_settings(), "root", tmp_path)
+
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/x-icon")
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_favicon_without_build_returns_404(client, monkeypatch, tmp_path):
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "root", tmp_path)
+
+    assert client.get("/favicon.ico").status_code == 404
+
+
 def test_chat_page_declares_pwa(client):
     """PWA-теги — только у страницы чата, остальной сайт не устанавливаемый."""
     register(client, _email())
@@ -97,3 +123,26 @@ def test_pwa_manifest_matches_the_chat_entry():
     for icon in manifest["icons"]:
         assert icon["src"].startswith("/chat-ui/")
         assert (public / icon["src"].removeprefix("/chat-ui/")).is_file()
+
+
+def test_favicon_generator_writes_a_real_ico():
+    """`scripts/generate_pwa_icons.py` кладёт ICO-контейнер (не PNG под другим именем)."""
+    from app.config import get_settings
+
+    public = get_settings().root / "frontend" / "public"
+    data = (public / "favicon.ico").read_bytes()
+    reserved, ico_type, count = (
+        int.from_bytes(data[0:2], "little"),
+        int.from_bytes(data[2:4], "little"),
+        int.from_bytes(data[4:6], "little"),
+    )
+    assert (reserved, ico_type, count) == (0, 1, 1)
+    entry = data[6:22]
+    width, height, planes, bpp = (
+        entry[0],
+        entry[1],
+        int.from_bytes(entry[4:6], "little"),
+        int.from_bytes(entry[6:8], "little"),
+    )
+    assert (width, height, planes, bpp) == (32, 32, 1, 32)
+    assert data[22:26] == b"\x89PNG"

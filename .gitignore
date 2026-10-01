@@ -14,3 +14,4 @@ frontend/dist/
 .coverage
 .pytest_cache/
 data/
+.playwright-cli/

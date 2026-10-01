@@ -257,6 +257,15 @@ def web_manifest() -> FileResponse:
     return _dist_response("manifest.webmanifest", "application/manifest+json")
 
 
+@router.get("/favicon.ico")
+def favicon_ico() -> FileResponse:
+    """Классический favicon из корня: браузеры запрашивают его даже без <link>.
+
+    Файл живёт в `frontend/public/favicon.ico` и попадает в сборку чата.
+    """
+    return _dist_response("favicon.ico", "image/x-icon")
+
+
 def _settings_render(
     request: Request,
     user: User,

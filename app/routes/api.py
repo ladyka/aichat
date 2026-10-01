@@ -500,15 +500,13 @@ async def _stream_tool_loop_body(
         user.id,
         MAX_TOOL_STEPS,
     )
-    yield (
-        f"data: {json.dumps({'error': TOOL_LOOP_LIMIT_ERROR}, ensure_ascii=False)}\n\n"
-    ).encode("utf-8")
+    yield (f"data: {json.dumps({'error': TOOL_LOOP_LIMIT_ERROR}, ensure_ascii=False)}\n\n").encode(
+        "utf-8"
+    )
     yield b"data: [DONE]\n\n"
 
 
-def _tool_progress_sse(
-    raw: bytes, calls: list[dict[str, str]], route: ModelRoute
-) -> bytes:
+def _tool_progress_sse(raw: bytes, calls: list[dict[str, str]], route: ModelRoute) -> bytes:
     """Кадр reasoning: мысль модели до tool_calls и строка хода работы.
 
     После tool_calls, до их исполнения — иначе чат показывает пустой пузырь.
