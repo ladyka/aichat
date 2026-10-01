@@ -233,6 +233,13 @@ async function* postAndStream(
       }
       if (obj?.type === "location_request") {
         state.locationRequest = obj as LocationRequestEvent;
+        if (!text && !reasoning) {
+          reasoning = "Запрашиваю местоположение…\n";
+          yield runResult(
+            buildParts(reasoning, text),
+            buildResponseInfo(model, reportedModel, usage),
+          );
+        }
         continue;
       }
       if (obj?.error != null) {

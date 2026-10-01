@@ -550,6 +550,29 @@ def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
     return calls
 
 
+_TOOL_PROGRESS = {
+    "get_current_datetime": "Смотрю дату и время…",
+    "get_weather": "Узнаю погоду…",
+    "get_user_location": "Запрашиваю местоположение…",
+    "read_chat_note": "Читаю заметку чата…",
+    "write_chat_note": "Пишу в заметку чата…",
+    "download_file": "Скачиваю файл…",
+    "generate_image": "Рисую картинку…",
+    "pzz_search_menu": "Смотрю меню pzz.by…",
+    "pzz_lookup_address": "Ищу адрес доставки…",
+    "pzz_place_order": "Оформляю заказ на pzz.by…",
+    "send_feedback": "Передаю обращение команде…",
+}
+
+
+def tool_progress_line(name: str) -> str:
+    """Короткая строка хода работы для блока рассуждения в чате."""
+    key = (name or "").strip()
+    if not key:
+        return "Выполняю действие…"
+    return _TOOL_PROGRESS.get(key, f"Вызываю инструмент {key}…")
+
+
 def _chat_note_tool(
     name: str,
     arguments: str,

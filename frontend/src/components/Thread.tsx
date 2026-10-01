@@ -262,9 +262,14 @@ function MarkdownText({ text }: TextMessagePartProps) {
 }
 
 function ReasoningText({ text }: ReasoningMessagePartProps) {
+  const isRunning = useAuiState((s) => s.thread.isRunning);
+  const isLast = useAuiState((s) => s.message.isLast);
+  const live = isRunning && isLast;
   return (
-    <details className="msg-reasoning">
-      <summary className="msg-reasoning-summary">Рассуждение</summary>
+    <details className={live ? "msg-reasoning msg-reasoning-live" : "msg-reasoning"} open={live || undefined}>
+      <summary className="msg-reasoning-summary">
+        {live ? "Работаю…" : "Рассуждение"}
+      </summary>
       <div className="msg-reasoning-body">{text}</div>
     </details>
   );

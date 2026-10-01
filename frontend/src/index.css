@@ -250,6 +250,10 @@ body,
   transform: rotate(90deg);
 }
 
+.msg-reasoning-live .msg-reasoning-summary {
+  color: var(--chat-accent);
+}
+
 .msg-reasoning-body {
   padding: 0 0.7rem 0.7rem;
   font-size: 0.85rem;
