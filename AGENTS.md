@@ -25,6 +25,7 @@
 - Skills приватны по умолчанию. В каталоге только опубликованные. В чат и в дефолты — только свои (чужой — через копию). Набор чата можно менять по ходу диалога.
 - Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`docs/product/v2/billing.md`). Эту строку менять только вместе с эпиком и его страницей.
 - **Витрина этого репозитория — для обычных людей** (простой чат, бытовые tools). Не заменять её на LibreChat и не тащить сюда корпоративный ACL/агентский зоопарк.
+- **Деплой сайта**: у пользователя один сайт `<имя>.mzg.by`; содержимое — заметка чата, публикация кладёт `<имя>.md` в `MZG_SITES_FOLDER` (пусто — инструменты выключены). Таблица `user_sites`.
 - **Компании — отдельный деплой LibreChat** (OAuth/SSO, роли, агенты). Бытовые tools витрины туда не вырезать; при необходимости — обёртка снаружи (MCP/OpenAPI). См. `docs/product/audiences.md`.
 - **Версия 1 выпущена** (план исполнен, работает на проде): факт — витрина (чат, tools, API, PWA) и **skills с каталогом навыков**; новых функций в v1 не будет. По функциям — `docs/product/v1/`.
 - **Версия 2 — в планах** (`docs/product/v2/`): решённое, но не сделанное; на витрине — **ИИ-диктофон** (`/dictaphone`, план — `docs/product/v2/dictaphone.md`), голосовой чат, заметки 2, веб-поиск, биллинг, приложение на телефон (вторая часть офлайна и магазины); **отдельной выкладкой** — LibreChat для компаний. Порядка внутри нет, очередь не выбрана. В коде из этого нет ничего. См. `docs/product/roadmap.md`.
@@ -42,7 +43,8 @@
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
-| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`) |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`) |
+| `app/mzg.py` | mzg.by: сайты пользователей — домен `<имя>.mzg.by`, один сайт на пользователя (создать / сменить домен = удалить+создать / удалить / статус), публикация заметки как `<имя>.md` в `MZG_SITES_FOLDER` |
 | `app/feedback.py` | `send_feedback`: Incoming Webhook Slack/Discord (`FEEDBACK_WEBHOOK_URL`) |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
 | `app/skills.py` | CRUD skills, публикация/каталог/копия, дефолты, набор чата |

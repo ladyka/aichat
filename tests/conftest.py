@@ -48,6 +48,11 @@ os.environ["PZZ_ORDERS_ENABLED"] = "1"
 # A local FEEDBACK_WEBHOOK_URL would advertise send_feedback in tool lists
 # that tests assert without it.
 os.environ["FEEDBACK_WEBHOOK_URL"] = ""
+# Same for the user-sites deploy tools: an MZG_SITES_FOLDER in the local .env
+# would add create_site/update_site/delete_site/publish_site/site_status to
+# the exact tool lists asserted in tests/test_tools.py. Tests that exercise
+# them (tests/test_mzg.py) enable a temporary folder via monkeypatch.
+os.environ["MZG_SITES_FOLDER"] = ""
 # SYSTEM_PROMPT is also a deployment setting; a local value would change the first
 # message of every payload asserted in tests/test_tools.py. Drop it so the built-in
 # default (app.config.DEFAULT_SYSTEM_PROMPT) applies — it is itself covered in
