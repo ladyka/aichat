@@ -169,6 +169,7 @@ cd frontend && npm run dev   # :5173
 | `ARIZE_SPACE_ID` / `ARIZE_API_KEY` | Включить OTLP-трейсы (Arize / Phoenix) |
 | `ARIZE_PROJECT_NAME` | Имя проекта в коллекторе (по умолчанию `aichat`) |
 | `ARIZE_OTLP_ENDPOINT` | OTLP endpoint. Arize cloud gRPC: `https://otlp.<region>.arize.com/v1`; HTTPS: `https://otlp.<region>.arize.com/v1/traces`; локальный Phoenix: `http://127.0.0.1:6006/v1/traces`. Транспорт (gRPC/HTTP) выбирается автоматически: HTTP — для `http://` и путей `/v1/traces`, иначе gRPC (как в `example/aichat`) |
+| `ARIZE_REST_BASE_URL` / `ARIZE_REST_API_KEY` | Чтение спанов REST v2 (`scripts/arize_spans.py`). Регион CA: `https://api.ca-central-1a.arize.com`. Пустой REST-ключ — тот же `ARIZE_API_KEY` |
 | `NEW_RELIC_LICENSE_KEY` | Включить New Relic: APM-метрики + автоматический форвардинг логов (`logging`) |
 | `NEW_RELIC_USER_KEY` | Ключ пользователя New Relic для запросов к API (GraphQL); самому агенту не нужен |
 | `NEW_RELIC_APP_NAME` | Имя приложения в New Relic (по умолчанию `aichat`) |
@@ -188,7 +189,7 @@ Redirect URI (прописать в кабинете 1:1):
 
 Новые пользователи создаются автоматически по email из провайдера; если email совпадает с существующим — вход в тот же аккаунт. Привязка провайдера хранится в таблице `oauth_identities`. OAuth-аккаунты пароль не имеют — вход по email+пароль для них недоступен.
 
-Трейсы смотрим в [Arize app](https://app.ca-central-1a.arize.com/).
+Трейсы смотрим в [Arize app](https://app.ca-central-1a.arize.com/). Как агенту разбирать спаны и какие поля туда пишутся: **[docs/dev/tracing.md](docs/dev/tracing.md)**.
 
 Погода в чате (`/api/chat`): модель может запросить `get_weather` по городу или координатам. Если локация не указана — модель вызывает `get_user_location`, и фронтенд запрашивает доступ к геолокации браузера (`navigator.geolocation`); координаты после разрешения передаются в чат и кешируются на 2 часа. **Геолокация работает только по HTTPS** (или `localhost`) — иначе браузер не даст доступ, и модель попросит назвать город текстом.
 

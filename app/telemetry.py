@@ -146,6 +146,14 @@ async def llm_byte_stream(
 
 def _sse_output_text(raw: bytes) -> str:
     """Collect assistant text from an OpenAI-style SSE body."""
+    return _sse_delta_join(raw, ("content",))
+
+
+def _sse_reasoning_text(raw: bytes) -> str:
+    return _sse_delta_join(raw, ("reasoning", "reasoning_content"))
+
+
+def _sse_delta_join(raw: bytes, keys: tuple[str, ...]) -> str:
     texts: list[str] = []
     for line in raw.split(b"\n"):
         stripped = line.strip()
@@ -159,9 +167,12 @@ def _sse_output_text(raw: bytes) -> str:
         except json.JSONDecodeError:
             continue
         delta = (obj.get("choices") or [{}])[0].get("delta") or {}
-        content = delta.get("content")
-        if isinstance(content, str) and content:
-            texts.append(content)
+        if not isinstance(delta, dict):
+            continue
+        for key in keys:
+            value = delta.get(key)
+            if isinstance(value, str) and value:
+                texts.append(value)
     return "".join(texts)
 
 
@@ -177,10 +188,22 @@ def _record_llm_stream_output(span: Any, raw: bytes) -> None:
     from openinference.instrumentation._attributes import get_llm_attributes
 
     text = _sse_output_text(raw)
+    reasoning = _sse_reasoning_text(raw)
     calls = _sse_tool_calls(raw)
+    span.set_attribute("aichat.llm.sse_bytes", len(raw))
+    span.set_attribute("aichat.llm.tool_call_count", len(calls))
+    if reasoning:
+        span.set_attribute("aichat.llm.reasoning", reasoning[:_TRACE_JSON_MAX])
     if calls:
         rendered = json.dumps(
-            [{"name": call["name"], "arguments": call["arguments"]} for call in calls],
+            [
+                {
+                    "id": call.get("id") or "",
+                    "name": call["name"],
+                    "arguments": call["arguments"],
+                }
+                for call in calls
+            ],
             ensure_ascii=False,
         )
         span.set_output(value=f"{text}\n{rendered}".strip() if text else rendered)
@@ -225,7 +248,18 @@ def payload_for_trace(payload: dict[str, Any]) -> dict[str, Any]:
         if item.get("role") == "tool":
             item["content"] = compact_tool_content(str(item.get("content") or ""))
         messages.append(item)
-    return {"model": payload.get("model"), "messages": messages}
+    traced: dict[str, Any] = {"model": payload.get("model"), "messages": messages}
+    tool_names: list[str] = []
+    for tool in payload.get("tools") or []:
+        if not isinstance(tool, dict):
+            continue
+        function = tool.get("function") or {}
+        name = function.get("name") if isinstance(function, dict) else None
+        if name:
+            tool_names.append(str(name))
+    if tool_names:
+        traced["tools"] = tool_names
+    return traced
 
 
 def compact_tool_content(content: str) -> str:
@@ -281,7 +315,7 @@ def chain_instrument(name: str) -> Callable[[F], F]:
 
 
 @contextmanager
-def chain_span(name: str) -> Iterator[Any]:
+def chain_span(name: str, attributes: dict[str, Any] | None = None) -> Iterator[Any]:
     """Open an OpenInference CHAIN span bound to the current context (or no-op).
 
     Yields the span, or ``None`` when tracing is disabled. Child spans created
@@ -291,19 +325,35 @@ def chain_span(name: str) -> Iterator[Any]:
         yield None
         return
     from openinference.semconv.trace import OpenInferenceSpanKindValues
+    from opentelemetry.trace import Status, StatusCode
 
     with tracer.start_as_current_span(
         name,
         openinference_span_kind=OpenInferenceSpanKindValues.CHAIN,
+        attributes=attributes or None,
     ) as span:
         yield span
-        from opentelemetry.trace import Status, StatusCode
+        if span.status.status_code == StatusCode.UNSET:
+            span.set_status(Status(StatusCode.OK))
 
-        span.set_status(Status(StatusCode.OK))
+
+def _arguments_json_valid(arguments: str) -> bool:
+    try:
+        json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        return False
+    return True
 
 
 @contextmanager
-def tool_span(name: str, arguments: str) -> Iterator[Any]:
+def tool_span(
+    name: str,
+    arguments: str,
+    *,
+    tool_call_id: str = "",
+    conversation_id: str = "",
+    known: bool | None = None,
+) -> Iterator[Any]:
     """Open an OpenInference TOOL span for one tool call (or no-op).
 
     Yields the span, or ``None`` when tracing is disabled. Records the tool
@@ -314,24 +364,31 @@ def tool_span(name: str, arguments: str) -> Iterator[Any]:
         yield None
         return
     from openinference.semconv.trace import OpenInferenceSpanKindValues, SpanAttributes
+    from opentelemetry.trace import Status, StatusCode
 
-    attributes = {
+    payload = {"name": name, "arguments": arguments}
+    if tool_call_id:
+        payload["id"] = tool_call_id
+    attributes: dict[str, Any] = {
         SpanAttributes.TOOL_NAME: name,
         SpanAttributes.INPUT_MIME_TYPE: "application/json",
-        SpanAttributes.INPUT_VALUE: json.dumps(
-            {"name": name, "arguments": arguments},
-            ensure_ascii=False,
-        ),
+        SpanAttributes.INPUT_VALUE: json.dumps(payload, ensure_ascii=False),
+        "aichat.tool.arguments_json_valid": _arguments_json_valid(arguments),
     }
+    if tool_call_id:
+        attributes[SpanAttributes.TOOL_ID] = tool_call_id
+    if conversation_id:
+        attributes["aichat.conversation_id"] = conversation_id
+    if known is not None:
+        attributes["aichat.tool.known"] = bool(known)
     with tracer.start_as_current_span(
         name,
         openinference_span_kind=OpenInferenceSpanKindValues.TOOL,
         attributes=attributes,
     ) as span:
         yield span
-        from opentelemetry.trace import Status, StatusCode
-
-        span.set_status(Status(StatusCode.OK))
+        if span.status.status_code == StatusCode.UNSET:
+            span.set_status(Status(StatusCode.OK))
 
 
 def tool_output(span: Any, value: str) -> None:
@@ -339,9 +396,24 @@ def tool_output(span: Any, value: str) -> None:
     if span is None:
         return
     from openinference.semconv.trace import SpanAttributes
+    from opentelemetry.trace import Status, StatusCode
 
     span.set_attribute(SpanAttributes.OUTPUT_VALUE, compact_tool_content(value))
     span.set_attribute(SpanAttributes.OUTPUT_MIME_TYPE, "application/json")
+    error = _tool_result_error(value)
+    if error:
+        span.set_attribute("aichat.tool.error", error[:500])
+        span.set_status(Status(StatusCode.ERROR, error[:200]))
+
+
+def _tool_result_error(value: str) -> str | None:
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(data, dict) and data.get("error"):
+        return str(data["error"])
+    return None
 
 
 def request_context(user_id: str, session_id: str) -> Any:

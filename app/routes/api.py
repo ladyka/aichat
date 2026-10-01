@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -34,7 +32,12 @@ from app.models_catalog import (
     to_public_id,
 )
 from app.skills import inject_conversation_skills
-from app.tools import call_tool, enabled_tools, extract_tool_calls, tool_progress_line
+from app.tools import (
+    call_tool,
+    enabled_tools,
+    extract_tool_calls,
+    tool_progress_line,
+)
 
 router = APIRouter()
 logger = logging.getLogger("aichat.completions")
@@ -232,6 +235,12 @@ async def _public_event_stream(payload: dict[str, Any], route: ModelRoute) -> As
         yield _rewrite_sse_line(buffer, route)
 
 
+def _conversation_id_attr(conversation_id: Any) -> str:
+    if isinstance(conversation_id, str) and conversation_id.strip():
+        return conversation_id.strip()
+    return str(conversation_id or "")
+
+
 async def _tool_chat_response(
     route: ModelRoute,
     payload: dict[str, Any],
@@ -262,7 +271,15 @@ async def _tool_chat_response(
     messages = list(payload.get("messages") or [])
     location = _known_location(messages, known_location)
     if not payload.get("stream"):
-        with telemetry_mod.chain_span("chat.tool_loop"):
+        with telemetry_mod.chain_span(
+            "chat.tool_loop",
+            attributes={
+                "aichat.conversation_id": _conversation_id_attr(conversation_id),
+                "aichat.model": route.public_id,
+                "aichat.provider": route.provider,
+                "aichat.upstream_model": route.upstream_id,
+            },
+        ):
             for step in range(MAX_TOOL_STEPS):
                 response = await _call_chat(route, payload)
                 try:
@@ -310,6 +327,7 @@ async def _tool_chat_response(
                             user=user,
                             db=db,
                             conversation_id=conversation_id,
+                            tool_call_id=str(call.get("id") or ""),
                         )
                     messages.append(
                         {
@@ -374,7 +392,15 @@ async def _stream_tool_loop(
 ) -> AsyncIterator[bytes]:
     """Stream the tool loop: progress in reasoning, then the model's answer."""
     with _trace_user(user, session_id):
-        with telemetry_mod.chain_span("chat.tool_loop"):
+        with telemetry_mod.chain_span(
+            "chat.tool_loop",
+            attributes={
+                "aichat.conversation_id": _conversation_id_attr(conversation_id),
+                "aichat.model": route.public_id,
+                "aichat.provider": route.provider,
+                "aichat.upstream_model": route.upstream_id,
+            },
+        ):
             async for chunk in _stream_tool_loop_body(
                 route=route,
                 payload=payload,
@@ -427,6 +453,7 @@ async def _stream_tool_loop_body(
                 yield chunk
             return
         if classified == "text":
+            # Plain answer: forward the buffered prefix, stream the rest live.
             async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
                 yield chunk
             return
@@ -435,9 +462,6 @@ async def _stream_tool_loop_body(
         async for chunk in stream:
             raw += chunk
         calls = extract_tool_calls(raw)
-        progress = _tool_progress_sse(raw, calls, route)
-        if progress:
-            yield progress
         logger.info(
             "tool loop step=%s/%s tools=%s user_id=%s",
             step + 1,
@@ -445,6 +469,8 @@ async def _stream_tool_loop_body(
             ",".join(call["name"] for call in calls) or "-",
             user.id,
         )
+        progress = _tool_progress_sse(raw, calls, route)
+        yield progress
         requests_location = any(call["name"] == "get_user_location" for call in calls)
         if requests_location and not location:
             assistant_message = _tool_call_messages(calls)[0]
@@ -462,6 +488,7 @@ async def _stream_tool_loop_body(
                     user=user,
                     db=db,
                     conversation_id=conversation_id,
+                    tool_call_id=call.get("id") or "",
                 )
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
         location = _known_location(messages, known_location)
@@ -473,10 +500,60 @@ async def _stream_tool_loop_body(
         user.id,
         MAX_TOOL_STEPS,
     )
-    yield (f"data: {json.dumps({'error': TOOL_LOOP_LIMIT_ERROR}, ensure_ascii=False)}\n\n").encode(
-        "utf-8"
-    )
+    yield (
+        f"data: {json.dumps({'error': TOOL_LOOP_LIMIT_ERROR}, ensure_ascii=False)}\n\n"
+    ).encode("utf-8")
     yield b"data: [DONE]\n\n"
+
+
+def _tool_progress_sse(
+    raw: bytes, calls: list[dict[str, str]], route: ModelRoute
+) -> bytes:
+    """Кадр reasoning: мысль модели до tool_calls и строка хода работы.
+
+    После tool_calls, до их исполнения — иначе чат показывает пустой пузырь.
+    """
+    thinking = _sse_delta_concat(raw, ("reasoning", "reasoning_content", "content"))
+    names = [call["name"] for call in calls if call.get("name")]
+    status = "\n".join(tool_progress_line(name) for name in names)
+    if not status:
+        status = tool_progress_line("")
+    parts: list[str] = []
+    if thinking.strip():
+        parts.append(thinking.rstrip())
+    parts.append(status)
+    text = "\n".join(parts) + "\n"
+    payload = {"choices": [{"index": 0, "delta": {"reasoning": text}}]}
+    line = f"data: {json.dumps(payload, ensure_ascii=False)}"
+    return _rewrite_sse_line(line.encode("utf-8"), route) + b"\n\n"
+
+
+def _sse_reasoning_text(raw: bytes) -> str:
+    return _sse_delta_concat(raw, ("reasoning", "reasoning_content"))
+
+
+def _sse_delta_concat(raw: bytes, keys: tuple[str, ...]) -> str:
+    """Склеить строковые поля delta из SSE-кадров."""
+    texts: list[str] = []
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == "[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
+        if not isinstance(delta, dict):
+            continue
+        for key in keys:
+            value = delta.get(key)
+            if isinstance(value, str) and value:
+                texts.append(value)
+    return "".join(texts)
 
 
 async def _prefix_then(prefix: bytes, rest: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
@@ -498,51 +575,6 @@ async def _rewrite_chunks(chunks: AsyncIterator[bytes], route: ModelRoute) -> As
 
 def _sse_has_content(raw: bytes) -> bool:
     return bool(_sse_delta_concat(raw, ("content",)))
-
-
-def _sse_delta_concat(raw: bytes, keys: tuple[str, ...]) -> str:
-    """Склеить строковые поля delta из SSE-кадров."""
-    pieces: list[str] = []
-    for line in raw.split(b"\n"):
-        stripped = line.strip()
-        if not stripped.startswith(b"data:"):
-            continue
-        data = stripped[5:].strip()
-        if not data or data == b"[DONE]":
-            continue
-        try:
-            obj = json.loads(data)
-        except json.JSONDecodeError:
-            continue
-        delta = (obj.get("choices") or [{}])[0].get("delta") or {}
-        if not isinstance(delta, dict):
-            continue
-        for key in keys:
-            value = delta.get(key)
-            if isinstance(value, str) and value:
-                pieces.append(value)
-    return "".join(pieces)
-
-
-def _tool_progress_sse(
-    raw: bytes,
-    calls: list[dict[str, str]],
-    route: ModelRoute,
-) -> bytes:
-    """Кадр reasoning: мысль модели до tool_calls и строка хода работы."""
-    thinking = _sse_delta_concat(raw, ("reasoning", "reasoning_content", "content"))
-    names = [call["name"] for call in calls if call.get("name")]
-    status = "\n".join(tool_progress_line(name) for name in names)
-    if not status:
-        status = tool_progress_line("")
-    parts: list[str] = []
-    if thinking.strip():
-        parts.append(thinking.rstrip())
-    parts.append(status)
-    text = "\n".join(parts) + "\n"
-    payload = {"choices": [{"index": 0, "delta": {"reasoning": text}}]}
-    line = f"data: {json.dumps(payload, ensure_ascii=False)}"
-    return _rewrite_sse_line(line.encode("utf-8"), route) + b"\n\n"
 
 
 def _tool_call_messages(calls: list[dict[str, str]]) -> list[dict[str, Any]]:

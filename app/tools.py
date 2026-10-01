@@ -484,6 +484,29 @@ def _tool_delta_arguments(fn: dict[str, Any]) -> str:
     return str(raw)
 
 
+_ALL_TOOL_DEFINITIONS = (
+    _DATETIME_TOOL,
+    _WEATHER_TOOL,
+    _USER_LOCATION_TOOL,
+    _READ_NOTE_TOOL,
+    _WRITE_NOTE_TOOL,
+    _DOWNLOAD_TOOL,
+    _GENERATE_IMAGE_TOOL,
+    _PZZ_SEARCH_TOOL,
+    _PZZ_ADDRESS_TOOL,
+    _PZZ_ORDER_TOOL,
+    _FEEDBACK_TOOL,
+)
+
+
+def is_known_tool_name(name: str) -> bool:
+    """Имя есть в коде рук, даже если рука сейчас выключена настройкой."""
+    key = (name or "").strip()
+    return any(
+        str((tool.get("function") or {}).get("name") or "") == key for tool in _ALL_TOOL_DEFINITIONS
+    )
+
+
 def extract_tool_calls(sse_raw: bytes) -> list[dict[str, str]]:
     """Собрать tool_calls из дельт OpenAI-совместимого SSE-стрима.
 
@@ -659,13 +682,20 @@ async def call_tool(
     user: Any = None,
     db: Any = None,
     conversation_id: Any = None,
+    tool_call_id: str | None = None,
 ) -> str:
     """Исполнить инструмент и вернуть строковый результат для role:tool.
 
     Исполнение обёрнуто в OpenInference TOOL span (имя, аргументы и результат
     видны в Phoenix), когда трассировка включена.
     """
-    with tool_span(name, arguments) as span:
+    with tool_span(
+        name,
+        arguments,
+        tool_call_id=tool_call_id or "",
+        conversation_id=str(conversation_id or ""),
+        known=is_known_tool_name(name),
+    ) as span:
         result = await _call_tool_impl(
             name, arguments, user=user, db=db, conversation_id=conversation_id
         )
