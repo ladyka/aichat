@@ -264,9 +264,27 @@ _SITE_STATUS_TOOL: dict[str, Any] = {
             "домен, когда создан и опубликован ли последний вариант (publish_site). "
             "Вызывай, когда пользователь спрашивает про свой сайт: «есть ли у меня сайт», "
             "«какой адрес», «опубликован ли», «что на сайте сейчас». Если сайта нет — "
-            "предложи создать (create_site). Пересказывай данные словами, не выдумывай."
+            "предложи создать (create_site). "
+            "Если сайт опубликован, а заметка чата пуста, содержимое сайта автоматически "
+            "загружается в заметку (note_loaded=true) — скажи, что заметка наполнена с "
+            "сайта, и не переписывай её, пока пользователь не попросит. Если заметка не "
+            "пуста и отличается от сайта, в ответе будет note_confirm: покажи, что можно "
+            "залить содержимое сайта в заметку, и вызови повторно с confirmed=true, только "
+            "когда пользователь согласится заменить содержимое заметки. "
+            "Пересказывай данные словами, не выдумывай."
         ),
-        "parameters": {"type": "object", "properties": {}},
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "confirmed": {
+                    "type": "boolean",
+                    "description": (
+                        "true — заменить заметку чата содержимым сайта; только после "
+                        "явного согласия пользователя (см. note_confirm)."
+                    ),
+                },
+            },
+        },
     },
 }
 
@@ -662,6 +680,39 @@ def _chat_note_tool(
     )
 
 
+def _chat_note_context(db: Any, user: Any, conversation_id: Any) -> tuple[Any | None, Any | None]:
+    """Чат пользователя и его последняя заметка (или None)."""
+    conv_id = parse_conversation_id(conversation_id)
+    conv = owned_conversation(db, user, conv_id) if conv_id is not None else None
+    if conv is None:
+        return None, None
+    return conv, latest_note_for_conversation(db, conv.id)
+
+
+def _update_chat_note(db: Any, user: Any, conversation_id: Any, body: str) -> bool:
+    """Заменить тело заметки чата содержимым сайта (site_status → load_note)."""
+    conv, note = _chat_note_context(db, user, conversation_id)
+    if conv is None:
+        return False
+    if note is None:
+        created, err = upsert_conversation_note(db, user, conv, body=body)
+        ok = created is not None and not err
+        if ok:
+            db.commit()
+        return ok
+    note.body = body
+    note.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(note)
+    logger.info(
+        "site_status note loaded conversation_id=%s note_id=%s body_chars=%s",
+        conv.id,
+        note.id,
+        len(body),
+    )
+    return True
+
+
 def _site_tool(
     name: str,
     arguments: str,
@@ -729,8 +780,27 @@ def _site_tool(
         )
 
     if name == "site_status":
-        # Только чтение: состояние сайта + файл публикации на диске.
-        return _tool_json(mzg.site_status(db, user))
+        # Состояние сайта + необязательная загрузка содержимого в заметку чата:
+        # пустая заметка наполняется молча; непустая — только после note_confirm.
+        payload = mzg.site_status(db, user)
+        body = payload.get("body") or ""
+        if payload.get("exists") and payload.get("file_exists") and body:
+            note = _chat_note_context(db, user, conversation_id)[1]
+            if note is None or not (note.body or "").strip():
+                if _update_chat_note(db, user, conversation_id, body):
+                    payload["note_loaded"] = True
+            elif note.body != body:
+                payload["note_confirm"] = False
+                payload["note_message"] = (
+                    "Заметка чата непуста и отличается от содержимого сайта. "
+                    "Спроси, заменить ли содержимое заметки содержимым сайта; "
+                    "confirmed=true — только после явного согласия."
+                )
+                if args.get("confirmed"):
+                    if _update_chat_note(db, user, conversation_id, body):
+                        payload["note_loaded"] = True
+        payload.pop("body", None)
+        return _tool_json(payload)
 
     # publish_site: тело — заметка чата, если не передан явный body.
     if mzg.user_site(db, user) is None:

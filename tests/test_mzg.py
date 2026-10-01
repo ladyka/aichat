@@ -366,6 +366,68 @@ def test_site_status_lifecycle(monkeypatch, client, db, tmp_path):
     assert deleted == {"exists": False}
 
 
+def test_site_status_loads_empty_note(monkeypatch, client, db, tmp_path):
+    """Публикация была, заметки нет — site_status наполняет заметку сам."""
+    _enable(monkeypatch, tmp_path)
+    user, conv_id = _user_ctx(client, db)
+    _call("create_site", '{"domain": "fill"}', user=user, db=db)
+    _call("publish_site", '{"body": "# Со страницы"}', user=user, db=db)
+
+    result = _call("site_status", "{}", user=user, db=db, conversation_id=conv_id)
+    assert result["note_loaded"] is True
+    assert "body" not in result
+    note = client.get(f"/api/conversations/{conv_id}/note").json()
+    assert note["body"] == "# Со страницы"
+
+    # Заметка теперь непустая и совпадает с сайтом — note_confirm не появляется.
+    again = _call("site_status", "{}", user=user, db=db, conversation_id=conv_id)
+    assert "note_confirm" not in again
+    assert "note_loaded" not in again
+
+
+def test_site_status_asks_before_overwriting_note(monkeypatch, client, db, tmp_path):
+    """Непустая заметка: сначала note_confirm, запись — только с confirmed=true."""
+    _enable(monkeypatch, tmp_path)
+    user, conv_id = _user_ctx(client, db)
+    _call("create_site", '{"domain": "ask"}', user=user, db=db)
+    client.put(f"/api/conversations/{conv_id}/note", json={"body": "# Мой черновик"})
+    _call("publish_site", '{"body": "# С сайта"}', user=user, db=db)
+
+    first = _call("site_status", "{}", user=user, db=db, conversation_id=conv_id)
+    assert first["note_confirm"] is False
+    assert "непуста" in first["note_message"]
+    note = client.get(f"/api/conversations/{conv_id}/note").json()
+    assert note["body"] == "# Мой черновик"  # без согласия ничего не записано
+
+    confirmed = _call(
+        "site_status", '{"confirmed": true}', user=user, db=db, conversation_id=conv_id
+    )
+    assert confirmed["note_loaded"] is True
+    note = client.get(f"/api/conversations/{conv_id}/note").json()
+    assert note["body"] == "# С сайта"
+
+    # Заметка совпадает с сайтом — повторный вызов тихий.
+    again = _call("site_status", "{}", user=user, db=db, conversation_id=conv_id)
+    assert "note_confirm" not in again
+
+
+def test_site_status_no_note_context_no_load(monkeypatch, client, db, tmp_path):
+    """site_status вне сохранённого чата: статус без note_loaded."""
+    _enable(monkeypatch, tmp_path)
+    user, _ = _user_ctx(client, db)
+    _call("create_site", '{"domain": "orphan"}', user=user, db=db)
+    _call("publish_site", '{"body": "# Данные"}', user=user, db=db)
+
+    result = _call("site_status", "{}", user=user, db=db, conversation_id=None)
+    assert result["exists"] is True
+    assert "note_loaded" not in result
+    assert "body" not in result
+
+    # Вне чата и confirmed=true — тоже просто статус, без записи (некуда).
+    result = _call("site_status", '{"confirmed": true}', user=user, db=db, conversation_id=None)
+    assert "note_loaded" not in result
+
+
 def test_publish_site_tool_from_note(monkeypatch, client, db, tmp_path):
     _enable(monkeypatch, tmp_path)
     user, conv_id = _user_ctx(client, db)

@@ -156,11 +156,21 @@ def delete_site(db: Session, user: Any) -> tuple[UserSite | None, str | None]:
     return site, None
 
 
+def _read_site_file(path: Path, site: UserSite) -> str:
+    """Текст <domain>.md; ошибка чтения — пустая строка."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("site_status read failed domain=%s error=%s", site.domain, exc)
+        return ""
+
+
 def site_status(db: Session, user: Any) -> dict[str, Any]:
     """Состояние сайта пользователя для инструмента site_status (без изменений в БД).
 
     сайта нет → {"exists": False}; иначе домен, отметки времени, флаг публикации
     и сведения о файле <domain>.md на диске (file_exists/file_bytes).
+    Содержимое (body) — файл публикации: то, что реально увидит посетитель.
     """
     site = user_site(db, user)
     if site is None:
@@ -178,6 +188,8 @@ def site_status(db: Session, user: Any) -> dict[str, Any]:
     payload["file_bytes"] = file_path.stat().st_size if file_exists else 0
     if not file_exists and site.published_at is not None:
         payload["note"] = "файл публикации отсутствует на диске; опубликуйте заново"
+    if file_exists:
+        payload["body"] = _read_site_file(file_path, site)
     return payload
 
 
@@ -196,7 +208,8 @@ def _site_file(domain: str) -> Path | None:
 def publish_site(db: Session, user: Any, body: str) -> tuple[UserSite | None, str | None]:
     """Записать markdown сайта в MZG_SITES_FOLDER/<domain>.md.
 
-    Тело — заметка чата; обновление файла оверврайтит прежнюю публикацию.
+    Тело — заметка чата или явный body из tools.py. Обновление файла
+    оверврайтит прежнюю публикацию.
     """
     site = user_site(db, user)
     if site is None:
