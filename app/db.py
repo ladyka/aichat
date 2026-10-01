@@ -49,6 +49,11 @@ class User(Base):
     conversations: Mapped[list["Conversation"]] = relationship(back_populates="user")
     oauth_identities: Mapped[list["OAuthIdentity"]] = relationship(back_populates="user")
     downloads: Mapped[list["Download"]] = relationship(back_populates="user")
+    site: Mapped["UserSite | None"] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
     notes: Mapped[list["Note"]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
@@ -399,6 +404,25 @@ class Download(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="downloads")
+
+
+class UserSite(Base):
+    """The one site a user may have: <domain>.mzg.by published as <domain>.md."""
+
+    __tablename__ = "user_sites"
+    __table_args__ = (UniqueConstraint("user_id", name="uq_user_sites_user"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    domain: Mapped[str] = mapped_column(String(63), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped[User] = relationship(back_populates="site")
 
 
 class GeneratedImage(Base):

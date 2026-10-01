@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx2 as httpx
 from sqlalchemy import func, select
 
-from app import storage
+from app import mzg, storage
 from app.config import get_settings
 from app.db import Download, GeneratedImage
 from app.feedback import send_feedback
@@ -176,6 +176,108 @@ _DOWNLOAD_TOOL: dict[str, Any] = {
                 },
             },
             "required": ["url"],
+        },
+    },
+}
+
+_CREATE_SITE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "create_site",
+        "description": (
+            "Создать сайт пользователю на домене третьего уровня <имя>.mzg.by. "
+            "Вызывай, когда пользователь хочет свой сайт или просит «создать сайт». "
+            "Перед вызовом спроси, какое имя домена он хочет: параметр domain — "
+            "латиница, цифры и дефисы, 3–63 символа. Сайт у пользователя один: "
+            "занять другой домен можно после update_site или delete_site. "
+            "После создания предложи собрать содержимое сайта в заметке чата "
+            "и опубликовать его (publish_site)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string",
+                    "description": (
+                        "Имя домена третьего уровня без суффикса, например «my-page». "
+                        "Латиница в нижнем регистре, цифры и дефисы, 3–63 символа."
+                    ),
+                },
+            },
+            "required": ["domain"],
+        },
+    },
+}
+
+_UPDATE_SITE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "update_site",
+        "description": (
+            "Сменить домен сайта пользователя на новый <имя>.mzg.by. Вызывай, когда "
+            "пользователь просит переименовать сайт или сменить адрес. Сначала спроси "
+            "новое имя (латиница, цифры и дефисы, 3–63 символа). Внутри это удаление "
+            "старого сайта и создание нового: прежняя публикация стирается и сайт "
+            "нужно опубликовать заново (publish_site) — предупреди об этом."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "type": "string",
+                    "description": "Новое имя домена без суффикса, например «best-blog».",
+                },
+            },
+            "required": ["domain"],
+        },
+    },
+}
+
+_DELETE_SITE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "delete_site",
+        "description": (
+            "Удалить сайт пользователя: домен освобождается, опубликованный файл "
+            "стирается, содержимое заметки остаётся в чате. Вызывай только после "
+            "явного подтверждения: сначала назови адрес сайта и спроси, точно ли "
+            "удалить; действие необратимо (вернуть сайт можно только создав его заново)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "confirm": {
+                    "type": "boolean",
+                    "description": "true только после явного согласия пользователя.",
+                },
+            },
+        },
+    },
+}
+
+_PUBLISH_SITE_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "publish_site",
+        "description": (
+            "Опубликовать сайт пользователя: заметка текущего чата кладётся на сервер "
+            "как <домен>.md и открывается на https://<домен>.mzg.by. Вызывай, когда "
+            "пользователь просит опубликовать, выложить или обновить сайт. Сайт должен "
+            "быть создан (create_site). Если заметка пуста — предложи сначала собрать "
+            "страницу в заметке; publish без аргументов публикует заметку как есть, "
+            "а с параметром body — этот текст вместо заметки."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string",
+                    "description": (
+                        "Необязательно: markdown-текст сайта. Без параметра публикуется "
+                        "текущая заметка чата."
+                    ),
+                },
+            },
         },
     },
 }
@@ -427,6 +529,8 @@ def enabled_tools() -> list[dict[str, Any]]:
     """Tools бота: дата, скачивание, заметка всегда; остальные — по настройкам."""
     settings = get_settings()
     tools = [_DATETIME_TOOL, _DOWNLOAD_TOOL, _READ_NOTE_TOOL, _WRITE_NOTE_TOOL]
+    if settings.mzg_sites_enabled:
+        tools.extend([_CREATE_SITE_TOOL, _UPDATE_SITE_TOOL, _DELETE_SITE_TOOL, _PUBLISH_SITE_TOOL])
     if settings.pzz_enabled:
         tools.extend([_PZZ_SEARCH_TOOL, _PZZ_ADDRESS_TOOL, _PZZ_ORDER_TOOL])
     if settings.openweather_api_key:
@@ -535,6 +639,104 @@ def _chat_note_tool(
     )
 
 
+def _site_tool(
+    name: str,
+    arguments: str,
+    user: Any = None,
+    db: Any = None,
+    conversation_id: Any = None,
+) -> str:
+    """Сайты пользователей на mzg.by: создание, изменение, удаление, публикация."""
+    if user is None or db is None:
+        return _tool_json({"error": "Нет контекста пользователя."})
+    settings = get_settings()
+    if not settings.mzg_sites_enabled:
+        return _tool_json({"error": "Публикация сайтов не настроена."})
+    try:
+        args = json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        args = {}
+    if not isinstance(args, dict):
+        args = {}
+
+    if name == "create_site":
+        site, err = mzg.create_site(db, user, str(args.get("domain") or ""))
+        if err:
+            return _tool_json({"error": err})
+        db.commit()
+        return _tool_json(
+            {
+                "ok": True,
+                "domain": f"{site.domain}.{mzg.MZG_SUFFIX}",
+                "published": site.published_at is not None,
+            }
+        )
+
+    if name == "update_site":
+        site, err = mzg.update_site(db, user, str(args.get("domain") or ""))
+        if err:
+            return _tool_json({"error": err})
+        return _tool_json(
+            {
+                "ok": True,
+                "domain": f"{site.domain}.{mzg.MZG_SUFFIX}",
+                "published": site.published_at is not None,
+            }
+        )
+
+    if name == "delete_site":
+        site = mzg.user_site(db, user)
+        if site is None:
+            return _tool_json({"error": mzg.SITE_NOT_FOUND})
+        if not args.get("confirm"):
+            # Превью удаления: модель показывает адрес и спрашивает согласие.
+            return _tool_json(
+                {
+                    "confirm": False,
+                    "domain": f"{site.domain}.{mzg.MZG_SUFFIX}",
+                    "note": "Назови адрес сайта и спроси, точно ли удалить. "
+                    "confirm=true — только после явного согласия.",
+                }
+            )
+        site, err = mzg.delete_site(db, user)
+        if err:
+            return _tool_json({"error": err})
+        return _tool_json(
+            {"ok": True, "deleted": f"{site.domain}.{mzg.MZG_SUFFIX}", "domain": None}
+        )
+
+    # publish_site: тело — заметка чата, если не передан явный body.
+    if mzg.user_site(db, user) is None:
+        return _tool_json({"error": mzg.SITE_NOT_FOUND})
+    body = args.get("body")
+    if body is None:
+        conv_id = parse_conversation_id(conversation_id)
+        conv = owned_conversation(db, user, conv_id) if conv_id is not None else None
+        note = latest_note_for_conversation(db, conv.id) if conv is not None else None
+        if note is None:
+            return _tool_json(
+                {
+                    "error": (
+                        "Заметка чата пуста; соберите содержимое сайта "
+                        "в заметке и опубликуйте снова."
+                    )
+                }
+            )
+        body = note.body
+    site, err = mzg.publish_site(db, user, str(body))
+    if err:
+        return _tool_json({"error": err})
+    return _tool_json(
+        {
+            "ok": True,
+            "domain": f"{site.domain}.{mzg.MZG_SUFFIX}",
+            "url": f"https://{site.domain}.{mzg.MZG_SUFFIX}/",
+            "published": True,
+            "bytes": len((body or "").encode("utf-8")),
+        }
+    )
+
+
 async def _pzz_tool(name: str, args: dict[str, Any]) -> str:
     settings = get_settings()
     if not settings.pzz_enabled:
@@ -593,6 +795,8 @@ async def _call_tool_impl(
         return await _download_file(arguments, user=user, db=db)
     if name in {"read_chat_note", "write_chat_note"}:
         return _chat_note_tool(name, arguments, user=user, db=db, conversation_id=conversation_id)
+    if name in {"create_site", "update_site", "delete_site", "publish_site"}:
+        return _site_tool(name, arguments, user=user, db=db, conversation_id=conversation_id)
     try:
         args = json.loads(arguments or "{}")
     except json.JSONDecodeError:
