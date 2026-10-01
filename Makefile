@@ -16,7 +16,7 @@ venv:
 	@if [ -s requirements.txt ]; then $(PYTHON) -m pip install -r requirements.txt; fi
 	@if [ -s requirements-dev.txt ]; then $(PYTHON) -m pip install -r requirements-dev.txt; fi
 
-run: $(VENV)/bin/python
+run: $(VENV)/bin/python frontend-build
 	INSTANCE_HOST=$(INSTANCE_HOST) PORT=$(PORT) $(PYTHON) server.py
 
 $(VENV)/bin/python:

@@ -123,6 +123,10 @@ class Settings:
         self.downloads_root = ROOT / "data" / "customers"
         self.downloads_max_bytes = int(_env("DOWNLOADS_MAX_BYTES", "2097152") or "2097152")
 
+        # Сайты пользователей (create_site / publish_site в чате): каждый сайт —
+        # один markdown-файл <domain>.md. Пусто — инструменты деплоя выключены.
+        self.mzg_sites_folder = (_env("MZG_SITES_FOLDER", "") or "").strip()
+
         # Cloud.ru (or S3-compatible) object storage. generate_image needs this + OpenRouter.
         self.s3_endpoint = (_env("S3_ENDPOINT", "") or "").rstrip("/")
         self.s3_region = (_env("S3_REGION", "ru-central-1") or "ru-central-1").strip()
@@ -208,6 +212,10 @@ class Settings:
         if value.endswith("/v1"):
             return value
         return f"{value}/v1"
+
+    @property
+    def mzg_sites_enabled(self) -> bool:
+        return bool(self.mzg_sites_folder)
 
     @property
     def openrouter_enabled(self) -> bool:

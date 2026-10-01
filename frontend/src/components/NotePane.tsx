@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, FileText, PanelRightClose, StickyNote } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   conversationNoteDownloadUrl,
   getConversationNote,
   putConversationNote,
 } from "@/lib/api";
+import { Markdown } from "@/lib/markdown";
 import { onNoteChanged } from "@/lib/note-events";
 
 type NotePaneProps = {
@@ -159,7 +158,7 @@ export function NotePane({ conversationId, onClose, onHasBody }: NotePaneProps) 
         ) : (
           <div className="md note-preview h-full overflow-y-auto p-3 text-sm">
             {body.trim() ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+              <Markdown>{body}</Markdown>
             ) : (
               <p className="text-[var(--chat-muted)]">Пока пусто</p>
             )}

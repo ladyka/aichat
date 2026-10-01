@@ -9,8 +9,7 @@ import {
   type TextMessagePartProps,
 } from "@assistant-ui/react";
 import { Info } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "@/lib/markdown";
 import { responseInfoFromCustom } from "@/lib/response-info";
 
 type ThreadAui = ReturnType<typeof useAui>;
@@ -256,7 +255,7 @@ function UserMessage() {
 function MarkdownText({ text }: TextMessagePartProps) {
   return (
     <div className="md">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <Markdown>{text}</Markdown>
     </div>
   );
 }
