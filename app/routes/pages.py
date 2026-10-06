@@ -27,6 +27,9 @@ from app.skills import default_skill_ids, list_owned_skills, set_default_skill_i
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(get_settings().root / "templates"))
+# Кирилица в JSON не экранируется в \uXXXX (иначе русский текст не найти в HTML);
+# HTML-безопасность сохраняется: < > & по-прежнему уходят в \u003c и т. п.
+templates.env.policies["json.dumps_kwargs"] = {"sort_keys": True, "ensure_ascii": False}
 
 
 def safe_next_path(raw: str | None) -> str | None:

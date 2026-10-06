@@ -1,0 +1,110 @@
+/* Единый рендер markdown (.md): чат + страница шара `/s/<key>`.
+   Файл импортируется и в index.css чата, и в share.css, поэтому переменные
+   --chat-* даны с fallback-значениями: на странице шара `:root` чата нет. */
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p {
+  margin: 0.5em 0;
+  white-space: pre-wrap;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  margin: 0.9em 0 0.4em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.md h1 { font-size: 1.35em; }
+.md h2 { font-size: 1.2em; }
+.md h3 { font-size: 1.1em; }
+
+.md ul,
+.md ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.md li {
+  margin: 0.2em 0;
+}
+
+.md a {
+  color: var(--chat-accent, #0f7a5f);
+  text-decoration: underline;
+}
+
+.md blockquote {
+  margin: 0.6em 0;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--chat-line, rgba(20, 32, 26, 0.12));
+  color: var(--chat-muted, #5b6b62);
+}
+
+.md code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: rgba(20, 32, 26, 0.07);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+}
+
+.md pre {
+  margin: 0.7em 0;
+  padding: 0.85rem 1rem;
+  background: #132019;
+  color: #e8f2ec;
+  border-radius: 12px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.md pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.md table {
+  margin: 0.7em 0;
+  border-collapse: collapse;
+  font-size: 0.95em;
+  display: block;
+  overflow-x: auto;
+}
+
+.md th,
+.md td {
+  border: 1px solid var(--chat-line, rgba(20, 32, 26, 0.12));
+  padding: 0.4em 0.7em;
+}
+
+.md th {
+  background: rgba(20, 32, 26, 0.05);
+  font-weight: 600;
+}
+
+.md hr {
+  margin: 0.9em 0;
+  border: none;
+  border-top: 1px solid var(--chat-line, rgba(20, 32, 26, 0.12));
+}
+
+.md img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 28rem;
+  border-radius: 10px;
+}

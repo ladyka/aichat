@@ -19,7 +19,7 @@
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
 - Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
 - Деплой сайта из чата (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`): домен `<имя>.mzg.by`, содержимое — заметка чата, публикуется как `<домен>.md` в `MZG_SITES_FOLDER`. Нужен `MZG_SITES_FOLDER`; без него инструментов нет
-- Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
+- Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время). Сообщения отдаются сырым markdown в `window.AICHAT_SHARE`, рендерит фронтенд тем же React-компонентом, что и чат (`frontend/src/share.tsx`), — GFM (таблицы, зачёркивание) и безопасные ссылки работают как в чате
 - Skills: свои markdown-навыки (приватные по умолчанию), публикация в каталог `/catalog`, копия чужого с `parent_id`, дефолты в `/settings`, набор чата в панели «Навыки»
 
 ## Quick Start
@@ -80,7 +80,8 @@ Git-хук на коммит (один раз после клонировани�
 make hooks     # git config core.hooksPath .githooks
 ```
 
-Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test`;
+Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage` и `make frontend-test-coverage`
+(фронтенд с порогами покрытия, см. `frontend/vite.config.ts` → `test.coverage.thresholds`);
 если что-то падает — коммит не создаётся. `--no-verify` обходит проверку. Если `.venv` или
 `frontend/node_modules` нет, соответствующие тесты пропускаются с предупреждением (на свежем клоне
 это ожидаемо).
@@ -94,7 +95,7 @@ make hooks     # git config core.hooksPath .githooks
 
 ```bash
 cd frontend && npm run test       # прогон
-cd frontend && npm run test:cov   # с покрытием
+cd frontend && npm run test:cov   # с покрытием (или `make frontend-test-coverage`)
 ```
 
 Интеграционный тест погоды (нужен запущенный сервер на `:8080`; запрашивает `Какая погода в Минске?`, проверяет атрибуцию OpenWeatherMap и наличие реальных данных; при ошибке показывает серверный лог, чтобы отличить сбой LLM от сбоя погодного сервиса):

@@ -1,4 +1,4 @@
-.PHONY: run update-prod update-requirements-prod venv docs-serve docs-build frontend-install frontend-build test-coverage lint format hooks migrate migrate-rev
+.PHONY: run update-prod update-requirements-prod venv docs-serve docs-build frontend-install frontend-build frontend-test-coverage test-coverage lint format hooks migrate migrate-rev
 
 PORT ?= 20000
 INSTANCE_HOST ?= 0.0.0.0
@@ -46,6 +46,10 @@ update-requirements-prod: $(VENV)/bin/python
 
 test-coverage: $(VENV)/bin/python
 	$(PYTHON) -m pytest tests/ -q --cov=app --cov-report=term-missing --cov-fail-under=80
+
+# Фронтенд: Vitest с порогами coverage (vite.config.ts → test.coverage.thresholds).
+frontend-test-coverage:
+	cd frontend && $(NPM) run test:cov
 
 lint: $(VENV)/bin/python
 	$(VENV)/bin/flake8 $(PY_FILES)

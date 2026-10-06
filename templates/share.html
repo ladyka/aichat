@@ -2,6 +2,9 @@
 {% block title %}{% if not_found %}Ссылка недействительна — aichat{% else %}{{ title or 'Поделиться чатом' }} — aichat{% endif %}{% endblock %}
 {% block body_class %}page-share{% endblock %}
 {% block main_class %}share-main{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/chat-ui/assets/share.css">
+{% endblock %}
 {% block content %}
 {% if not_found %}
   <section class="share-missing">
@@ -17,20 +20,18 @@
       <p class="share-badge">Просмотр</p>
       <p class="muted share-date">{% if created_at %}Опубликовано {{ created_at[:10] }}{% endif %}{% if updated_at and updated_at != created_at %} · обновлено {{ updated_at[:10] }}{% endif %}</p>
     </div>
-    {% if messages %}
-      <div class="share-log">
-        {% for m in messages %}
-          <div class="bubble share-bubble {% if m.role == 'user' %}user{% else %}bot{% endif %}">
-            {% if m.role != 'user' %}
-              <div class="share-name">Чатбот</div>
-            {% endif %}
-            {{ m.html | safe }}
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="muted">В этом чате пока нет сообщений.</p>
-    {% endif %}
+    <noscript>
+      <p class="muted">Для просмотра чата включите JavaScript.</p>
+    </noscript>
+    {# Markdown сообщений рендерит тот же React-компонент, что и чат (frontend/src/share.tsx). #}
+    <div id="share-root"></div>
   </div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if not_found %}
+{% else %}
+<script>window.AICHAT_SHARE = {{ messages | tojson }};</script>
+<script type="module" src="/chat-ui/assets/share.js"></script>
 {% endif %}
 {% endblock %}

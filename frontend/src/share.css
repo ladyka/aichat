@@ -1,0 +1,8 @@
+/* Страница шара `/s/<key>`: рендер сообщений React-ом, общий markdown — styles/md.css. */
+@import "./styles/md.css";
+
+.share-user-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

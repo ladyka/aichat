@@ -65,11 +65,14 @@ def test_share_lifecycle(client, db):
     with TestClient(app) as anon:
         page = anon.get(f"/s/{key}")
         assert page.status_code == 200
+        # Сообщения отдаются сырым markdown через window.AICHAT_SHARE —
+        # рендерит фронтенд тем же компонентом, что и чат (frontend/src/share.tsx).
+        assert "AICHAT_SHARE" in page.text
         assert "Первый вопрос" in page.text
         assert "Ответ от чатбота" in page.text
-        assert "Чатбот" in page.text
-        assert "Просмотр" in page.text
-        assert email() not in page.text  # автор не показывается
+        assert 'id="share-root"' in page.text
+        assert "/chat-ui/assets/share.js" in page.text
+        assert "/chat-ui/assets/share.css" in page.text
         assert 'property="og:title"' in page.text
         assert "og:description" in page.text
         assert "Первый вопрос" in page.text

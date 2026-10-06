@@ -19,8 +19,8 @@ else
 fi
 
 if [ -d "frontend/node_modules" ]; then
-    echo "pre-commit: тесты фронтенда — npm run test"
-    (cd frontend && npm run test) || failed=1
+    echo "pre-commit: тесты фронтенда с покрытием — make frontend-test-coverage"
+    make frontend-test-coverage || failed=1
 else
     echo "pre-commit: frontend/node_modules не найден, тесты фронтенда пропущены — make frontend-install"
 fi

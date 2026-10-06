@@ -45,11 +45,22 @@ export default defineConfig(({ mode }) => ({
     outDir: "dist",
     emptyOutDir: true,
     assetsDir: "assets",
+    // Два входа: чат (`/chat`) и страница шара (`/s/<key>`) — оба рендерят
+    // markdown одним компонентом (`src/lib/markdown.tsx`). Имена фиксируем,
+    // потому что шаблоны Jinja подключают их по точному пути.
     rollupOptions: {
+      input: {
+        chat: path.resolve(rootDir, "src/main.tsx"),
+        share: path.resolve(rootDir, "src/share.tsx"),
+      },
       output: {
-        entryFileNames: "assets/chat.js",
+        entryFileNames: (chunk) =>
+          chunk.name === "share" ? "assets/share.js" : "assets/chat.js",
         chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name][extname]",
+        assetFileNames: (asset) =>
+          asset.originalFileNames.some((f) => f.endsWith("share.css"))
+            ? "assets/share[extname]"
+            : "assets/[name][extname]",
       },
     },
   },
@@ -68,5 +79,15 @@ export default defineConfig(({ mode }) => ({
   test: {
     environment: "jsdom",
     globals: true,
+    // Порог прогоняет pre-commit-хук (`make frontend-test-coverage`).
+    // Зеркало бэкендовской --cov-fail-under=80: пока честные 65 по строкам.
+    coverage: {
+      reporter: ["text", "text-summary"],
+      thresholds: {
+        lines: 65,
+        branches: 50,
+        functions: 50,
+      },
+    },
   },
 }));
