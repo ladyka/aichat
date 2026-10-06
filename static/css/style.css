@@ -815,19 +815,11 @@ body.page-chat {
 }
 .share-date { font-size: 0.85rem; margin: 0.4rem 0 0; }
 .share-log { display: grid; gap: 0.8rem; }
-.share-bubble { max-width: 100%; }
+.share-bubble { max-width: 100%; overflow-wrap: break-word; }
 .share-bubble.bot { animation: none; }
-.share-bubble .md > :first-child { margin-top: 0; }
-.share-bubble .md > :last-child { margin-bottom: 0; }
-.share-bubble .md p { margin: 0.4rem 0; }
-.share-bubble .md pre {
-  overflow-x: auto;
-  background: rgba(0, 0, 0, 0.045);
-  padding: 0.6rem 0.8rem;
-  border-radius: 8px;
-}
-.share-bubble .md code { font-size: 0.9em; }
-.share-bubble .md img { max-width: 100%; }
+/* До подключения share.js ответ виден как текст, с переносами строк. */
+.share-text,
+.share-md:not([data-mounted]) { white-space: pre-wrap; }
 .share-name {
   font-size: 0.75rem;
   color: var(--muted);

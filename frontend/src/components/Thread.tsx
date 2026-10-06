@@ -9,7 +9,7 @@ import {
   type TextMessagePartProps,
 } from "@assistant-ui/react";
 import { Info } from "lucide-react";
-import { Markdown } from "@/lib/markdown";
+import { MarkdownBlock } from "@/lib/markdown";
 import { responseInfoFromCustom } from "@/lib/response-info";
 
 type ThreadAui = ReturnType<typeof useAui>;
@@ -253,11 +253,7 @@ function UserMessage() {
 }
 
 function MarkdownText({ text }: TextMessagePartProps) {
-  return (
-    <div className="md">
-      <Markdown>{text}</Markdown>
-    </div>
-  );
+  return <MarkdownBlock>{text}</MarkdownBlock>;
 }
 
 function ReasoningText({ text }: ReasoningMessagePartProps) {

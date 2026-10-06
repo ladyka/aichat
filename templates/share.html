@@ -2,6 +2,12 @@
 {% block title %}{% if not_found %}Ссылка недействительна — aichat{% else %}{{ title or 'Поделиться чатом' }} — aichat{% endif %}{% endblock %}
 {% block body_class %}page-share{% endblock %}
 {% block main_class %}share-main{% endblock %}
+{% block head %}
+{% if render_markdown %}
+  {# Те же стили .md, что в чате. Файл кладёт сборка (copyMarkdownCss в vite.config.ts). #}
+  <link rel="stylesheet" href="/chat-ui/assets/markdown.css">
+{% endif %}
+{% endblock %}
 {% block content %}
 {% if not_found %}
   <section class="share-missing">
@@ -23,8 +29,11 @@
           <div class="bubble share-bubble {% if m.role == 'user' %}user{% else %}bot{% endif %}">
             {% if m.role != 'user' %}
               <div class="share-name">Чатбот</div>
+              {# Сырой markdown: share.tsx заменяет его на MarkdownBlock из чата. #}
+              <div class="share-md">{{ m.content }}</div>
+            {% else %}
+              <div class="share-text">{{ m.content }}</div>
             {% endif %}
-            {{ m.html | safe }}
           </div>
         {% endfor %}
       </div>
@@ -32,5 +41,10 @@
       <p class="muted">В этом чате пока нет сообщений.</p>
     {% endif %}
   </div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if render_markdown %}
+  <script type="module" src="/chat-ui/assets/share.js"></script>
 {% endif %}
 {% endblock %}

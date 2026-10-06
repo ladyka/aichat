@@ -10,6 +10,7 @@
 
 - `GET/POST /api/conversations/{id}/share` — посмотреть состояние ссылки и создать её; `POST …/share/revoke` — отозвать.
 - `/s/<key>` — публичная страница чтения, без входа.
+- Ответы на этой странице читаются тем же markdown, что и в чате: таблицы, списки, код, ссылки в новом окне. Сервер отдаёт исходный текст, рисует его `frontend/src/lib/markdown.tsx`. Свои реплики остаются обычным текстом, как в чате.
 - Срок жизни — `SHARE_TTL_DAYS` (по умолчанию 30 дней).
 - Open Graph: ссылка в мессенджере разворачивается превью, а не голым адресом.
 - Заходы пишутся в `share_accesses` с типом гостя — человек, поисковый робот или бот.
@@ -17,7 +18,7 @@
 
 ## Где в коде
 
-`app/routes/share.py` — API шаринга и страница `/s/<key>`; `app/og.py` — абсолютные URL превью и сниппет описания; `app/visitors.py` — классификация гостя по User-Agent; `templates/share.html`; таблицы `share_links`, `share_accesses`; тесты `tests/test_shares.py`, `tests/test_visitors.py`.
+`app/routes/share.py` — API шаринга и страница `/s/<key>`; `app/og.py` — абсолютные URL превью и сниппет описания; `app/visitors.py` — классификация гостя по User-Agent; `templates/share.html`; `frontend/src/share.tsx` и `frontend/src/lib/markdown.tsx` — тот же рендер ответов, что в чате; стили — `frontend/src/markdown.css`; таблицы `share_links`, `share_accesses`; тесты `tests/test_shares.py`, `tests/test_visitors.py`, `frontend/src/tests/share-markdown.test.tsx`.
 
 ## Что осталось
 

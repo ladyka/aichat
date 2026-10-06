@@ -9,7 +9,7 @@ type AnchorProps = React.AnchorHTMLAttributes<HTMLAnchorElement> &
   };
 
 /**
- * Ссылки в чате и заметке: внешние (http/https/mailto и любые другие схемы)
+ * Ссылки в чате, заметке и на странице шаринга: внешние (http/https/mailto и любые другие схемы)
  * всегда открываются в новом окне и без window.opener, чтобы открытая страница
  * не могла добраться до окна чата. Относительные ссылки (если появятся)
  * остаются в текущем окне.
@@ -41,5 +41,17 @@ export function Markdown({ children }: { children: string }) {
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
       {children}
     </ReactMarkdown>
+  );
+}
+
+/**
+ * Сообщение с markdown: чат, страница шаринга и всё, что должно выглядеть так же.
+ * Класс `.md` — стили из `markdown.css`.
+ */
+export function MarkdownBlock({ children }: { children: string }) {
+  return (
+    <div className="md">
+      <Markdown>{children}</Markdown>
+    </div>
   );
 }

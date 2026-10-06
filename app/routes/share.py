@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import html
 import secrets
 from datetime import datetime, timedelta, timezone
 
-import markdown
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -70,13 +68,6 @@ def _is_expired(share: ShareLink, now: datetime | None = None) -> bool:
     if expires.tzinfo is None:
         expires = expires.replace(tzinfo=timezone.utc)
     return expires < now
-
-
-def _render_md(text: str) -> str:
-    return markdown.markdown(
-        html.escape(text),
-        extensions=["fenced_code", "nl2br"],
-    )
 
 
 def _client_ip(request: Request) -> str:
@@ -208,6 +199,7 @@ def _share_missing(request: Request, render):
         None,
         status_code=404,
         not_found=True,
+        render_markdown=False,
         og_type="article",
         og_url=canonical_url(request),
         og_description="Эта ссылка отозвана, истекла или не существует.",
@@ -232,8 +224,11 @@ def share_page(key: str, request: Request, db: Session = Depends(get_db)):
     messages = db.scalars(
         select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id)
     ).all()
-    rendered = [{"role": m.role, "html": _render_md(m.content)} for m in messages]
+    # Текст уходит как есть. Страница подключает share.tsx, и ответы рисует
+    # тот же MarkdownBlock, что и чат (frontend/src/lib/markdown.tsx).
+    rendered = [{"role": m.role, "content": m.content or ""} for m in messages]
     title = conversation.title or "Без названия"
+    render_markdown = any(item["role"] != "user" and item["content"].strip() for item in rendered)
 
     return render(
         request,
@@ -243,6 +238,7 @@ def share_page(key: str, request: Request, db: Session = Depends(get_db)):
         created_at=_iso(conversation.created_at),
         updated_at=_iso(conversation.updated_at),
         messages=rendered,
+        render_markdown=render_markdown,
         not_found=False,
         og_type="article",
         og_url=canonical_url(request),

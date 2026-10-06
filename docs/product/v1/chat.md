@@ -22,7 +22,7 @@
 
 `app/routes/api.py` — `POST /api/chat` (стриминг, петля инструментов: пока рука работает, в поток идут дельты `reasoning`); `app/routes/conversations.py` — истории, сообщения, `/api/settings`; `app/db.py` — таблицы `conversations`, `messages`, `notes`, `conversation_notes`; `app/title.py` — фоновая тема диалога; `templates/chat.html` и `app/routes/pages.py` — оболочка страницы.
 
-Чат UI — `frontend/` на React и assistant-ui: `src/App.tsx` (страница), `src/components/` (`Thread`, `ThreadList`, `RuntimeProvider`, `NotePane`, `SkillsDialog`, `ShareDialog`, `ConfirmDialog`), `src/lib/` (`chat-model-adapter.ts` — модель и поток, `api.ts`, `thread-list-adapter.tsx`, `note-events.ts`, `conversation-id.ts`, `title-sync.ts` — автотема без перезагрузки, `markdown.tsx` — общий рендер markdown со ссылками в новом окне).
+Чат UI — `frontend/` на React и assistant-ui: `src/App.tsx` (страница), `src/components/` (`Thread`, `ThreadList`, `RuntimeProvider`, `NotePane`, `SkillsDialog`, `ShareDialog`, `ConfirmDialog`), `src/lib/` (`chat-model-adapter.ts` — модель и поток, `api.ts`, `thread-list-adapter.tsx`, `note-events.ts`, `conversation-id.ts`, `title-sync.ts` — автотема без перезагрузки, `markdown.tsx` — общий рендер markdown со ссылками в новом окне: им пользуются чат, заметка и страница шаринга).
 
 На телефоне страница не должна скроллиться целиком: `body.page-chat` и `#root` с `overflow: hidden`, колонка чата с `min-h-0`, лента — `.aui-thread-viewport` с внутренним скроллом. Иначе жест по ленте уводит шапку и поле ввода за край экрана. Подписи кнопок шапки на узкой ширине скрыты, чтобы ряд не становился шире окна. Выбор диалога в списке вызывает `onNavigate` и закрывает панель только при ширине меньше `md`; на широком экране колонка историй остаётся.
 
