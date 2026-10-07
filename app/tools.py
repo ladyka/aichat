@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 
 from app import mzg, storage
 from app.config import get_settings
-from app.db import Download, GeneratedImage
+from app.db import Download, GeneratedImage, WebSearch
 from app.feedback import send_feedback
 from app.model_providers.openrouter import generate_image as openrouter_generate_image
 from app.notes import (
@@ -29,6 +29,7 @@ from app.notes import (
     upsert_conversation_note,
 )
 from app.pzz import lookup_address, place_order, search_menu
+from app.search import normalize_query, run_web_search
 from app.telemetry import tool_output, tool_span
 
 logger = logging.getLogger("aichat.tools")
@@ -580,6 +581,8 @@ def enabled_tools() -> list[dict[str, Any]]:
         tools.append(_GENERATE_IMAGE_TOOL)
     if settings.feedback_webhook_url:
         tools.append(_FEEDBACK_TOOL)
+    if settings.web_search_enabled:
+        tools.append(_web_search_tool())
     return tools
 
 
@@ -629,6 +632,76 @@ def _tool_delta_arguments(fn: dict[str, Any]) -> str:
     return str(raw)
 
 
+_WEB_SEARCH_TOOL: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": (
+            "Найти страницы в интернете. Вызывай, когда для ответа нужны свежие факты, "
+            "новости, цены, законы или то, чего нет в памяти модели. "
+            "В ответе пользователю приведи ссылки и назови службу: Bing или Яндекс. "
+            "Не выдумывай адреса страниц."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Поисковый запрос на языке пользователя.",
+                },
+            },
+            "required": ["query"],
+        },
+    },
+}
+
+
+def _web_search_tool() -> dict[str, Any]:
+    """Описание руки с теми службами, для которых заданы ключи."""
+    settings = get_settings()
+    names: list[str] = []
+    enum: list[str] = []
+    if settings.bing_search_enabled:
+        names.append("Bing")
+        enum.append("bing")
+    if settings.yandex_search_enabled:
+        names.append("Яндекс")
+        enum.append("yandex")
+    joined = " и ".join(names) or "интернет"
+    properties: dict[str, Any] = {
+        "query": {
+            "type": "string",
+            "description": "Поисковый запрос на языке пользователя.",
+        },
+    }
+    required = ["query"]
+    if len(enum) > 1:
+        properties["engine"] = {
+            "type": "string",
+            "enum": enum,
+            "description": (
+                "Какую службу спросить. Без параметра запрос уходит во все настроенные."
+            ),
+        }
+    return {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": (
+                f"Найти страницы через {joined}. Вызывай, когда для ответа нужны свежие "
+                "факты, новости, цены, законы или то, чего нет в памяти модели. "
+                "В ответе пользователю приведи ссылки и назови службу: Bing или Яндекс. "
+                "Не выдумывай адреса страниц."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+            },
+        },
+    }
+
+
 _ALL_TOOL_DEFINITIONS = (
     _DATETIME_TOOL,
     _WEATHER_TOOL,
@@ -646,6 +719,7 @@ _ALL_TOOL_DEFINITIONS = (
     _PZZ_ADDRESS_TOOL,
     _PZZ_ORDER_TOOL,
     _FEEDBACK_TOOL,
+    _WEB_SEARCH_TOOL,
 )
 
 
@@ -740,6 +814,7 @@ _TOOL_PROGRESS = {
     "pzz_lookup_address": "Ищу адрес доставки…",
     "pzz_place_order": "Оформляю заказ на pzz.by…",
     "send_feedback": "Передаю обращение команде…",
+    "web_search": "Ищу в интернете…",
 }
 
 
@@ -1045,6 +1120,8 @@ async def _call_tool_impl(
         return await _pzz_tool(name, args)
     if name == "send_feedback":
         return await send_feedback(args, user=user, db=db, conversation_id=conversation_id)
+    if name == "web_search":
+        return await _web_search(args, user=user, db=db)
     if name != "get_weather":
         return json.dumps({"error": f"Unknown tool: {name}"}, ensure_ascii=False)
     city = str(args.get("city") or "").strip()
@@ -1077,6 +1154,100 @@ def _prompt_alt(prompt: str) -> str:
     if len(text) > 80:
         text = text[:77].rstrip() + "…"
     return text.replace("[", "(").replace("]", ")") or "image"
+
+
+def _search_result_count() -> int:
+    raw = get_settings().web_search_result_count
+    try:
+        count = int(raw)
+    except (TypeError, ValueError):
+        count = 5
+    return max(1, min(count, 10))
+
+
+def _selected_search_engines(engine: str) -> tuple[list[str], str | None]:
+    settings = get_settings()
+    available: list[str] = []
+    if settings.bing_search_enabled:
+        available.append("bing")
+    if settings.yandex_search_enabled:
+        available.append("yandex")
+    choice = engine.strip().lower()
+    if choice in {"", "all"}:
+        return available, None
+    if choice == "bing":
+        if "bing" not in available:
+            return [], "Поиск Bing не настроен."
+        return ["bing"], None
+    if choice == "yandex":
+        if "yandex" not in available:
+            return [], "Поиск Яндекс XML не настроен."
+        return ["yandex"], None
+    return [], "Неизвестная служба поиска. Используй bing или yandex."
+
+
+async def _web_search(args: dict[str, Any], user: Any = None, db: Any = None) -> str:
+    settings = get_settings()
+    user_id = getattr(user, "id", None)
+    if not settings.web_search_enabled:
+        return json.dumps({"error": "Веб-поиск не настроен."}, ensure_ascii=False)
+    if user is None or db is None:
+        return json.dumps({"error": "Нет контекста пользователя."}, ensure_ascii=False)
+
+    query = normalize_query(args.get("query"))
+    if not query:
+        return json.dumps({"error": "Нужен query — что искать."}, ensure_ascii=False)
+    engines, engine_error = _selected_search_engines(str(args.get("engine") or ""))
+    if engine_error:
+        return json.dumps({"error": engine_error}, ensure_ascii=False)
+
+    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    used = db.scalar(
+        select(func.count())
+        .select_from(WebSearch)
+        .where(WebSearch.user_id == user.id, WebSearch.created_at >= start)
+    )
+    if int(used or 0) >= settings.web_search_daily_limit:
+        return json.dumps(
+            {
+                "error": (
+                    "Дневной лимит веб-поиска исчерпан: "
+                    f"{settings.web_search_daily_limit} в сутки."
+                )
+            },
+            ensure_ascii=False,
+        )
+
+    count = _search_result_count()
+    logger.info(
+        "web_search started user_id=%s engines=%s query_chars=%s",
+        user_id,
+        ",".join(engines),
+        len(query),
+    )
+    payload = await run_web_search(query, engines, count=count)
+    results = payload.get("results")
+    result_count = len(results) if isinstance(results, list) else 0
+    db.add(
+        WebSearch(
+            user_id=user.id,
+            query=query,
+            engines=",".join(engines)[:32],
+            result_count=result_count,
+        )
+    )
+    try:
+        db.commit()
+    except Exception:
+        logger.exception("web_search log failed user_id=%s", user_id)
+        db.rollback()
+    logger.info(
+        "web_search done user_id=%s engines=%s results=%s",
+        user_id,
+        ",".join(engines),
+        result_count,
+    )
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def _generate_image_fail(user_id: Any, reason: str, **fields: Any) -> str:
