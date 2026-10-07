@@ -20,13 +20,13 @@
 | `create_site`, `update_site`, `delete_site`, `publish_site`, `site_status` | свой сайт `<имя>.mzg.by`: создать, сменить домен (удалить+создать), удалить, опубликовать заметку как `<домен>.md`, спросить состояние | нужен `MZG_SITES_FOLDER`; один сайт на человека; домен освобождается после удаления; публикация и удаление — после явного согласия; в `/v1` не отдаётся |
 | `pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order` | меню, адрес и заказ с pzz.by | выключается `PZZ_ENABLED=0`; отправка на кухню — только после явного согласия и при `PZZ_ORDERS_ENABLED=1`; через чат проходит только оплата наличными курьеру |
 | `send_feedback` | жалоба, идея или вопрос команде сервиса | нужен `FEEDBACK_WEBHOOK_URL` (Incoming Webhook Slack или аналог); отправка — только после явного согласия; для жалобы модель сначала выясняет, что именно не понравилось; в `/v1` не отдаётся |
-| `web_search` | страницы из Bing и Яндекс XML со ссылками | нужен ключ хотя бы одной службы; суточный потолок `WEB_SEARCH_DAILY_LIMIT`; в `/v1` не отдаётся |
+| `web_search` | страницы из Brave и Яндекса со ссылками | нужен ключ хотя бы одной службы; суточный потолок `WEB_SEARCH_DAILY_LIMIT`; в `/v1` не отдаётся |
 
 Если модель зовёт две руки сразу — два курса валют через `download_file` — сервер исполняет оба вызова. Поток не склеивает имена (`download_filedownload_file`) и JSON-аргументы в один неизвестный инструмент.
 
 ## Где в коде
 
-`app/tools.py` — описания инструментов, `enabled_tools()`, `extract_tool_calls()` (сборка дельт потока), `tool_progress_line()` (строка хода работы) и исполнение; `app/search.py` — Bing и Яндекс XML; `app/mzg.py` — сайты на mzg.by (домен, публикация, состояние); `app/model_providers/ol.py` — поток ollama отдаёт каждый вызов один раз со стабильным index; `app/routes/api.py` — петля `/api/chat` шлёт дельты `reasoning`, пока рука работает; `app/feedback.py` — отправка обращения на вебхук; `app/pzz.py` — клиент публичного API pzz.by; `app/storage.py` — S3 для картинок; `app/notes.py` — заметка; таблицы `downloads`, `generated_images`, `user_sites`, `usage_logs`; флаги в `app/config.py`. UI рисует ход в `frontend/src/components/Thread.tsx` (`ReasoningText`).
+`app/tools.py` — описания инструментов, `enabled_tools()`, `extract_tool_calls()` (сборка дельт потока), `tool_progress_line()` (строка хода работы) и исполнение; `app/search.py` — Brave Search API и Yandex Search API v2; `app/mzg.py` — сайты на mzg.by (домен, публикация, состояние); `app/model_providers/ol.py` — поток ollama отдаёт каждый вызов один раз со стабильным index; `app/routes/api.py` — петля `/api/chat` шлёт дельты `reasoning`, пока рука работает; `app/feedback.py` — отправка обращения на вебхук; `app/pzz.py` — клиент публичного API pzz.by; `app/storage.py` — S3 для картинок; `app/notes.py` — заметка; таблицы `downloads`, `generated_images`, `user_sites`, `usage_logs`; флаги в `app/config.py`. UI рисует ход в `frontend/src/components/Thread.tsx` (`ReasoningText`).
 
 ## Что осталось
 

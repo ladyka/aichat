@@ -114,24 +114,11 @@ class Settings:
         self.share_ttl_days = int(_env("SHARE_TTL_DAYS", "30") or "30")
         self.openweather_api_key = _env("OPENWEATHER_API_KEY", "") or ""
         # Веб-поиск в чате. Пустой ключ выключает соответствующую службу.
-        # Bing Web Search v7: Microsoft сняла API 11 августа 2025; адрес можно
-        # подменить, если подписка отвечает с другого хоста.
-        self.bing_search_api_key = (_env("BING_SEARCH_API_KEY", "") or "").strip()
-        self.bing_search_endpoint = (
-            _env("BING_SEARCH_ENDPOINT", "https://api.bing.microsoft.com/v7.0/search")
-            or "https://api.bing.microsoft.com/v7.0/search"
-        ).strip()
-        self.bing_search_mkt = (_env("BING_SEARCH_MKT", "ru-RU") or "ru-RU").strip()
-        # Яндекс XML: облачный Search API (folderid + apikey) либо классическая пара user + key.
+        # Brave Web Search: GET https://api.search.brave.com/res/v1/web/search
+        self.brave_search_api_key = (_env("BRAVE_SEARCH_API_KEY", "") or "").strip()
+        # Yandex Search API v2: POST https://searchapi.api.cloud.yandex.net/v2/web/search
         self.yandex_search_api_key = (_env("YANDEX_SEARCH_API_KEY", "") or "").strip()
         self.yandex_search_folder_id = (_env("YANDEX_SEARCH_FOLDER_ID", "") or "").strip()
-        self.yandex_xml_user = (_env("YANDEX_XML_USER", "") or "").strip()
-        self.yandex_xml_key = (_env("YANDEX_XML_KEY", "") or "").strip()
-        self.yandex_search_xml_url = (
-            _env("YANDEX_SEARCH_XML_URL", "https://yandex.ru/search/xml")
-            or "https://yandex.ru/search/xml"
-        ).strip()
-        self.yandex_search_lr = (_env("YANDEX_SEARCH_LR", "") or "").strip()
         self.web_search_daily_limit = int(_env("WEB_SEARCH_DAILY_LIMIT", "20") or "20")
         self.web_search_result_count = int(_env("WEB_SEARCH_RESULT_COUNT", "5") or "5")
         # Пицца Лисицца (pzz.by): публичный каталог в чате. Заказы — через их SPA API.
@@ -265,18 +252,16 @@ class Settings:
         return bool(self.openrouter_api_key and self.s3_enabled)
 
     @property
-    def bing_search_enabled(self) -> bool:
-        return bool(self.bing_search_api_key)
+    def brave_search_enabled(self) -> bool:
+        return bool(self.brave_search_api_key)
 
     @property
     def yandex_search_enabled(self) -> bool:
-        cloud = bool(self.yandex_search_api_key and self.yandex_search_folder_id)
-        classic = bool(self.yandex_xml_user and self.yandex_xml_key)
-        return cloud or classic
+        return bool(self.yandex_search_api_key and self.yandex_search_folder_id)
 
     @property
     def web_search_enabled(self) -> bool:
-        return self.bing_search_enabled or self.yandex_search_enabled
+        return self.brave_search_enabled or self.yandex_search_enabled
 
     @property
     def google_redirect_uri(self) -> str:

@@ -1,8 +1,10 @@
-"""Веб-поиск для чата: Bing Web Search и Яндекс XML (Yandex Search API)."""
+"""Веб-поиск для чата: Brave Search API и Yandex Search API v2."""
 
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
 import xml.etree.ElementTree as ET
 from typing import Any
@@ -17,9 +19,12 @@ _MAX_QUERY_CHARS = 400
 _MAX_SNIPPET_CHARS = 400
 _TIMEOUT = 20.0
 
+_BRAVE_URL = "https://api.search.brave.com/res/v1/web/search"
+_YANDEX_URL = "https://searchapi.api.cloud.yandex.net/v2/web/search"
+
 
 def normalize_query(raw: Any) -> str:
-    """Сжать пробелы и обрезать запрос до лимита Яндекс XML."""
+    """Сжать пробелы и обрезать запрос до лимита Yandex Search API."""
     text = " ".join(str(raw or "").split())
     return text[:_MAX_QUERY_CHARS]
 
@@ -46,19 +51,15 @@ def _xml_text(node: ET.Element) -> str:
     return " ".join("".join(node.itertext()).split())
 
 
-def parse_bing_payload(payload: Any, *, limit: int) -> dict[str, Any]:
-    """Разобрать JSON Bing Web Search v7: webPages.value[]."""
+def parse_brave_payload(payload: Any, *, limit: int) -> dict[str, Any]:
+    """Разобрать JSON Brave Web Search: web.results[]."""
     if not isinstance(payload, dict):
-        return {"source": "Bing", "error": "Bing вернул неразборчивый ответ."}
-    errors = payload.get("errors")
-    if isinstance(errors, list) and errors:
-        message = ""
-        first = errors[0]
-        if isinstance(first, dict):
-            message = str(first.get("message") or "").strip()
-        return {"source": "Bing", "error": message or "Bing отклонил запрос."}
-    pages = payload.get("webPages")
-    values = pages.get("value") if isinstance(pages, dict) else None
+        return {"source": "Brave", "error": "Brave вернул неразборчивый ответ."}
+    message = str(payload.get("message") or "").strip()
+    if message and "web" not in payload:
+        return {"source": "Brave", "error": message}
+    web = payload.get("web")
+    values = web.get("results") if isinstance(web, dict) else None
     if not isinstance(values, list):
         values = []
     results: list[dict[str, str]] = []
@@ -70,19 +71,19 @@ def parse_bing_payload(payload: Any, *, limit: int) -> dict[str, Any]:
             continue
         results.append(
             {
-                "source": "Bing",
-                "title": _clip(str(item.get("name") or url)),
+                "source": "Brave",
+                "title": _clip(str(item.get("title") or url)),
                 "url": url,
-                "snippet": _clip(str(item.get("snippet") or "")),
+                "snippet": _clip(str(item.get("description") or "")),
             }
         )
         if len(results) >= limit:
             break
-    return {"source": "Bing", "results": results}
+    return {"source": "Brave", "results": results}
 
 
 def parse_yandex_xml(text: str, *, limit: int) -> dict[str, Any]:
-    """Разобрать ответ Яндекс XML: doc/url, title, passages."""
+    """Разобрать XML из ответа Yandex Search API v2: doc/url, title, passages."""
     try:
         root = ET.fromstring(text)
     except ET.ParseError:
@@ -134,74 +135,114 @@ def parse_yandex_xml(text: str, *, limit: int) -> dict[str, Any]:
     return {"source": "Яндекс", "results": results}
 
 
-async def search_bing(query: str, *, count: int) -> dict[str, Any]:
-    """GET Bing Web Search v7. Ключ — заголовок Ocp-Apim-Subscription-Key."""
+async def search_brave(query: str, *, count: int) -> dict[str, Any]:
+    """GET Brave Web Search. Ключ — заголовок X-Subscription-Token."""
     settings = get_settings()
-    if not settings.bing_search_api_key:
-        return {"source": "Bing", "error": "Поиск Bing не настроен."}
-    headers = {"Ocp-Apim-Subscription-Key": settings.bing_search_api_key}
+    if not settings.brave_search_api_key:
+        return {"source": "Brave", "error": "Поиск Brave не настроен."}
+    headers = {
+        "Accept": "application/json",
+        "X-Subscription-Token": settings.brave_search_api_key,
+    }
     params = {
         "q": query,
         "count": count,
-        "mkt": settings.bing_search_mkt,
-        "responseFilter": "Webpages",
-        "textDecorations": "false",
-        "textFormat": "Raw",
+        "country": "ALL",
+        "search_lang": "ru",
+        "ui_lang": "ru-RU",
+        "safesearch": "moderate",
+        "text_decorations": "false",
+        "result_filter": "web",
     }
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
-            response = await client.get(
-                settings.bing_search_endpoint, params=params, headers=headers
-            )
+            response = await client.get(_BRAVE_URL, params=params, headers=headers)
     except httpx.HTTPError:
-        logger.warning("bing search failed error=transport")
-        return {"source": "Bing", "error": "Не удалось связаться с Bing."}
+        logger.warning("brave search failed error=transport")
+        return {"source": "Brave", "error": "Не удалось связаться с Brave."}
     if response.status_code >= 400:
-        logger.warning("bing search failed status=%s", response.status_code)
-        return {"source": "Bing", "error": f"Bing ответил ошибкой {response.status_code}."}
+        logger.warning("brave search failed status=%s", response.status_code)
+        return {"source": "Brave", "error": f"Brave ответил ошибкой {response.status_code}."}
     try:
         payload = response.json()
     except ValueError:
-        return {"source": "Bing", "error": "Bing вернул неразборчивый ответ."}
-    return parse_bing_payload(payload, limit=count)
+        return {"source": "Brave", "error": "Brave вернул неразборчивый ответ."}
+    return parse_brave_payload(payload, limit=count)
+
+
+def _yandex_body(query: str, count: int, folder_id: str) -> dict[str, Any]:
+    return {
+        "query": {
+            "searchType": "SEARCH_TYPE_RU",
+            "queryText": query,
+            "familyMode": "FAMILY_MODE_MODERATE",
+            "page": "0",
+        },
+        "groupSpec": {
+            "groupMode": "GROUP_MODE_FLAT",
+            "groupsOnPage": str(count),
+            "docsInGroup": "1",
+        },
+        "l10n": "LOCALIZATION_RU",
+        "folderId": folder_id,
+        "responseFormat": "FORMAT_XML",
+    }
+
+
+def _yandex_xml_from_payload(payload: Any) -> tuple[str, str]:
+    """Достать XML из поля rawData. Вторая строка — текст ошибки, если XML нет."""
+    if not isinstance(payload, dict):
+        return "", "Яндекс вернул неразборчивый ответ."
+    error = payload.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message") or "").strip()
+        if message:
+            return "", message
+    raw = payload.get("rawData")
+    if not isinstance(raw, str) or not raw.strip():
+        message = str(payload.get("message") or "").strip()
+        return "", message or "Яндекс вернул неразборчивый ответ."
+    try:
+        xml = base64.b64decode("".join(raw.split()), validate=True)
+    except (binascii.Error, ValueError):
+        return "", "Яндекс вернул неразборчивый ответ."
+    return xml.decode("utf-8", errors="replace"), ""
 
 
 async def search_yandex(query: str, *, count: int) -> dict[str, Any]:
-    """GET Яндекс XML. Облачный ключ (folderid + apikey) важнее классической пары user + key."""
+    """POST Yandex Search API v2. Ключ — Authorization: Api-Key, каталог — folderId."""
     settings = get_settings()
-    params: dict[str, Any] = {
-        "query": query,
-        "l10n": "ru",
-        "filter": "moderate",
-        "groupby": f"attr=d.mode=deep.groups-on-page={count}.docs-in-group=1",
+    if not (settings.yandex_search_api_key and settings.yandex_search_folder_id):
+        return {"source": "Яндекс", "error": "Поиск Яндекса не настроен."}
+    headers = {
+        "Authorization": f"Api-Key {settings.yandex_search_api_key}",
+        "Content-Type": "application/json",
     }
-    if settings.yandex_search_api_key and settings.yandex_search_folder_id:
-        params["folderid"] = settings.yandex_search_folder_id
-        params["apikey"] = settings.yandex_search_api_key
-    elif settings.yandex_xml_user and settings.yandex_xml_key:
-        params["user"] = settings.yandex_xml_user
-        params["key"] = settings.yandex_xml_key
-    else:
-        return {"source": "Яндекс", "error": "Поиск Яндекс XML не настроен."}
-    if settings.yandex_search_lr:
-        params["lr"] = settings.yandex_search_lr
+    body = _yandex_body(query, count, settings.yandex_search_folder_id)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=False) as client:
-            response = await client.get(settings.yandex_search_xml_url, params=params)
+            response = await client.post(_YANDEX_URL, json=body, headers=headers)
     except httpx.HTTPError:
-        logger.warning("yandex xml search failed error=transport")
+        logger.warning("yandex search failed error=transport")
         return {"source": "Яндекс", "error": "Не удалось связаться с Яндексом."}
     if response.status_code >= 400:
-        logger.warning("yandex xml search failed status=%s", response.status_code)
+        logger.warning("yandex search failed status=%s", response.status_code)
         return {"source": "Яндекс", "error": f"Яндекс ответил ошибкой {response.status_code}."}
-    return parse_yandex_xml(response.text, limit=count)
+    try:
+        payload = response.json()
+    except ValueError:
+        return {"source": "Яндекс", "error": "Яндекс вернул неразборчивый ответ."}
+    xml, error = _yandex_xml_from_payload(payload)
+    if error:
+        return {"source": "Яндекс", "error": error}
+    return parse_yandex_xml(xml, limit=count)
 
 
 async def run_web_search(query: str, engines: list[str], *, count: int) -> dict[str, Any]:
     """Обойти выбранные службы и склеить ссылки. Сбой одной не прячет ответ другой."""
     tasks = []
-    if "bing" in engines:
-        tasks.append(search_bing(query, count=count))
+    if "brave" in engines:
+        tasks.append(search_brave(query, count=count))
     if "yandex" in engines:
         tasks.append(search_yandex(query, count=count))
     parts = await asyncio.gather(*tasks)

@@ -54,15 +54,9 @@ os.environ["FEEDBACK_WEBHOOK_URL"] = ""
 # them (tests/test_mzg.py) enable a temporary folder via monkeypatch.
 os.environ["MZG_SITES_FOLDER"] = ""
 # Ключи поиска из локального .env включили бы web_search в точные списки рук.
-os.environ["BING_SEARCH_API_KEY"] = ""
-os.environ["BING_SEARCH_ENDPOINT"] = ""
-os.environ["BING_SEARCH_MKT"] = ""
+os.environ["BRAVE_SEARCH_API_KEY"] = ""
 os.environ["YANDEX_SEARCH_API_KEY"] = ""
 os.environ["YANDEX_SEARCH_FOLDER_ID"] = ""
-os.environ["YANDEX_XML_USER"] = ""
-os.environ["YANDEX_XML_KEY"] = ""
-os.environ["YANDEX_SEARCH_XML_URL"] = ""
-os.environ["YANDEX_SEARCH_LR"] = ""
 os.environ["WEB_SEARCH_DAILY_LIMIT"] = ""
 os.environ["WEB_SEARCH_RESULT_COUNT"] = ""
 # SYSTEM_PROMPT is also a deployment setting; a local value would change the first

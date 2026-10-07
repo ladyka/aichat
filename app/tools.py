@@ -639,7 +639,7 @@ _WEB_SEARCH_TOOL: dict[str, Any] = {
         "description": (
             "Найти страницы в интернете. Вызывай, когда для ответа нужны свежие факты, "
             "новости, цены, законы или то, чего нет в памяти модели. "
-            "В ответе пользователю приведи ссылки и назови службу: Bing или Яндекс. "
+            "В ответе пользователю приведи ссылки и назови службу: Brave или Яндекс. "
             "Не выдумывай адреса страниц."
         ),
         "parameters": {
@@ -661,9 +661,9 @@ def _web_search_tool() -> dict[str, Any]:
     settings = get_settings()
     names: list[str] = []
     enum: list[str] = []
-    if settings.bing_search_enabled:
-        names.append("Bing")
-        enum.append("bing")
+    if settings.brave_search_enabled:
+        names.append("Brave")
+        enum.append("brave")
     if settings.yandex_search_enabled:
         names.append("Яндекс")
         enum.append("yandex")
@@ -690,7 +690,7 @@ def _web_search_tool() -> dict[str, Any]:
             "description": (
                 f"Найти страницы через {joined}. Вызывай, когда для ответа нужны свежие "
                 "факты, новости, цены, законы или то, чего нет в памяти модели. "
-                "В ответе пользователю приведи ссылки и назови службу: Bing или Яндекс. "
+                "В ответе пользователю приведи ссылки и назови службу: Brave или Яндекс. "
                 "Не выдумывай адреса страниц."
             ),
             "parameters": {
@@ -1168,22 +1168,22 @@ def _search_result_count() -> int:
 def _selected_search_engines(engine: str) -> tuple[list[str], str | None]:
     settings = get_settings()
     available: list[str] = []
-    if settings.bing_search_enabled:
-        available.append("bing")
+    if settings.brave_search_enabled:
+        available.append("brave")
     if settings.yandex_search_enabled:
         available.append("yandex")
     choice = engine.strip().lower()
     if choice in {"", "all"}:
         return available, None
-    if choice == "bing":
-        if "bing" not in available:
-            return [], "Поиск Bing не настроен."
-        return ["bing"], None
+    if choice == "brave":
+        if "brave" not in available:
+            return [], "Поиск Brave не настроен."
+        return ["brave"], None
     if choice == "yandex":
         if "yandex" not in available:
-            return [], "Поиск Яндекс XML не настроен."
+            return [], "Поиск Яндекса не настроен."
         return ["yandex"], None
-    return [], "Неизвестная служба поиска. Используй bing или yandex."
+    return [], "Неизвестная служба поиска. Используй brave или yandex."
 
 
 async def _web_search(args: dict[str, Any], user: Any = None, db: Any = None) -> str:

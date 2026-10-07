@@ -449,7 +449,7 @@ class GeneratedImage(Base):
 
 
 class WebSearch(Base):
-    """Один вызов web_search: запрос ушёл в Bing и/или Яндекс XML."""
+    """Один вызов web_search: запрос ушёл в Brave и/или Yandex Search API."""
 
     __tablename__ = "web_searches"
 

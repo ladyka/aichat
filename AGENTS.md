@@ -28,7 +28,7 @@
 - **Деплой сайта**: у пользователя один сайт `<имя>.mzg.by`; содержимое — заметка чата, публикация кладёт `<имя>.md` в `MZG_SITES_FOLDER` (пусто — инструменты выключены). Таблица `user_sites`.
 - **Компании — отдельный деплой LibreChat** (OAuth/SSO, роли, агенты). Бытовые tools витрины туда не вырезать; при необходимости — обёртка снаружи (MCP/OpenAPI). См. `docs/product/audiences.md`.
 - **Версия 1 выпущена** (план исполнен, работает на проде): факт — витрина (чат, tools, API, PWA) и **skills с каталогом навыков**; новых функций в v1 не будет. По функциям — `docs/product/v1/`.
-- **Версия 2 — в планах** (`docs/product/v2/`): решённое, но в основном не сделанное. На витрине уже есть веб-поиск (`web_search`: Bing и Яндекс XML, план — `docs/product/v2/websearch.md`). Дальше — **ИИ-диктофон** (`/dictaphone`, план — `docs/product/v2/dictaphone.md`), голосовой чат, заметки 2, биллинг, приложение на телефон (вторая часть офлайна и магазины); **отдельной выкладкой** — LibreChat для компаний. Порядка внутри нет, очередь не выбрана. Кроме веб-поиска, в коде из этого списка ничего нет. См. `docs/product/roadmap.md`.
+- **Версия 2 — в планах** (`docs/product/v2/`): решённое, но в основном не сделанное. На витрине уже есть веб-поиск (`web_search`: Brave Search API и Yandex Search API v2, план — `docs/product/v2/websearch.md`). Дальше — **ИИ-диктофон** (`/dictaphone`, план — `docs/product/v2/dictaphone.md`), голосовой чат, заметки 2, биллинг, приложение на телефон (вторая часть офлайна и магазины); **отдельной выкладкой** — LibreChat для компаний. Порядка внутри нет, очередь не выбрана. Кроме веб-поиска, в коде из этого списка ничего нет. См. `docs/product/roadmap.md`.
 
 ### Where things live
 
@@ -44,7 +44,7 @@
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, `web_search`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`) |
-| `app/search.py` | Bing Web Search и Яндекс XML для `web_search` |
+| `app/search.py` | Brave Search API и Yandex Search API v2 для `web_search` |
 | `app/mzg.py` | mzg.by: сайты пользователей — домен `<имя>.mzg.by`, один сайт на пользователя (создать / сменить домен = удалить+создать / удалить / статус), публикация заметки как `<имя>.md` в `MZG_SITES_FOLDER` |
 | `app/feedback.py` | `send_feedback`: Incoming Webhook Slack/Discord (`FEEDBACK_WEBHOOK_URL`) |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |

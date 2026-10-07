@@ -52,7 +52,7 @@ def test_settings_defaults(monkeypatch):
     assert settings.web_search_daily_limit == 20
     assert settings.web_search_result_count == 5
     assert not settings.web_search_enabled
-    assert not settings.bing_search_enabled
+    assert not settings.brave_search_enabled
     assert not settings.yandex_search_enabled
     assert settings.image_generation_model == "black-forest-labs/flux.2-klein-4b"
     assert settings.log_level_name == "INFO"

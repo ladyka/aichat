@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import uuid
 
@@ -6,7 +7,7 @@ from sqlalchemy import func, select
 
 from app.config import Settings, get_settings
 from app.db import WebSearch, get_user_by_email
-from app.search import parse_bing_payload, parse_yandex_xml, search_bing, search_yandex
+from app.search import parse_brave_payload, parse_yandex_xml, search_brave, search_yandex
 from app.tools import call_tool, enabled_tools, tool_progress_line
 from tests.conftest import register
 
@@ -50,6 +51,7 @@ class _Response:
 class _Client:
     last_init: dict = {}
     last_get: dict = {}
+    last_post: dict = {}
     response = _Response(200, payload={})
 
     def __init__(self, *args, **kwargs):
@@ -65,24 +67,19 @@ class _Client:
         _Client.last_get = {"url": url, "params": params, "headers": headers}
         return _Client.response
 
-
-def _enable_bing(monkeypatch, key="bing-secret"):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "bing_search_api_key", key)
-    monkeypatch.setattr(
-        settings, "bing_search_endpoint", "https://api.bing.microsoft.com/v7.0/search"
-    )
-    monkeypatch.setattr(settings, "bing_search_mkt", "ru-RU")
+    async def post(self, url, json=None, headers=None):
+        _Client.last_post = {"url": url, "json": json, "headers": headers}
+        return _Client.response
 
 
-def _enable_yandex_cloud(monkeypatch):
+def _enable_brave(monkeypatch, key="brave-secret"):
+    monkeypatch.setattr(get_settings(), "brave_search_api_key", key)
+
+
+def _enable_yandex(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "yandex_search_api_key", "ya-key")
     monkeypatch.setattr(settings, "yandex_search_folder_id", "b1gfolder")
-    monkeypatch.setattr(settings, "yandex_xml_user", "")
-    monkeypatch.setattr(settings, "yandex_xml_key", "")
-    monkeypatch.setattr(settings, "yandex_search_xml_url", "https://yandex.ru/search/xml")
-    monkeypatch.setattr(settings, "yandex_search_lr", "149")
 
 
 def test_web_search_progress_line():
@@ -91,41 +88,42 @@ def test_web_search_progress_line():
 
 def test_web_search_hidden_without_keys():
     settings = get_settings()
-    assert settings.bing_search_api_key == ""
+    assert settings.brave_search_api_key == ""
+    assert settings.yandex_search_api_key == ""
     assert "web_search" not in [t["function"]["name"] for t in enabled_tools()]
 
 
 def test_web_search_advertised_for_each_engine(monkeypatch):
-    _enable_bing(monkeypatch)
-    bing_tool = next(t for t in enabled_tools() if t["function"]["name"] == "web_search")
-    assert "Bing" in bing_tool["function"]["description"]
-    assert "engine" not in bing_tool["function"]["parameters"]["properties"]
+    _enable_brave(monkeypatch)
+    brave_tool = next(t for t in enabled_tools() if t["function"]["name"] == "web_search")
+    assert "Brave" in brave_tool["function"]["description"]
+    assert "engine" not in brave_tool["function"]["parameters"]["properties"]
 
-    monkeypatch.setattr(get_settings(), "bing_search_api_key", "")
-    _enable_yandex_cloud(monkeypatch)
+    monkeypatch.setattr(get_settings(), "brave_search_api_key", "")
+    _enable_yandex(monkeypatch)
     yandex_tool = next(t for t in enabled_tools() if t["function"]["name"] == "web_search")
     assert "Яндекс" in yandex_tool["function"]["description"]
 
-    _enable_bing(monkeypatch)
+    _enable_brave(monkeypatch)
     both = next(t for t in enabled_tools() if t["function"]["name"] == "web_search")
-    assert both["function"]["parameters"]["properties"]["engine"]["enum"] == ["bing", "yandex"]
+    assert both["function"]["parameters"]["properties"]["engine"]["enum"] == ["brave", "yandex"]
 
 
-def test_parse_bing_and_yandex_documents():
-    bing = parse_bing_payload(
+def test_parse_brave_and_yandex_documents():
+    brave = parse_brave_payload(
         {
-            "webPages": {
-                "value": [
-                    {"name": "Минск", "url": "https://example.com/a", "snippet": "Столица"},
-                    {"name": "мимо", "url": "ftp://example.com/no", "snippet": "нет"},
+            "web": {
+                "results": [
+                    {"title": "Минск", "url": "https://example.com/a", "description": "Столица"},
+                    {"title": "мимо", "url": "ftp://example.com/no", "description": "нет"},
                 ]
             }
         },
         limit=5,
     )
-    assert bing["results"] == [
+    assert brave["results"] == [
         {
-            "source": "Bing",
+            "source": "Brave",
             "title": "Минск",
             "url": "https://example.com/a",
             "snippet": "Столица",
@@ -138,72 +136,69 @@ def test_parse_bing_and_yandex_documents():
     assert parse_yandex_xml(_YANDEX_ERROR, limit=5)["error"] == "Ничего не найдено"
 
 
-def test_search_bing_sends_subscription_key(monkeypatch):
-    _enable_bing(monkeypatch)
+def test_search_brave_sends_subscription_token(monkeypatch):
+    _enable_brave(monkeypatch)
     _Client.response = _Response(
         200,
         payload={
-            "webPages": {"value": [{"name": "A", "url": "https://a.example", "snippet": "s"}]}
+            "web": {"results": [{"title": "A", "url": "https://a.example", "description": "s"}]}
         },
     )
     monkeypatch.setattr("app.search.httpx.AsyncClient", _Client)
-    result = asyncio.run(search_bing("погода", count=3))
+    result = asyncio.run(search_brave("погода", count=3))
     assert result["results"][0]["url"] == "https://a.example"
     assert _Client.last_init["follow_redirects"] is False
-    assert _Client.last_get["headers"]["Ocp-Apim-Subscription-Key"] == "bing-secret"
+    assert _Client.last_get["url"] == "https://api.search.brave.com/res/v1/web/search"
+    assert _Client.last_get["headers"]["X-Subscription-Token"] == "brave-secret"
     assert _Client.last_get["params"]["q"] == "погода"
-    assert _Client.last_get["params"]["mkt"] == "ru-RU"
+    assert _Client.last_get["params"]["search_lang"] == "ru"
+    assert _Client.last_get["params"]["country"] == "ALL"
 
 
-def test_search_yandex_prefers_cloud_key(monkeypatch):
-    _enable_yandex_cloud(monkeypatch)
-    monkeypatch.setattr(get_settings(), "yandex_xml_user", "legacy-user")
-    monkeypatch.setattr(get_settings(), "yandex_xml_key", "legacy-key")
-    _Client.response = _Response(200, text=_YANDEX_XML)
+def test_search_yandex_posts_search_api_v2(monkeypatch):
+    _enable_yandex(monkeypatch)
+    encoded = base64.b64encode(_YANDEX_XML.encode()).decode()
+    _Client.response = _Response(200, payload={"rawData": encoded})
     monkeypatch.setattr("app.search.httpx.AsyncClient", _Client)
     result = asyncio.run(search_yandex("минск", count=2))
     assert result["results"][0]["source"] == "Яндекс"
-    params = _Client.last_get["params"]
-    assert params["folderid"] == "b1gfolder"
-    assert params["apikey"] == "ya-key"
-    assert "user" not in params
-    assert params["lr"] == "149"
-    assert "groups-on-page=2" in params["groupby"]
+    assert result["results"][0]["url"] == "https://example.com/minsk"
+    assert _Client.last_init["follow_redirects"] is False
+    assert _Client.last_post["url"] == "https://searchapi.api.cloud.yandex.net/v2/web/search"
+    assert _Client.last_post["headers"]["Authorization"] == "Api-Key ya-key"
+    body = _Client.last_post["json"]
+    assert body["folderId"] == "b1gfolder"
+    assert body["query"]["searchType"] == "SEARCH_TYPE_RU"
+    assert body["query"]["queryText"] == "минск"
+    assert body["groupSpec"]["groupsOnPage"] == "2"
+    assert body["responseFormat"] == "FORMAT_XML"
 
 
-def test_search_yandex_classic_user_key(monkeypatch):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "yandex_search_api_key", "")
-    monkeypatch.setattr(settings, "yandex_search_folder_id", "")
-    monkeypatch.setattr(settings, "yandex_xml_user", "xml-user")
-    monkeypatch.setattr(settings, "yandex_xml_key", "xml-key")
-    monkeypatch.setattr(settings, "yandex_search_xml_url", "https://yandex.ru/search/xml")
-    monkeypatch.setattr(settings, "yandex_search_lr", "")
-    _Client.response = _Response(401, text="")
+def test_search_yandex_http_error(monkeypatch):
+    _enable_yandex(monkeypatch)
+    _Client.response = _Response(401, payload={})
     monkeypatch.setattr("app.search.httpx.AsyncClient", _Client)
     result = asyncio.run(search_yandex("минск", count=1))
     assert result["error"] == "Яндекс ответил ошибкой 401."
-    assert _Client.last_get["params"]["user"] == "xml-user"
-    assert _Client.last_get["params"]["key"] == "xml-key"
 
 
 def test_web_search_merges_engines_and_counts_the_day(monkeypatch, client, db):
-    _enable_bing(monkeypatch)
-    _enable_yandex_cloud(monkeypatch)
+    _enable_brave(monkeypatch)
+    _enable_yandex(monkeypatch)
     monkeypatch.setattr(get_settings(), "web_search_daily_limit", 2)
     monkeypatch.setattr(get_settings(), "web_search_result_count", 5)
     email = f"search-{uuid.uuid4().hex[:8]}@example.com"
     register(client, email)
     user = get_user_by_email(db, email)
 
-    async def fake_bing(query, *, count):
+    async def fake_brave(query, *, count):
         return {
-            "source": "Bing",
+            "source": "Brave",
             "results": [
                 {
-                    "source": "Bing",
+                    "source": "Brave",
                     "title": "Курс",
-                    "url": "https://bing.example/usd",
+                    "url": "https://brave.example/usd",
                     "snippet": "3.2",
                 }
             ],
@@ -212,21 +207,20 @@ def test_web_search_merges_engines_and_counts_the_day(monkeypatch, client, db):
     async def fake_yandex(query, *, count):
         return {"source": "Яндекс", "error": "Яндекс ответил ошибкой 503."}
 
-    monkeypatch.setattr("app.search.search_bing", fake_bing)
+    monkeypatch.setattr("app.search.search_brave", fake_brave)
     monkeypatch.setattr("app.search.search_yandex", fake_yandex)
-    # call_tool imports run_web_search, which calls the functions above.
     first = json.loads(
         asyncio.run(call_tool("web_search", '{"query": " курс   доллара "}', user, db))
     )
     assert first["query"] == "курс доллара"
-    assert [item["source"] for item in first["results"]] == ["Bing"]
+    assert [item["source"] for item in first["results"]] == ["Brave"]
     assert first["errors"][0]["source"] == "Яндекс"
     assert _search_count(db, user.id) == 1
 
     second = json.loads(
-        asyncio.run(call_tool("web_search", '{"query": "ещё", "engine": "bing"}', user, db))
+        asyncio.run(call_tool("web_search", '{"query": "ещё", "engine": "brave"}', user, db))
     )
-    assert second["results"][0]["url"] == "https://bing.example/usd"
+    assert second["results"][0]["url"] == "https://brave.example/usd"
     blocked = json.loads(asyncio.run(call_tool("web_search", '{"query": "третий"}', user, db)))
     assert "лимит" in blocked["error"]
     assert _search_count(db, user.id) == 2
@@ -240,21 +234,21 @@ def _search_count(db, user_id: int) -> int:
 
 
 def test_web_search_rejects_unknown_engine(monkeypatch, client, db):
-    _enable_bing(monkeypatch)
+    _enable_brave(monkeypatch)
     email = f"search-engine-{uuid.uuid4().hex[:8]}@example.com"
     register(client, email)
     user = get_user_by_email(db, email)
     result = json.loads(
         asyncio.run(call_tool("web_search", '{"query": "минск", "engine": "google"}', user, db))
     )
-    assert "bing или yandex" in result["error"]
+    assert "brave или yandex" in result["error"]
 
 
-def test_yandex_cloud_settings_from_env(monkeypatch):
+def test_search_settings_from_env(monkeypatch):
     monkeypatch.setenv("YANDEX_SEARCH_API_KEY", "key")
     monkeypatch.setenv("YANDEX_SEARCH_FOLDER_ID", "folder")
-    monkeypatch.setenv("BING_SEARCH_API_KEY", "")
+    monkeypatch.setenv("BRAVE_SEARCH_API_KEY", "")
     settings = Settings()
     assert settings.yandex_search_enabled
     assert settings.web_search_enabled
-    assert not settings.bing_search_enabled
+    assert not settings.brave_search_enabled

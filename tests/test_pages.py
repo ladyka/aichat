@@ -49,7 +49,7 @@ def test_privacy_and_terms_have_og_description(client):
     privacy = client.get("/privacy")
     assert privacy.status_code == 200
     assert "Как aichat обрабатывает данные" in privacy.text
-    assert "Bing" in privacy.text
+    assert "Brave" in privacy.text
     assert "Яндекс" in privacy.text
     terms = client.get("/terms")
     assert terms.status_code == 200
