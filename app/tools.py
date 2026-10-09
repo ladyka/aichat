@@ -18,9 +18,10 @@ from sqlalchemy import func, select
 
 from app import mzg, storage
 from app.config import get_settings
-from app.db import Download, GeneratedImage
+from app.db import Download, GeneratedImage, UsageLog
 from app.feedback import send_feedback
 from app.model_providers.openrouter import generate_image as openrouter_generate_image
+from app.models_catalog import PROVIDER_OPENROUTER
 from app.notes import (
     NOTE_TOO_LARGE,
     latest_note_for_conversation,
@@ -581,6 +582,102 @@ def enabled_tools() -> list[dict[str, Any]]:
     if settings.feedback_webhook_url:
         tools.append(_FEEDBACK_TOOL)
     return tools
+
+
+_OPENROUTER_WEB_SEARCH_ENGINES = frozenset({"exa", "parallel", "perplexity", "firecrawl"})
+
+
+def web_search_requests_from_usage(usage: dict[str, Any] | None) -> int:
+    """Сколько поисков OpenRouter посчитал в ``usage.server_tool_use``."""
+    if not isinstance(usage, dict):
+        return 0
+    server = usage.get("server_tool_use")
+    if not isinstance(server, dict):
+        return 0
+    try:
+        return max(0, int(server.get("web_search_requests") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def web_search_used_today(db: Any, user_id: Any) -> int:
+    """Сумма ``web_search_requests`` в ``usage_logs.detail`` за текущие сутки UTC."""
+    if db is None or user_id is None:
+        return 0
+    start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = db.scalars(
+        select(UsageLog.detail).where(
+            UsageLog.user_id == user_id,
+            UsageLog.created_at >= start,
+            UsageLog.detail.is_not(None),
+        )
+    )
+    total = 0
+    for detail in rows:
+        try:
+            data = json.loads(detail)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        try:
+            total += max(0, int(data.get("web_search_requests") or 0))
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def openrouter_web_search_tool() -> dict[str, Any]:
+    """Серверная рука OpenRouter: поиск исполняет провайдер, не наша петля."""
+    settings = get_settings()
+    engine = settings.openrouter_web_search_engine
+    if engine not in _OPENROUTER_WEB_SEARCH_ENGINES:
+        engine = "exa"
+    return {
+        "type": "openrouter:web_search",
+        "parameters": {
+            "engine": engine,
+            "max_results": settings.openrouter_web_search_max_results,
+            "max_uses": settings.openrouter_web_search_max_uses,
+        },
+    }
+
+
+def attach_openrouter_web_search(
+    payload: dict[str, Any],
+    *,
+    provider: str,
+    user: Any = None,
+    db: Any = None,
+) -> dict[str, Any]:
+    """Добавить ``openrouter:web_search`` только к чату моделей OpenRouter."""
+    settings = get_settings()
+    if provider != PROVIDER_OPENROUTER or not settings.openrouter_web_search_enabled:
+        return payload
+    user_id = getattr(user, "id", None)
+    used = web_search_used_today(db, user_id)
+    if used >= settings.openrouter_web_search_daily_limit:
+        logger.info(
+            "openrouter web_search skipped user_id=%s reason=daily_limit used=%s limit=%s",
+            user_id,
+            used,
+            settings.openrouter_web_search_daily_limit,
+        )
+        return payload
+    tools = list(payload.get("tools") or [])
+    if any(
+        isinstance(tool, dict) and tool.get("type") == "openrouter:web_search" for tool in tools
+    ):
+        return payload
+    tools.append(openrouter_web_search_tool())
+    logger.info(
+        "openrouter web_search attached user_id=%s engine=%s max_uses=%s used_today=%s",
+        user_id,
+        settings.openrouter_web_search_engine,
+        settings.openrouter_web_search_max_uses,
+        used,
+    )
+    return {**payload, "tools": tools}
 
 
 def _merge_streamed_text(current: str, incoming: str) -> str:

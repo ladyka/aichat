@@ -53,6 +53,9 @@ os.environ["FEEDBACK_WEBHOOK_URL"] = ""
 # the exact tool lists asserted in tests/test_tools.py. Tests that exercise
 # them (tests/test_mzg.py) enable a temporary folder via monkeypatch.
 os.environ["MZG_SITES_FOLDER"] = ""
+# OpenRouter web_search would append a server tool to every /api/chat payload
+# and break tests that read t["function"]["name"] for each advertised tool.
+os.environ["OPENROUTER_WEB_SEARCH"] = "0"
 # SYSTEM_PROMPT is also a deployment setting; a local value would change the first
 # message of every payload asserted in tests/test_tools.py. Drop it so the built-in
 # default (app.config.DEFAULT_SYSTEM_PROMPT) applies — it is itself covered in
