@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_user_from_session
@@ -48,6 +48,7 @@ def _conversation_summary(c: Conversation) -> dict[str, Any]:
         "created_at": _iso(c.created_at),
         "updated_at": _iso(c.updated_at),
         "archived_at": _iso(c.archived_at),
+        "pinned_at": _iso(c.pinned_at),
         "skill_ids": conversation_skill_ids(c),
     }
 
@@ -79,6 +80,7 @@ class ConversationCreate(BaseModel):
 class ConversationPatch(BaseModel):
     title: str | None = None
     archived: bool | None = None
+    pinned: bool | None = None
 
 
 class MessageCreate(BaseModel):
@@ -104,16 +106,37 @@ class ConversationSkillsUpdate(BaseModel):
     skill_ids: list[str] = Field(default_factory=list)
 
 
+def _archive_scope(raw: str | None):
+    """None — только живые чаты, True — только архив, 'all' — оба списка."""
+    value = (raw or "").strip().lower()
+    if value == "all":
+        return "all"
+    if value in {"1", "true", "yes"}:
+        return True
+    return None
+
+
 @router.get("/api/conversations")
-def list_conversations(request: Request, db: Session = Depends(get_db)):
+def list_conversations(
+    request: Request,
+    archived: str | None = None,
+    db: Session = Depends(get_db),
+):
     user = _require_user(request, db)
     if isinstance(user, JSONResponse):
         return user
+    scope = _archive_scope(archived)
+    stmt = select(Conversation).where(Conversation.user_id == user.id)
+    if scope is True:
+        stmt = stmt.where(Conversation.archived_at.is_not(None))
+    elif scope != "all":
+        stmt = stmt.where(Conversation.archived_at.is_(None))
     rows = db.scalars(
-        select(Conversation)
-        .where(Conversation.user_id == user.id, Conversation.archived_at.is_(None))
-        .options(selectinload(Conversation.skill_links))
-        .order_by(Conversation.updated_at.desc())
+        stmt.options(selectinload(Conversation.skill_links)).order_by(
+            Conversation.pinned_at.is_(None),
+            Conversation.pinned_at.desc(),
+            Conversation.updated_at.desc(),
+        )
     ).all()
     return {"data": [_conversation_summary(c) for c in rows]}
 
@@ -180,7 +203,27 @@ def patch_conversation(
         conv.archived_at = datetime.now(timezone.utc)
     elif body.archived is False:
         conv.archived_at = None
-    conv.updated_at = datetime.now(timezone.utc)
+    if body.title is not None or body.archived is not None:
+        conv.updated_at = datetime.now(timezone.utc)
+    # onupdate у updated_at срабатывает на любую правку строки. Закрепление
+    # не должно двигать чат среди незакреплённых, поэтому пишем pinned_at
+    # отдельно и оставляем прежнее время.
+    if body.pinned is not None:
+        pin_value = conv.pinned_at
+        if body.pinned is True:
+            pin_value = conv.pinned_at or datetime.now(timezone.utc)
+        else:
+            pin_value = None
+        if pin_value != conv.pinned_at:
+            if body.title is not None or body.archived is not None:
+                conv.pinned_at = pin_value
+            else:
+                db.execute(
+                    update(Conversation)
+                    .where(Conversation.id == conv.id)
+                    .values(pinned_at=pin_value, updated_at=conv.updated_at)
+                )
+                db.expire(conv)
     db.commit()
     db.refresh(conv)
     return _conversation_summary(conv)

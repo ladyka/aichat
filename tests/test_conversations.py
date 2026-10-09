@@ -72,6 +72,58 @@ def test_conversations_crud(client):
     assert client.get(f"/api/conversations/{conv['id']}").status_code == 404
 
 
+def test_pin_stays_on_top_and_archive_can_be_listed(client):
+    _auth(client)
+    older = _create_conversation(client, title="Старый").json()
+    newer = _create_conversation(client, title="Свежий").json()
+    renamed = client.patch(
+        f"/api/conversations/{newer['id']}",
+        json={"title": "Новый"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["updated_at"] != older["updated_at"]
+
+    pinned = client.patch(
+        f"/api/conversations/{older['id']}",
+        json={"pinned": True},
+    )
+    assert pinned.status_code == 200
+    assert pinned.json()["pinned_at"] is not None
+    assert pinned.json()["updated_at"] == older["updated_at"]
+
+    listed = client.get("/api/conversations").json()["data"]
+    assert [row["title"] for row in listed] == ["Старый", "Новый"]
+
+    unpinned = client.patch(
+        f"/api/conversations/{older['id']}",
+        json={"pinned": False},
+    )
+    assert unpinned.json()["pinned_at"] is None
+    assert unpinned.json()["updated_at"] == older["updated_at"]
+    listed = client.get("/api/conversations").json()["data"]
+    assert [row["title"] for row in listed] == ["Новый", "Старый"]
+
+    third = _create_conversation(client, title="Третий").json()
+    client.patch(f"/api/conversations/{newer['id']}", json={"archived": True})
+    client.patch(
+        f"/api/conversations/{older['id']}",
+        json={"archived": True, "pinned": True},
+    )
+
+    active = client.get("/api/conversations").json()["data"]
+    assert [row["id"] for row in active] == [third["id"]]
+    assert client.get("/api/conversations?archived=0").json()["data"] == active
+
+    archived = client.get("/api/conversations?archived=1").json()["data"]
+    assert [row["title"] for row in archived] == ["Старый", "Новый"]
+    assert client.get("/api/conversations?archived=true").json()["data"] == archived
+
+    both = client.get("/api/conversations?archived=all").json()["data"]
+    # Архивация «Нового» обновляет его время, поэтому среди незакреплённых он
+    # выше «Третьего». Закреплённый «Старый» всё равно первый.
+    assert [row["title"] for row in both] == ["Старый", "Новый", "Третий"]
+
+
 def test_append_messages_sets_title(client):
     _auth(client)
     conv = _create_conversation(client).json()

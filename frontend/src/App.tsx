@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { useAui } from "@assistant-ui/react";
+import { useAui, useAuiState } from "@assistant-ui/react";
 import {
   Archive,
+  ArchiveRestore,
   ChevronDown,
   ChevronUp,
   Home,
   Link2,
   PanelLeftClose,
   PanelLeftOpen,
+  Pin,
   Sparkles,
   StickyNote,
   Trash2,
@@ -20,7 +22,7 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { SkillsDialog } from "@/components/SkillsDialog";
 import { Thread } from "@/components/Thread";
 import { ActiveThreadTitle, ThreadList } from "@/components/ThreadList";
-import { getConversation } from "@/lib/api";
+import { getConversation, patchConversation } from "@/lib/api";
 import { useConversationId } from "@/lib/conversation-id";
 import { useTitleSync } from "@/lib/title-sync";
 
@@ -39,10 +41,12 @@ function isMobileViewport(): boolean {
 function ChatHeaderButton({
   label,
   onClick,
+  pressed,
   children,
 }: {
   label: string;
   onClick: () => void;
+  pressed?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -51,6 +55,7 @@ function ChatHeaderButton({
       className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[var(--chat-line)] p-2 text-sm hover:bg-black/5 md:px-2.5 md:py-1.5"
       onClick={onClick}
       aria-label={label}
+      aria-pressed={pressed}
       title={label}
     >
       {children}
@@ -62,6 +67,9 @@ function ChatHeaderButton({
 function ChatLayout() {
   const conversationId = useConversationId();
   const aui = useAui();
+  const threadStatus = useAuiState((s) => s.threadListItem.status);
+  const threadPinned = useAuiState((s) => Boolean(s.threadListItem.custom?.pinned));
+  const threadRemoteId = useAuiState((s) => s.threadListItem.remoteId);
   useTitleSync();
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     try {
@@ -109,9 +117,29 @@ function ChatLayout() {
     Boolean(conversationId) && !noteCollapsed && (noteHasBody || noteForcedOpen);
 
   const runConfirm = () => {
-    if (confirm === "archive") aui.threadListItem.archive();
+    if (confirm === "archive") {
+      void (async () => {
+        await aui.threadListItem.archive();
+        await aui.threads.reload();
+      })();
+    }
     if (confirm === "delete") aui.threadListItem.delete();
     setConfirm(null);
+  };
+
+  const togglePin = () => {
+    if (!threadRemoteId) return;
+    void (async () => {
+      await patchConversation(threadRemoteId, { pinned: !threadPinned });
+      await aui.threads.reload();
+    })();
+  };
+
+  const restoreThread = () => {
+    void (async () => {
+      await aui.threadListItem.unarchive();
+      await aui.threads.reload();
+    })();
   };
 
   useEffect(() => {
@@ -267,11 +295,26 @@ function ChatLayout() {
                 <StickyNote className="h-4 w-4" />
               </ChatHeaderButton>
               <ChatHeaderButton
-                label="Архив"
-                onClick={() => setConfirm("archive")}
+                label={threadPinned ? "Открепить" : "Закрепить"}
+                pressed={threadPinned}
+                onClick={togglePin}
               >
-                <Archive className="h-4 w-4" />
+                <Pin
+                  className={`h-4 w-4 ${threadPinned ? "text-[var(--chat-accent)]" : ""}`}
+                />
               </ChatHeaderButton>
+              {threadStatus === "archived" ? (
+                <ChatHeaderButton label="Вернуть" onClick={restoreThread}>
+                  <ArchiveRestore className="h-4 w-4" />
+                </ChatHeaderButton>
+              ) : (
+                <ChatHeaderButton
+                  label="В архив"
+                  onClick={() => setConfirm("archive")}
+                >
+                  <Archive className="h-4 w-4" />
+                </ChatHeaderButton>
+              )}
               <ChatHeaderButton
                 label="Удалить"
                 onClick={() => setConfirm("delete")}
@@ -338,7 +381,7 @@ function ChatLayout() {
           title={confirm === "archive" ? "Архивировать диалог" : "Удалить диалог"}
           message={
             confirm === "archive"
-              ? "Диалог уйдёт в архив. Его можно восстановить позже."
+              ? "Диалог уйдёт в архив. Список архива открывается кнопкой внизу списка чатов."
               : "Диалог будет удалён без возможности восстановления."
           }
           confirmLabel={confirm === "archive" ? "Архивировать" : "Удалить"}
