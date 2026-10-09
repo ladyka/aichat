@@ -25,6 +25,7 @@ import {
   getConversation,
   listConversations,
   patchConversation,
+  type ConversationSummary,
 } from "@/lib/api";
 import { isResponseInfo, type ResponseInfo } from "@/lib/response-info";
 
@@ -156,6 +157,16 @@ export class AichatHistoryAdapter implements ThreadHistoryAdapter {
   }
 }
 
+export function threadFromSummary(c: ConversationSummary) {
+  return {
+    status: c.archived_at ? ("archived" as const) : ("regular" as const),
+    remoteId: c.id,
+    title: c.title,
+    lastMessageAt: c.updated_at ? new Date(c.updated_at) : undefined,
+    custom: { pinned: Boolean(c.pinned_at) },
+  };
+}
+
 export function useAichatThreadListAdapter(): RemoteThreadListAdapter {
   const unstable_Provider = useCallback<FC<PropsWithChildren>>(
     function Provider({ children }) {
@@ -180,15 +191,8 @@ export function useAichatThreadListAdapter(): RemoteThreadListAdapter {
   return useMemo<RemoteThreadListAdapter>(
     () => ({
       async list() {
-        const rows = await listConversations();
-        return {
-          threads: rows.map((c) => ({
-            status: "regular" as const,
-            remoteId: c.id,
-            title: c.title,
-            lastMessageAt: c.updated_at ? new Date(c.updated_at) : undefined,
-          })),
-        };
+        const rows = await listConversations({ archived: "all" });
+        return { threads: rows.map(threadFromSummary) };
       },
 
       async initialize() {
@@ -217,15 +221,7 @@ export function useAichatThreadListAdapter(): RemoteThreadListAdapter {
       },
 
       async fetch(threadId) {
-        const detail = await getConversation(threadId);
-        return {
-          status: detail.archived_at ? ("archived" as const) : ("regular" as const),
-          remoteId: detail.id,
-          title: detail.title,
-          lastMessageAt: detail.updated_at
-            ? new Date(detail.updated_at)
-            : undefined,
-        };
+        return threadFromSummary(await getConversation(threadId));
       },
 
       unstable_Provider,

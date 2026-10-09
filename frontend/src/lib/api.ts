@@ -4,6 +4,7 @@ export type ConversationSummary = {
   created_at: string | null;
   updated_at: string | null;
   archived_at: string | null;
+  pinned_at?: string | null;
   skill_ids?: string[];
 };
 
@@ -39,8 +40,17 @@ export async function fetchSettings(): Promise<{
   return res.json();
 }
 
-export async function listConversations(): Promise<ConversationSummary[]> {
-  const res = await fetch("/api/conversations", { credentials: "include" });
+export async function listConversations(options?: {
+  archived?: "all" | boolean;
+}): Promise<ConversationSummary[]> {
+  const params = new URLSearchParams();
+  if (options?.archived === "all") params.set("archived", "all");
+  else if (options?.archived === true) params.set("archived", "1");
+  const query = params.toString();
+  const res = await fetch(
+    query ? `/api/conversations?${query}` : "/api/conversations",
+    { credentials: "include" },
+  );
   if (!res.ok) throw new Error(await parseError(res));
   const data = await res.json();
   return Array.isArray(data?.data) ? data.data : [];
@@ -71,7 +81,7 @@ export async function getConversation(
 
 export async function patchConversation(
   id: string,
-  body: { title?: string; archived?: boolean },
+  body: { title?: string; archived?: boolean; pinned?: boolean },
 ): Promise<ConversationSummary> {
   const res = await fetch(`/api/conversations/${id}`, {
     method: "PATCH",

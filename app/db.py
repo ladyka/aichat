@@ -3,11 +3,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -100,6 +100,7 @@ class Conversation(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pinned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # True после ручного переименования: авто-тема больше не перезаписывает title.
     title_locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
