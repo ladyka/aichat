@@ -124,3 +124,7 @@ python3 api_check.py --host http://127.0.0.1:8080 --token aichat_…
 5. В ответе пользователю кратко укажи, что проверено.
 
 Автотесты: pytest (`make test-coverage`), Vitest во `frontend/src/tests/` (`cd frontend && npm run test`), интеграционные скрипты (`tests/integration_weather.py`, `tests/integration_s3.py`). Обе пачки гоняет `.githooks/pre-commit` (ставится `make hooks`) и блокирует коммит при падении. Юнит-тесты не должны зависеть от локального `.env`: нужные переменные фиксирует `tests/conftest.py` до импорта приложения (секреты S3 включали бы `generate_image`, `SYSTEM_PROMPT` менял бы первый message payload'а).
+
+## Cursor Cloud specific instructions
+
+После загрузки агента приложение уже слушает `http://127.0.0.1:8080/` (хост `0.0.0.0`, порт `8080`). Повторный запуск не нужен, пока процесс жив. База — SQLite (`aichat.db`): MySQL из `docker compose` не поднимается, пока в `.env` пустой `MYSQL_PASSWORD`. Образ приносит Node.js 22 раньше в `PATH`, чем `/usr/local/bin`; среда ставит Node.js 24 так, чтобы `node` и `npm` были 24. Живой ответ модели требует секрет `OPENROUTER_API_KEY`. Без него регистрация, чат, заметка и `/settings` работают, а `/v1/models` пустой и completion отвечает, что провайдер выключен. Юнит-тесты ключ не используют.
