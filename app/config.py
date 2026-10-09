@@ -36,6 +36,14 @@ def _flag(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _bounded_int(value: str | None, default: int, lo: int, hi: int) -> int:
+    try:
+        parsed = int(value if value not in (None, "") else default)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(lo, min(hi, parsed))
+
+
 def compose_s3_access_key(tenant_id: str, key_id: str) -> str:
     """Build Cloud.ru SigV4 access key ``tenant_id:key_id`` without double-prefixing."""
     key = (key_id or "").strip()
@@ -144,6 +152,23 @@ class Settings:
         )
         self.image_generation_daily_limit = int(_env("IMAGE_GENERATION_DAILY_LIMIT", "5") or "5")
 
+        # Веб-поиск OpenRouter (`openrouter:web_search`) в /api/chat. Только модели
+        # OpenRouter: e7/ol эту руку не получают. Движок закрепляем (не auto/native).
+        self.openrouter_web_search = _flag(_env("OPENROUTER_WEB_SEARCH", "1"), default=True)
+        engine = (_env("OPENROUTER_WEB_SEARCH_ENGINE", "exa") or "exa").strip().lower()
+        if engine not in {"exa", "parallel", "perplexity", "firecrawl"}:
+            engine = "exa"
+        self.openrouter_web_search_engine = engine
+        self.openrouter_web_search_max_results = _bounded_int(
+            _env("OPENROUTER_WEB_SEARCH_MAX_RESULTS", "5"), 5, 1, 25
+        )
+        self.openrouter_web_search_max_uses = _bounded_int(
+            _env("OPENROUTER_WEB_SEARCH_MAX_USES", "3"), 3, 1, 30
+        )
+        self.openrouter_web_search_daily_limit = _bounded_int(
+            _env("OPENROUTER_WEB_SEARCH_DAILY_LIMIT", "20"), 20, 0, 1000
+        )
+
         # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
         # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com
         self.public_base_url = (_env("PUBLIC_BASE_URL", "") or "").rstrip("/")
@@ -242,6 +267,15 @@ class Settings:
     @property
     def image_generation_enabled(self) -> bool:
         return bool(self.openrouter_api_key and self.s3_enabled)
+
+    @property
+    def openrouter_web_search_enabled(self) -> bool:
+        """Поиск OpenRouter: ключ есть, флаг не снят, суточный лимит не ноль."""
+        return bool(
+            self.openrouter_api_key
+            and self.openrouter_web_search
+            and self.openrouter_web_search_daily_limit > 0
+        )
 
     @property
     def google_redirect_uri(self) -> str:

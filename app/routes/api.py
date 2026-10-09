@@ -33,10 +33,12 @@ from app.models_catalog import (
 )
 from app.skills import inject_conversation_skills
 from app.tools import (
+    attach_openrouter_web_search,
     call_tool,
     enabled_tools,
     extract_tool_calls,
     tool_progress_line,
+    web_search_requests_from_usage,
 )
 
 router = APIRouter()
@@ -140,6 +142,8 @@ def _stream_completions(route: ModelRoute, payload: dict[str, Any]) -> AsyncIter
 def _log_usage(db: Session, user: User, model: str, source: str, usage: dict | None) -> None:
     if not usage:
         return
+    searches = web_search_requests_from_usage(usage)
+    detail = json.dumps({"web_search_requests": searches}, ensure_ascii=False) if searches else None
     db.add(
         UsageLog(
             user_id=user.id,
@@ -147,9 +151,17 @@ def _log_usage(db: Session, user: User, model: str, source: str, usage: dict | N
             prompt_tokens=int(usage.get("prompt_tokens") or 0),
             completion_tokens=int(usage.get("completion_tokens") or 0),
             source=source,
+            detail=detail,
         )
     )
     db.commit()
+    if searches:
+        logger.info(
+            "openrouter web_search billed user_id=%s requests=%s source=%s",
+            user.id,
+            searches,
+            source,
+        )
 
 
 def _api_usage_exceeded(db: Session, token: ApiToken) -> JSONResponse | None:
@@ -449,12 +461,12 @@ async def _stream_tool_loop_body(
             elif _sse_has_content(prefix):
                 classified = "text"
         if classified is None:
-            async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
+            async for chunk in _forward_final_stream(prefix, stream, route, db, user, source):
                 yield chunk
             return
         if classified == "text":
             # Plain answer: forward the buffered prefix, stream the rest live.
-            async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
+            async for chunk in _forward_final_stream(prefix, stream, route, db, user, source):
                 yield chunk
             return
 
@@ -560,15 +572,49 @@ async def _prefix_then(prefix: bytes, rest: AsyncIterator[bytes]) -> AsyncIterat
         yield chunk
 
 
-async def _rewrite_chunks(chunks: AsyncIterator[bytes], route: ModelRoute) -> AsyncIterator[bytes]:
+def _sse_usage(raw: bytes) -> dict[str, Any] | None:
+    """Последний объект usage из SSE (OpenRouter отдаёт его в финальном кадре)."""
+    found: dict[str, Any] | None = None
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("usage"), dict):
+            found = obj["usage"]
+    return found
+
+
+async def _forward_final_stream(
+    prefix: bytes,
+    rest: AsyncIterator[bytes],
+    route: ModelRoute,
+    db: Session,
+    user: User,
+    source: str,
+) -> AsyncIterator[bytes]:
+    """Прокинуть финальный текст и записать поиски OpenRouter из usage потока."""
+    collected = bytearray()
     buffer = b""
-    async for chunk in chunks:
+    async for chunk in _prefix_then(prefix, rest):
         buffer += chunk
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
+            collected.extend(line)
+            collected.extend(b"\n")
             yield _rewrite_sse_line(line, route) + b"\n"
     if buffer:
+        collected.extend(buffer)
         yield _rewrite_sse_line(buffer, route)
+    usage = _sse_usage(bytes(collected))
+    if web_search_requests_from_usage(usage):
+        _log_usage(db, user, route.public_id, source, usage)
 
 
 def _sse_has_content(raw: bytes) -> bool:
@@ -696,6 +742,8 @@ async def _proxy_inner(
         known_location = _body_location(body)
 
     route, payload = _payload_from_body(body)
+    if source == "chat":
+        payload = attach_openrouter_web_search(payload, provider=route.provider, user=user, db=db)
 
     logger.info(
         "completions user_id=%s source=%s aichat_model=%s provider=%s upstream_model=%s",
