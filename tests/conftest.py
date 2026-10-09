@@ -53,6 +53,12 @@ os.environ["FEEDBACK_WEBHOOK_URL"] = ""
 # the exact tool lists asserted in tests/test_tools.py. Tests that exercise
 # them (tests/test_mzg.py) enable a temporary folder via monkeypatch.
 os.environ["MZG_SITES_FOLDER"] = ""
+# Ключи поиска из локального .env включили бы web_search в точные списки рук.
+os.environ["BRAVE_SEARCH_API_KEY"] = ""
+os.environ["YANDEX_SEARCH_API_KEY"] = ""
+os.environ["YANDEX_SEARCH_FOLDER_ID"] = ""
+os.environ["WEB_SEARCH_DAILY_LIMIT"] = ""
+os.environ["WEB_SEARCH_RESULT_COUNT"] = ""
 # SYSTEM_PROMPT is also a deployment setting; a local value would change the first
 # message of every payload asserted in tests/test_tools.py. Drop it so the built-in
 # default (app.config.DEFAULT_SYSTEM_PROMPT) applies — it is itself covered in

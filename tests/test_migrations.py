@@ -32,6 +32,7 @@ EXPECTED_TABLES = {
     "conversation_skills",
     "skill_shares",
     "user_sites",
+    "web_searches",
     "alembic_version",
 }
 

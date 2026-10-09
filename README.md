@@ -14,6 +14,7 @@
 - `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, модели e7 как `e7/<имя>` и облачные модели ollama.com как `ol/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
+- Веб-поиск в чате (`web_search`): Brave Search API и Yandex Search API v2. Рука появляется, если задан ключ хотя бы одной службы; в ответе — ссылки. Суточный лимит `WEB_SEARCH_DAILY_LIMIT`
 - Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
@@ -144,6 +145,9 @@ cd frontend && npm run dev   # :5173
 | `MAX_TOKENS_PER_USER` | Максимум активных API-токенов на пользователя (по умолчанию `10`) |
 | `SHARE_TTL_DAYS` | Срок действия ссылки на общий чат `/s/<key>` (по умолчанию `30`) |
 | `OPENWEATHER_API_KEY` | Ключ OpenWeatherMap: включает инструменты погоды `get_weather` и `get_user_location` в `/api/chat`. Пусто — инструменты отключены |
+| `BRAVE_SEARCH_API_KEY` | Ключ Brave Web Search (`X-Subscription-Token`). Включает `web_search` для Brave. Пусто — Brave выключен |
+| `YANDEX_SEARCH_API_KEY` / `YANDEX_SEARCH_FOLDER_ID` | Yandex Search API v2: оба поля включают поиск Яндекса (`Authorization: Api-Key` и `folderId`, `POST https://searchapi.api.cloud.yandex.net/v2/web/search`) |
+| `WEB_SEARCH_DAILY_LIMIT` | Вызовов `web_search` на пользователя в сутки UTC (по умолчанию `20`) |
 | `PZZ_ENABLED` | Инструменты pzz.by в `/api/chat` (`pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order`). По умолчанию включены (`1`) |
 | `PZZ_ORDERS_ENABLED` | Разрешить реальную отправку заказа на pzz.by (`confirm=true`). `0` — только черновик и ссылка на сайт |
 | `FEEDBACK_WEBHOOK_URL` | Incoming Webhook Slack (или Discord / любой POST JSON с полем `text`): включает `send_feedback` в `/api/chat`. Пусто — инструмент выключен |
