@@ -19,7 +19,7 @@
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
 - Инструмент `download_file` в чате: скачивает страницы/текстовые файлы по URL (до 2 МБ, только http/https, с защитой от SSRF — недоступны адреса локальной сети), кеширует в `data/customers/<hash(user_id)>/`
 - Деплой сайта из чата (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`): домен `<имя>.mzg.by`, содержимое — заметка чата, публикуется как `<домен>.md` в `MZG_SITES_FOLDER`. Нужен `MZG_SITES_FOLDER`; без него инструментов нет
-- Шаринг чатов по ссылке `/s/<key>`: только просмотр, срок действия, отзыв и лог доступов (IP + время)
+- Шаринг чатов по ссылке `/s/<key>`: только просмотр, ответы тем же markdown, что в чате, срок действия, отзыв и лог доступов (IP + время)
 - Skills: свои markdown-навыки (приватные по умолчанию), публикация в каталог `/catalog`, копия чужого с `parent_id`, дефолты в `/settings`, набор чата в панели «Навыки»
 
 ## Quick Start
@@ -223,7 +223,7 @@ Redirect URI (прописать в кабинете 1:1):
 | `GET` | `/api/conversations/{id}/note/download` | cookie-сессия (файл `.md`) |
 | `GET/POST` | `/api/conversations/{id}/share` | cookie-сессия |
 | `POST` | `/api/conversations/{id}/share/revoke` | cookie-сессия |
-| `GET` | `/s/{key}` | нет (публичная страница чтения; Open Graph для превью в мессенджерах; заходы пишутся в `share_accesses` с `visitor_kind`: human / crawler / bot) |
+| `GET` | `/s/{key}` | нет (публичная страница чтения; ответы рисует тот же markdown, что чат; Open Graph для превью в мессенджерах; заходы пишутся в `share_accesses` с `visitor_kind`: human / crawler / bot) |
 
 Проверка токена против хоста:
 

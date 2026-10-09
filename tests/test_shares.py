@@ -98,12 +98,55 @@ def test_share_lifecycle(client, db):
     assert new_key != key
 
 
+def test_share_page_keeps_markdown_for_the_chat_renderer(client):
+    """Ответ не превращается в HTML на сервере: его рисует тот же markdown, что и чат."""
+    _auth(client)
+    conv = _create_conversation(client).json()
+    client.post(
+        f"/api/conversations/{conv['id']}/messages",
+        json={
+            "messages": [
+                {"role": "user", "content": "Смотри <b>это</b>"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "| Пицца | Цена |\n"
+                        "| --- | --- |\n"
+                        "| Пепперони | 28,9 |\n\n"
+                        "**жирный**\n\n"
+                        "<script>alert(1)</script>"
+                    ),
+                },
+            ]
+        },
+    )
+    key = client.post(f"/api/conversations/{conv['id']}/share").json()["key"]
+
+    page = client.get(f"/s/{key}")
+
+    assert page.status_code == 200
+    assert 'class="share-md"' in page.text
+    assert 'class="share-text"' in page.text
+    assert "| Пицца | Цена |" in page.text
+    assert "**жирный**" in page.text
+    assert "<table>" not in page.text
+    assert "<strong>" not in page.text
+    assert "<script>alert" not in page.text
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page.text
+    assert "<b>это</b>" not in page.text
+    assert "Смотри" in page.text
+    assert 'href="/chat-ui/assets/markdown.css"' in page.text
+    assert 'src="/chat-ui/assets/share.js"' in page.text
+
+
 def test_share_not_found(client):
     page = client.get("/s/does-not-exist")
     assert page.status_code == 404
     assert "Первый вопрос" not in page.text
     assert 'content="noindex"' in page.text
     assert "отозвана, истекла или не существует" in page.text
+    assert "share.js" not in page.text
+    assert "markdown.css" not in page.text
 
 
 def test_share_access_classifies_crawlers_and_bots(client, db):
