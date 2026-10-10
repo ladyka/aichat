@@ -67,3 +67,10 @@ nav:
     - 999. Бэклог:
       - Как читать бэклог: product/v999.backlog/index.md
       - Видение (Беларусь): product/v999.backlog/vision-belarus.md
+  - Промо:
+    - Сценарии роликов: promo/index.md
+    - Вечер после работы: promo/evening.md
+    - Картинка к дню рождения: promo/image-card.md
+    - Свой маленький сайт: promo/mzg-site.md
+    - Навык вместо повторения: promo/skills.md
+    - На телефоне как приложение: promo/pwa.md
