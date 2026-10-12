@@ -1,0 +1,28 @@
+# Дополнительные OpenAI-совместимые провайдеры.
+# Скопируйте в ai-providers.yaml и заполните. Файл ai-providers.yaml в git не коммитится.
+#
+# Публичные id моделей: <id>/<upstream-model>, например groq/llama-3.3-70b-versatile.
+# Ключ лучше задавать через ${ENV_VAR}, а не литералом в файле.
+#
+# Модели:
+#   - список models — вручную (запрос к API не делается);
+#   - иначе — GET models_url (по умолчанию {base_url}/models).
+
+providers:
+  # Пример: автозагрузка списка моделей
+  # - id: groq
+  #   base_url: https://api.groq.com/openai/v1
+  #   api_key: ${GROQ_API_KEY}
+  #   # models_url: https://api.groq.com/openai/v1/models
+  #   timeout: 120
+  #   enabled: true
+
+  # Пример: модели заданы вручную
+  # - id: local
+  #   base_url: http://127.0.0.1:8000/v1
+  #   api_key: ${LOCAL_API_KEY}
+  #   models:
+  #     - my-model-a
+  #     - my-model-b
+  #   timeout: 300
+  #   enabled: true

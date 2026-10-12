@@ -9,8 +9,14 @@ from typing import Any
 import httpx2 as httpx
 from fastapi import HTTPException
 
+from app.ai_providers import (
+    get_yaml_providers,
+    match_yaml_provider,
+    to_yaml_public_id,
+    to_yaml_upstream_id,
+)
 from app.config import get_settings
-from app.model_providers import e7by, ol
+from app.model_providers import e7by, ol, openai_compat
 from app.site_settings import (
     get_effective_allowed_models,
     get_effective_default_model,
@@ -170,6 +176,15 @@ def _default_route() -> ModelRoute | None:
             upstream_id=upstream,
         )
 
+    matched = match_yaml_provider(target)
+    if matched is not None:
+        provider, upstream = matched
+        return ModelRoute(
+            public_id=PUBLIC_DEFAULT_ID,
+            provider=provider.id,
+            upstream_id=upstream,
+        )
+
     if not settings.openrouter_enabled:
         logger.warning(
             "DEFAULT_MODEL=%r требует OpenRouter, но OPENROUTER_API_KEY не задан",
@@ -214,8 +229,11 @@ def _build_models_response(
     openrouter_raw: list[dict[str, Any]],
     e7_raw: list[dict[str, Any]] | None = None,
     ol_raw: list[dict[str, Any]] | None = None,
+    yaml_raw: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    payload, _routes = _build_models_catalog(openrouter_raw, e7_raw or [], ol_raw or [])
+    payload, _routes = _build_models_catalog(
+        openrouter_raw, e7_raw or [], ol_raw or [], yaml_raw or {}
+    )
     return payload
 
 
@@ -223,6 +241,7 @@ def _build_models_catalog(
     openrouter_raw: list[dict[str, Any]],
     e7_raw: list[dict[str, Any]],
     ol_raw: list[dict[str, Any]],
+    yaml_raw: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, ModelRoute]]:
     items: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -281,6 +300,22 @@ def _build_models_catalog(
             upstream_id=to_ol_upstream_id(public_id),
         )
 
+    for provider_id, raw_models in (yaml_raw or {}).items():
+        for raw in raw_models:
+            upstream_id = str(raw.get("id") or raw.get("name") or "")
+            public_id = to_yaml_public_id(provider_id, upstream_id)
+            if not public_id or public_id in seen:
+                continue
+            items.append(
+                _openai_model_item(public_id, created=_created_int(raw), owned_by=provider_id)
+            )
+            seen.add(public_id)
+            routes[public_id] = ModelRoute(
+                public_id=public_id,
+                provider=provider_id,
+                upstream_id=to_yaml_upstream_id(provider_id, public_id),
+            )
+
     return {"object": "list", "data": items}, routes
 
 
@@ -305,10 +340,29 @@ async def _empty_models() -> list[dict[str, Any]]:
     return []
 
 
+async def _fetch_yaml_provider_models() -> dict[str, list[dict[str, Any]]]:
+    providers = get_yaml_providers()
+    if not providers:
+        return {}
+    tasks = {
+        provider.id: asyncio.create_task(openai_compat.list_models(provider))
+        for provider in providers
+    }
+    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    out: dict[str, list[dict[str, Any]]] = {}
+    for provider_id, raw in zip(tasks.keys(), results, strict=True):
+        if isinstance(raw, BaseException):
+            logger.warning("yaml provider %s models unavailable: %s", provider_id, raw)
+            continue
+        out[provider_id] = raw
+    return out
+
+
 async def _fetch_provider_models() -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
+    dict[str, list[dict[str, Any]]],
 ]:
     settings = get_settings()
     openrouter_task = (
@@ -316,15 +370,24 @@ async def _fetch_provider_models() -> tuple[
     )
     e7_task = asyncio.create_task(e7by.list_models()) if settings.e7_by_enabled else None
     ol_task = asyncio.create_task(ol.list_models()) if settings.ol_enabled else None
-    openrouter_raw, e7_raw, ol_raw = await asyncio.gather(
+    yaml_task = asyncio.create_task(_fetch_yaml_provider_models())
+    openrouter_raw, e7_raw, ol_raw, yaml_raw = await asyncio.gather(
         openrouter_task or _empty_models(),
         e7_task or _empty_models(),
         ol_task or _empty_models(),
+        yaml_task,
         return_exceptions=True,
     )
 
+    if isinstance(yaml_raw, BaseException):
+        logger.warning("yaml providers unavailable: %s", yaml_raw)
+        yaml_raw = {}
+
     if isinstance(openrouter_raw, BaseException):
-        has_fallback = any(not isinstance(raw, BaseException) and raw for raw in (e7_raw, ol_raw))
+        has_fallback = any(
+            (not isinstance(raw, BaseException) and raw)
+            for raw in (e7_raw, ol_raw, yaml_raw if isinstance(yaml_raw, dict) else None)
+        )
         if not has_fallback:
             if isinstance(openrouter_raw, HTTPException):
                 raise openrouter_raw
@@ -343,7 +406,7 @@ async def _fetch_provider_models() -> tuple[
         logger.warning("ol models unavailable: %s", ol_raw)
         ol_raw = []
 
-    return openrouter_raw, e7_raw, ol_raw
+    return openrouter_raw, e7_raw, ol_raw, yaml_raw
 
 
 async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
@@ -358,8 +421,8 @@ async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
         if not force_refresh and _cache_payload is not None and now < _cache_expires_at:
             return _cache_payload
 
-        openrouter_raw, e7_raw, ol_raw = await _fetch_provider_models()
-        payload, routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw)
+        openrouter_raw, e7_raw, ol_raw, yaml_raw = await _fetch_provider_models()
+        payload, routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw, yaml_raw)
         payload, routes = _filter_by_allowlist(payload, routes)
         settings = get_settings()
         _cache_payload = payload
@@ -372,8 +435,8 @@ async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
 async def get_models_list_unfiltered(*, force_refresh: bool = False) -> dict[str, Any]:
     """Полный каталог без белого списка — для админки."""
     # Не трогаем публичный кеш: собираем отдельно.
-    openrouter_raw, e7_raw, ol_raw = await _fetch_provider_models()
-    payload, _routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw)
+    openrouter_raw, e7_raw, ol_raw, yaml_raw = await _fetch_provider_models()
+    payload, _routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw, yaml_raw)
     if force_refresh:
         invalidate_models_cache()
     return payload
@@ -444,6 +507,20 @@ def resolve_model(public_id: str | None, *, enforce_allowlist: bool = True) -> M
         return ModelRoute(
             public_id=requested,
             provider=PROVIDER_OL,
+            upstream_id=upstream,
+        )
+
+    matched = match_yaml_provider(requested)
+    if matched is not None:
+        provider, upstream = matched
+        if enforce_allowlist and _cache_public_ids and requested not in _cache_public_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{requested}' is not available",
+            )
+        return ModelRoute(
+            public_id=requested,
+            provider=provider.id,
             upstream_id=upstream,
         )
 

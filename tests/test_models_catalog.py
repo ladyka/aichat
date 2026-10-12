@@ -122,11 +122,12 @@ def test_fetch_provider_models_skips_openrouter_without_key(monkeypatch):
     monkeypatch.setattr(mc, "_fetch_openrouter_models", boom)
     monkeypatch.setattr(mc.ol, "list_models", empty)
 
-    openrouter_raw, e7_raw, ol_raw = asyncio.run(mc._fetch_provider_models())
+    openrouter_raw, e7_raw, ol_raw, yaml_raw = asyncio.run(mc._fetch_provider_models())
     assert called["or"] is False
     assert openrouter_raw == []
     assert e7_raw == []
     assert ol_raw == []
+    assert yaml_raw == {}
 
 
 def test_default_route_follows_default_model(monkeypatch):

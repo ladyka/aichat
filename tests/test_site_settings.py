@@ -110,7 +110,7 @@ def test_admin_page_requires_admin(client, monkeypatch):
     assert client.get("/admin", follow_redirects=False).status_code == 303
 
     async def fake_providers():
-        return ([{"id": "openrouter/auto:free", "created": 1}], [], [])
+        return ([{"id": "openrouter/auto:free", "created": 1}], [], [], {})
 
     monkeypatch.setattr(mc, "_fetch_provider_models", fake_providers)
     monkeypatch.setattr(get_settings(), "admin_emails", frozenset({address.lower()}))
@@ -135,6 +135,7 @@ def test_admin_save_allowlist(client, monkeypatch):
             ],
             [],
             [],
+            {},
         )
 
     monkeypatch.setattr(mc, "_fetch_provider_models", fake_providers)

@@ -25,6 +25,7 @@ PyJWT[crypto]>=2.8.0             # проверка id_token OAuth2/OIDC (Google
 
 # --- Конфиг ---
 python-dotenv>=1.0.1             # загрузка секретов из .env (app/config.py, server.py)
+PyYAML>=6.0.0                    # ai-providers.yaml: доп. OpenAI-совместимые провайдеры
 
 # --- Наблюдаемость ---
 arize-otel>=0.13.0               # Arize/Phoenix: OTLP-экспорт трассировок (app/telemetry.py)

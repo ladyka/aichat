@@ -108,6 +108,8 @@ class Settings:
         self.allowed_models = self._parse_model_list(_env("ALLOWED_MODELS", "") or "")
         # Email администраторов (через запятую). Пусто — /admin никому не открыт.
         self.admin_emails = self._parse_email_list(_env("ADMIN_EMAILS", "") or "")
+        # Доп. OpenAI-совместимые провайдеры (см. ai-providers.example.yaml).
+        self.ai_providers_file = (_env("AI_PROVIDERS_FILE", "ai-providers.yaml") or "").strip()
         # Системный промпт на все диалоги (/api/chat и /v1/chat/completions).
         # Не задан — берётся DEFAULT_SYSTEM_PROMPT; задан пустым — отключён.
         self.system_prompt = (
