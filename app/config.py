@@ -103,6 +103,11 @@ class Settings:
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()
         self.default_model = _env("DEFAULT_MODEL", "default")
+        # Белый список публичных id моделей. Пусто — без ограничения (все free/e7/ol).
+        # Админка может переопределить значение в БД; см. app/site_settings.py.
+        self.allowed_models = self._parse_model_list(_env("ALLOWED_MODELS", "") or "")
+        # Email администраторов (через запятую). Пусто — /admin никому не открыт.
+        self.admin_emails = self._parse_email_list(_env("ADMIN_EMAILS", "") or "")
         # Системный промпт на все диалоги (/api/chat и /v1/chat/completions).
         # Не задан — берётся DEFAULT_SYSTEM_PROMPT; задан пустым — отключён.
         self.system_prompt = (
@@ -218,6 +223,16 @@ class Settings:
         if value.endswith("/v1"):
             return value
         return f"{value}/v1"
+
+    @staticmethod
+    def _parse_model_list(raw: str) -> frozenset[str] | None:
+        """Comma-separated public model ids. Empty → unrestricted (None)."""
+        items = [part.strip() for part in raw.split(",") if part.strip()]
+        return frozenset(items) if items else None
+
+    @staticmethod
+    def _parse_email_list(raw: str) -> frozenset[str]:
+        return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
 
     @property
     def mzg_sites_enabled(self) -> bool:

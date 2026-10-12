@@ -11,6 +11,11 @@ from fastapi import HTTPException
 
 from app.config import get_settings
 from app.model_providers import e7by, ol
+from app.site_settings import (
+    get_effective_allowed_models,
+    get_effective_default_model,
+    model_is_allowed,
+)
 
 logger = logging.getLogger("aichat.models")
 
@@ -120,14 +125,15 @@ def _created_int(raw: dict[str, Any]) -> int | None:
 
 
 def _default_route() -> ModelRoute | None:
-    """Маршрут публичного id `default` по `DEFAULT_MODEL`.
+    """Маршрут публичного id `default` по эффективному дефолту.
 
-    `DEFAULT_MODEL=default` (или пусто) → openrouter/free, только если OpenRouter
-    включён. Иначе `DEFAULT_MODEL` может быть конкретным публичным id
-    (`ol/…`, `e7/…`, модель OpenRouter) — тогда `default` указывает на него.
+    Эффективное значение: переопределение из админки, иначе `DEFAULT_MODEL`.
+    `default` (или пусто) → openrouter/free, только если OpenRouter включён.
+    Иначе цель может быть конкретным публичным id (`ol/…`, `e7/…`, модель
+    OpenRouter) — тогда `default` указывает на него.
     """
     settings = get_settings()
-    target = (settings.default_model or "").strip() or PUBLIC_DEFAULT_ID
+    target = (get_effective_default_model() or "").strip() or PUBLIC_DEFAULT_ID
 
     if target in (PUBLIC_DEFAULT_ID, UPSTREAM_DEFAULT_ID):
         if not settings.openrouter_enabled:
@@ -175,6 +181,33 @@ def _default_route() -> ModelRoute | None:
         provider=PROVIDER_OPENROUTER,
         upstream_id=to_upstream_id(target),
     )
+
+
+def _filter_by_allowlist(
+    payload: dict[str, Any],
+    routes: dict[str, ModelRoute],
+) -> tuple[dict[str, Any], dict[str, ModelRoute]]:
+    allowed = get_effective_allowed_models()
+    if allowed is None:
+        return payload, routes
+    items = []
+    filtered_routes: dict[str, ModelRoute] = {}
+    for item in payload.get("data") or []:
+        model_id = str(item.get("id") or "")
+        if model_id == PUBLIC_DEFAULT_ID or model_id in allowed:
+            items.append(item)
+            if model_id in routes:
+                filtered_routes[model_id] = routes[model_id]
+    return {"object": "list", "data": items}, filtered_routes
+
+
+def invalidate_models_cache() -> None:
+    """Сбросить кеш `/v1/models` (после смены настроек в админке)."""
+    global _cache_payload, _cache_expires_at, _cache_public_ids, _cache_routes
+    _cache_payload = None
+    _cache_expires_at = 0.0
+    _cache_public_ids = set()
+    _cache_routes = {}
 
 
 def _build_models_response(
@@ -327,6 +360,7 @@ async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
 
         openrouter_raw, e7_raw, ol_raw = await _fetch_provider_models()
         payload, routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw)
+        payload, routes = _filter_by_allowlist(payload, routes)
         settings = get_settings()
         _cache_payload = payload
         _cache_expires_at = now + settings.models_cache_ttl
@@ -335,12 +369,28 @@ async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
         return payload
 
 
-def resolve_model(public_id: str | None) -> ModelRoute:
+async def get_models_list_unfiltered(*, force_refresh: bool = False) -> dict[str, Any]:
+    """Полный каталог без белого списка — для админки."""
+    # Не трогаем публичный кеш: собираем отдельно.
+    openrouter_raw, e7_raw, ol_raw = await _fetch_provider_models()
+    payload, _routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw)
+    if force_refresh:
+        invalidate_models_cache()
+    return payload
+
+
+def resolve_model(public_id: str | None, *, enforce_allowlist: bool = True) -> ModelRoute:
     settings = get_settings()
-    requested = (public_id or "").strip() or settings.default_model
+    requested = (public_id or "").strip() or get_effective_default_model()
 
     if requested in _cache_routes:
-        return _cache_routes[requested]
+        route = _cache_routes[requested]
+        if enforce_allowlist and not model_is_allowed(route.public_id):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Model '{requested}' is not available",
+            )
+        return route
 
     if requested in (PUBLIC_DEFAULT_ID, UPSTREAM_DEFAULT_ID):
         route = _default_route()
@@ -354,6 +404,12 @@ def resolve_model(public_id: str | None) -> ModelRoute:
             )
         return route
 
+    if enforce_allowlist and not model_is_allowed(requested):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{requested}' is not available",
+        )
+
     if requested.startswith(E7_BY_PREFIX):
         if not settings.e7_by_enabled:
             raise HTTPException(status_code=503, detail="E7_BY_BASE_URL is not configured")
@@ -363,7 +419,7 @@ def resolve_model(public_id: str | None) -> ModelRoute:
                 status_code=400,
                 detail=f"Model '{requested}' is not available",
             )
-        if _cache_public_ids and requested not in _cache_public_ids:
+        if enforce_allowlist and _cache_public_ids and requested not in _cache_public_ids:
             raise HTTPException(
                 status_code=400,
                 detail=f"Model '{requested}' is not available",
@@ -396,7 +452,12 @@ def resolve_model(public_id: str | None) -> ModelRoute:
 
     upstream = to_upstream_id(requested)
     public = to_public_id(upstream)
-    if _cache_public_ids and public not in _cache_public_ids and requested not in _cache_public_ids:
+    if (
+        enforce_allowlist
+        and _cache_public_ids
+        and public not in _cache_public_ids
+        and requested not in _cache_public_ids
+    ):
         raise HTTPException(
             status_code=400,
             detail=f"Model '{requested}' is not available",
@@ -408,5 +469,5 @@ def resolve_model(public_id: str | None) -> ModelRoute:
     )
 
 
-def resolve_upstream_model(public_id: str | None) -> str:
-    return resolve_model(public_id).upstream_id
+def resolve_upstream_model(public_id: str | None, *, enforce_allowlist: bool = True) -> str:
+    return resolve_model(public_id, enforce_allowlist=enforce_allowlist).upstream_id

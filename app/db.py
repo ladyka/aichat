@@ -463,6 +463,24 @@ class UsageLog(Base):
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class AppSettings(Base):
+    """Singleton row (id=1): overrides for default and allowed models.
+
+    ``None`` in a column means «брать из переменных окружения».
+    """
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    default_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    allowed_models: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 _settings = get_settings()
 connect_args = {"check_same_thread": False} if _settings.database_url.startswith("sqlite") else {}
 engine = create_engine(_settings.database_url, pool_pre_ping=True, connect_args=connect_args)

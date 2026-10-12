@@ -31,6 +31,7 @@ from app.models_catalog import (
     to_ol_public_id,
     to_public_id,
 )
+from app.site_settings import get_effective_default_model
 from app.skills import inject_conversation_skills
 from app.tools import (
     call_tool,
@@ -55,8 +56,7 @@ def _trace_user(user: User, session_id: str):
 
 
 def _normalize_public_model(model: str | None) -> str:
-    settings = get_settings()
-    value = (model or "").strip() or settings.default_model
+    value = (model or "").strip() or get_effective_default_model()
     if value in (UPSTREAM_DEFAULT_ID, PUBLIC_DEFAULT_ID):
         return PUBLIC_DEFAULT_ID
     return value

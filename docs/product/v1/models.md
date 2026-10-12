@@ -12,10 +12,11 @@
 - Список моделей кешируется на `MODELS_CACHE_TTL` и отдаётся наружу через `GET /v1/models` и `GET /api/models`.
 - Провайдеры: OpenRouter (серверный ключ), e7 на Ollama (`E7_BY_BASE_URL`), облачный ollama.com (`OLLAMA_API_KEY`). Выключенный провайдер просто не появляется в списке — молчащей модели не бывает.
 - Тема диалога считается отдельной моделью (`TITLE_MODEL`).
+- Дефолт алиаса `default` и белый список моделей: сначала переменные окружения (`DEFAULT_MODEL`, `ALLOWED_MODELS`), при необходимости — переопределение в админке `/admin` (доступ по `ADMIN_EMAILS`). Пустой белый список в окружении значит «без ограничения».
 
 ## Где в коде
 
-`app/models_catalog.py` — кеш, маппинг публичных имён в upstream, маршрутизация по провайдерам; `app/model_providers/openrouter.py`, `app/model_providers/e7by.py`, `app/model_providers/ol.py` — HTTP-прокси к LLM; `app/routes/api.py` — `/v1/models`, `/api/models`; `app/routes/conversations.py` — `/api/settings`; `templates/settings.html` — раздел «Чат» (якорь `#chat`): выбор модели и навыки для новых чатов одной формой.
+`app/models_catalog.py` — кеш, маппинг публичных имён в upstream, маршрутизация по провайдерам; `app/site_settings.py` — эффективный дефолт и белый список (БД поверх env); `app/routes/admin.py` и `templates/admin.html` — админка; `app/model_providers/openrouter.py`, `app/model_providers/e7by.py`, `app/model_providers/ol.py` — HTTP-прокси к LLM; `app/routes/api.py` — `/v1/models`, `/api/models`; `app/routes/conversations.py` — `/api/settings`; `templates/settings.html` — раздел «Чат» (якорь `#chat`): выбор модели и навыки для новых чатов одной формой.
 
 ## Что осталось
 

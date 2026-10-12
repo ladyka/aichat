@@ -14,7 +14,8 @@
 ### Product facts (не ломать без явной просьбы)
 
 - Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **e7** (`E7_BY_BASE_URL`) и **ol** (`OLLAMA_API_KEY`). Без ключа OpenRouter провайдер не вызывается.
-- Публичный id `default` указывает на цель из `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash`).
+- Публичный id `default` указывает на цель из эффективного дефолта: сначала переопределение в админке (`app_settings`), иначе `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash`).
+- Белый список моделей: `ALLOWED_MODELS` (пусто — без ограничения) или переопределение в `/admin`. Доступ в админку — по `ADMIN_EMAILS`.
 - Пользователям показываем только **free**-модели OpenRouter; в публичных id **нет** суффикса `:free`.
 - Модели e7 в публичных id: `e7/<ollama-model>` (`owned_by`: `e7`).
 - Модели ol в публичных id: `ol/<ollama-model>` (`owned_by`: `ol`).
@@ -41,6 +42,8 @@
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
+| `app/site_settings.py` | эффективный дефолт и белый список моделей (БД поверх env) |
+| `app/routes/admin.py` | `/admin` — дефолтная модель и разрешённые модели |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`) |
