@@ -15,6 +15,7 @@
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
 - Веб-поиск в чате (`web_search`): Brave Search API и Yandex Search API v2. Рука появляется, если задан ключ хотя бы одной службы; в ответе — ссылки. Суточный лимит `WEB_SEARCH_DAILY_LIMIT`
+- Веб-поиск через OpenRouter (`openrouter:web_search`, по умолчанию движок Exa): модель сама уходит в интернет и отвечает со ссылками. Только модели OpenRouter; e7 и ol эту руку не получают. Выключается `OPENROUTER_WEB_SEARCH=0`
 - Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
@@ -151,6 +152,11 @@ cd frontend && npm run dev   # :5173
 | `BRAVE_SEARCH_API_KEY` | Ключ Brave Web Search (`X-Subscription-Token`). Включает `web_search` для Brave. Пусто — Brave выключен |
 | `YANDEX_SEARCH_API_KEY` / `YANDEX_SEARCH_FOLDER_ID` | Yandex Search API v2: оба поля включают поиск Яндекса (`Authorization: Api-Key` и `folderId`, `POST https://searchapi.api.cloud.yandex.net/v2/web/search`) |
 | `WEB_SEARCH_DAILY_LIMIT` | Вызовов `web_search` на пользователя в сутки UTC (по умолчанию `20`) |
+| `OPENROUTER_WEB_SEARCH` | Веб-поиск OpenRouter в `/api/chat` (`openrouter:web_search`). По умолчанию включён (`1`); `0` — выключить. Только модели OpenRouter |
+| `OPENROUTER_WEB_SEARCH_ENGINE` | Движок поиска: `exa` (по умолчанию), `parallel`, `perplexity`, `firecrawl`. Не `auto` и не `native` |
+| `OPENROUTER_WEB_SEARCH_MAX_RESULTS` | Результатов на один поиск (1–25, по умолчанию `5`) |
+| `OPENROUTER_WEB_SEARCH_MAX_USES` | Поисков за один ответ (1–30, по умолчанию `3`) |
+| `OPENROUTER_WEB_SEARCH_DAILY_LIMIT` | Поисков на человека в сутки UTC (по умолчанию `20`). `0` — рука выключена |
 | `PZZ_ENABLED` | Инструменты pzz.by в `/api/chat` (`pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order`). По умолчанию включены (`1`) |
 | `PZZ_ORDERS_ENABLED` | Разрешить реальную отправку заказа на pzz.by (`confirm=true`). `0` — только черновик и ссылка на сайт |
 | `FEEDBACK_WEBHOOK_URL` | Incoming Webhook Slack (или Discord / любой POST JSON с полем `text`): включает `send_feedback` в `/api/chat`. Пусто — инструмент выключен |
@@ -201,6 +207,8 @@ Redirect URI (прописать в кабинете 1:1):
 Трейсы смотрим в [Arize app](https://app.ca-central-1a.arize.com/). Как агенту разбирать спаны и какие поля туда пишутся: **[docs/dev/tracing.md](docs/dev/tracing.md)**.
 
 Погода в чате (`/api/chat`): модель может запросить `get_weather` по городу или координатам. Если локация не указана — модель вызывает `get_user_location`, и фронтенд запрашивает доступ к геолокации браузера (`navigator.geolocation`); координаты после разрешения передаются в чат и кешируются на 2 часа. **Геолокация работает только по HTTPS** (или `localhost`) — иначе браузер не даст доступ, и модель попросит назвать город текстом.
+
+Веб-поиск в том же `/api/chat`: на моделях OpenRouter к рукам добавляется серверная `openrouter:web_search`. Модель сама решает, искать ли; OpenRouter ходит в выбранный движок (по умолчанию Exa) и возвращает ссылки. e7 и ol эту руку не получают. Выключить: `OPENROUTER_WEB_SEARCH=0`. Суточный потолок — `OPENROUTER_WEB_SEARCH_DAILY_LIMIT`. В `/v1` рука не отдаётся.
 
 Пицца Лисицца (`pzz.by`) в том же `/api/chat`: модель ищет меню (`pzz_search_menu`), проверяет улицу/дом в их справочнике (`pzz_lookup_address`) и может отправить заказ (`pzz_place_order`). Официального партнёрского API нет — используется тот же JSON, что и у сайта (каталог `GET /api/v1/{pizzas|snacks|…}`, заказ через cookie-сессию, корзину и `POST /api/v1/basket/save`). Через чат уходит только оплата **наличными курьеру**; онлайн-оплата bePaid в боте не проводится. Отправка на кухню — только после явного согласия пользователя (`confirm=true`). Имя, телефон и адрес передаются на pzz.by. Выключить меню: `PZZ_ENABLED=0`; запретить отправку, оставив подбор состава: `PZZ_ORDERS_ENABLED=0`.
 
