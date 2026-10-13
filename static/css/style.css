@@ -377,6 +377,19 @@ body.page-chat {
   width: auto;
   margin: 0;
 }
+.admin-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem 1.1rem 1.2rem;
+  margin: 0;
+}
+.admin-fieldset legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+.admin-fieldset .muted {
+  margin-top: 0;
+}
 .skill-list li > div { display: grid; gap: 0.15rem; }
 .catalog-body {
   background: var(--panel);

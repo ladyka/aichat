@@ -8,6 +8,7 @@
 .env
 .env.*
 .env.example
+ai-providers.yaml
 
 # VCS and tooling
 .git/

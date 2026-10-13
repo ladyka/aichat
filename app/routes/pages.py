@@ -23,6 +23,7 @@ from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, User, get_db, get_user_by_email
 from app.models_catalog import PUBLIC_DEFAULT_ID, get_models_list, resolve_upstream_model
 from app.og import og_context, public_origin
+from app.site_settings import get_effective_default_model, is_admin
 from app.skills import default_skill_ids, list_owned_skills, set_default_skill_ids, skill_payload
 
 router = APIRouter()
@@ -46,7 +47,8 @@ def _ctx(user: User | None = None, **extra):
     data = {
         "user": user,
         "app_name": "aichat",
-        "default_model": settings.default_model,
+        "default_model": get_effective_default_model(),
+        "is_admin": is_admin(user),
         "google_oauth_enabled": settings.google_oauth_enabled,
         "apple_oauth_enabled": settings.apple_oauth_enabled,
         "yandex_oauth_enabled": settings.yandex_oauth_enabled,
@@ -278,7 +280,9 @@ def _settings_render(
     status_code: int = 200,
 ):
     settings = get_settings()
-    preferred = (user.preferred_model or "").strip() or settings.default_model or PUBLIC_DEFAULT_ID
+    preferred = (
+        (user.preferred_model or "").strip() or get_effective_default_model() or PUBLIC_DEFAULT_ID
+    )
     tokens, usage = _tokens_view_data(db, user)
     owned = list_owned_skills(db, user)
     return render(

@@ -10,6 +10,9 @@ os.environ["OPENROUTER_API_KEY"] = "sk-test"
 os.environ["MODELS_CACHE_TTL"] = "3600"
 # Fix the default model so tests don't follow DEFAULT_MODEL from the local .env.
 os.environ["DEFAULT_MODEL"] = "default"
+# Admin / allowlist: локальный .env не должен открывать /admin или сужать каталог.
+os.environ["ADMIN_EMAILS"] = ""
+os.environ["ALLOWED_MODELS"] = ""
 # Keep local .env e7 credentials from hitting the network in unit tests.
 os.environ["E7_BY_BASE_URL"] = ""
 os.environ["E7_BY_API_KEY"] = ""

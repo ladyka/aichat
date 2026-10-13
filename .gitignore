@@ -1,6 +1,7 @@
 .version
 .env
 *.env.local
+ai-providers.yaml
 .DS_Store
 __pycache__/
 .venv/

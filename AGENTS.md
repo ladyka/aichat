@@ -13,11 +13,13 @@
 
 ### Product facts (не ломать без явной просьбы)
 
-- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **e7** (`E7_BY_BASE_URL`) и **ol** (`OLLAMA_API_KEY`). Без ключа OpenRouter провайдер не вызывается.
-- Публичный id `default` указывает на цель из `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash`).
+- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **e7** (`E7_BY_BASE_URL`), **ol** (`OLLAMA_API_KEY`) и провайдеры из **`ai-providers.yaml`**. Без ключа OpenRouter встроенный OpenRouter не вызывается.
+- Публичный id `default` указывает на цель из эффективного дефолта: сначала переопределение в админке (`app_settings`), иначе `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash` или `groq/…` из yaml).
+- Белый список моделей: `ALLOWED_MODELS` (пусто — без ограничения) или переопределение в `/admin`. Доступ в админку — по `ADMIN_EMAILS`.
 - Пользователям показываем только **free**-модели OpenRouter; в публичных id **нет** суффикса `:free`.
 - Модели e7 в публичных id: `e7/<ollama-model>` (`owned_by`: `e7`).
 - Модели ol в публичных id: `ol/<ollama-model>` (`owned_by`: `ol`).
+- Yaml-провайдеры: публичные id `<id>/<model>`; ключ и `base_url` в yaml (`api_key` лучше через `${ENV}`); модели — список `models` или GET `models_url`.
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата. Страница — одна карточка с двумя разделами: «Чат» (`/settings#chat`: модель и навыки для новых чатов) и «API-токены» (`/settings#api`). Адрес в примере `curl` берётся из `public_origin()` (`PUBLIC_BASE_URL`, иначе хост запроса), а не пишется в шаблоне руками.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
@@ -41,7 +43,10 @@
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
-| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
+| `app/ai_providers.py` | разбор `ai-providers.yaml` |
+| `app/site_settings.py` | эффективный дефолт и белый список моделей (БД поверх env) |
+| `app/routes/admin.py` | `/admin` — дефолтная модель и разрешённые модели |
+| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7, ol, `openai_compat` (yaml) |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`) |
 | `app/mzg.py` | mzg.by: сайты пользователей — домен `<имя>.mzg.by`, один сайт на пользователя (создать / сменить домен = удалить+создать / удалить / статус), публикация заметки как `<имя>.md` в `MZG_SITES_FOLDER` |

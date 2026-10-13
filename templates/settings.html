@@ -3,7 +3,7 @@
 {% block body_class %}page-auth{% endblock %}
 {% block content %}
 <section class="auth-panel skill-card">
-  <p class="back-link"><a href="/chat">← К чату</a> · <a href="/skills">Навыки</a> · <a href="/profile">Профиль</a></p>
+  <p class="back-link"><a href="/chat">← К чату</a> · <a href="/skills">Навыки</a> · <a href="/profile">Профиль</a>{% if is_admin %} · <a href="/admin">Админка</a>{% endif %}</p>
   <h1>Настройки</h1>
   <p class="lede">Модель и навыки для чата, токены для внешнего API. На странице чата выбор модели скрыт.</p>
   {% if error %}
