@@ -1,6 +1,6 @@
 # aichat
 
-Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели) и опционально **e7** (Ollama).
+Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели), опционально **ol** (Ollama Cloud) и провайдеры из `ai-providers.yaml`.
 
 ## Возможности
 
@@ -11,11 +11,11 @@
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй (закреплённые сверху; архив открывается кнопкой внизу списка)
 - Модель чата в **/settings** (не на экране чата); там же навыки для новых чатов и API-токены — разделы `/settings#chat` и `/settings#api`
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
-- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, модели e7 как `e7/<имя>` и облачные модели ollama.com как `ol/<имя>`
+- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, облачные модели ollama.com как `ol/<имя>` и модели из `ai-providers.yaml` как `<id>/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
 - Веб-поиск в чате (`web_search`): Brave Search API и Yandex Search API v2. Рука появляется, если задан ключ хотя бы одной службы; в ответе — ссылки. Суточный лимит `WEB_SEARCH_DAILY_LIMIT`
-- Веб-поиск через OpenRouter (`openrouter:web_search`, по умолчанию движок Exa): модель сама уходит в интернет и отвечает со ссылками. Только модели OpenRouter; e7 и ol эту руку не получают. Выключается `OPENROUTER_WEB_SEARCH=0`
+- Веб-поиск через OpenRouter (`openrouter:web_search`, по умолчанию движок Exa): модель сама уходит в интернет и отвечает со ссылками. Только модели OpenRouter; ol и yaml-провайдеры эту руку не получают. Выключается `OPENROUTER_WEB_SEARCH=0`
 - Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
@@ -31,15 +31,15 @@
 - Python **3.13+** (pin: `.python-version`, `make venv` → `python3.13`)
 - Node.js **24+** (pin: `.nvmrc`, `engines` в `frontend/package.json`)
 - Ключ OpenRouter (`OPENROUTER_API_KEY`)
-- Для моделей e7 — `E7_BY_BASE_URL` (Ollama)
 - Для моделей ol — `OLLAMA_API_KEY` (Ollama Cloud)
+- Для доп. провайдеров — `ai-providers.yaml` (см. `ai-providers.example.yaml`)
 
 ### Запуск
 
 ```bash
 cp .env.example .env
 # заполните OPENROUTER_API_KEY
-# при необходимости: E7_BY_BASE_URL (Ollama e7), OLLAMA_API_KEY (Ollama Cloud ol)
+# при необходимости: OLLAMA_API_KEY (Ollama Cloud ol), ai-providers.yaml
 
 # nvm use   # Node 24 из .nvmrc
 make venv                 # python3.13 -m venv .venv
@@ -88,7 +88,7 @@ make hooks     # git config core.hooksPath .githooks
 это ожидаемо).
 
 Тесты не должны зависеть от конкретного `.env`: `tests/conftest.py` до импорта приложения
-выставляет окружение (SQLite, `DEFAULT_MODEL`, пустые ключи e7/ol/S3, флаги pzz) — `load_dotenv`
+выставляет окружение (SQLite, `DEFAULT_MODEL`, пустые ключи ol/S3, флаги pzz) — `load_dotenv`
 не перетирает уже заданные переменные, поэтому локальные секреты и `SYSTEM_PROMPT` на юнит-тесты
 не влияют.
 
@@ -132,13 +132,10 @@ cd frontend && npm run dev   # :5173
 | Переменная | Назначение |
 |------------|------------|
 | `OPENROUTER_API_KEY` | Серверный ключ OpenRouter. Пусто — провайдер выключен |
-| `E7_BY_BASE_URL` | Ollama e7: хост или `.../v1`. Пусто — провайдер выключен |
-| `E7_BY_API_KEY` | Опциональный ключ для e7 |
-| `E7_BY_TIMEOUT` | Таймаут completions e7 (сек, по умолчанию 300) |
 | `OLLAMA_API_KEY` | Ключ Ollama Cloud для провайдера ol. Пусто — провайдер выключен |
 | `OLL_HOST` | Хост ollama для ol (по умолчанию `https://ollama.com`) |
 | `OLL_TIMEOUT` | Таймаут completions ol (сек, по умолчанию 300) |
-| `DEFAULT_MODEL` | Куда указывает публичный id `default`: `default` → openrouter/free, или конкретный id (`ol/…`, `e7/…`, модель OpenRouter). Админка `/admin` может переопределить в БД |
+| `DEFAULT_MODEL` | Куда указывает публичный id `default`: `default` → openrouter/free, или конкретный id (`ol/…`, yaml `id/…`, модель OpenRouter). Админка `/admin` может переопределить в БД |
 | `ALLOWED_MODELS` | Белый список публичных id через запятую. Пусто — без ограничения. Админка может переопределить в БД |
 | `ADMIN_EMAILS` | Email администраторов через запятую. Пусто — `/admin` никому не открыт |
 | `AI_PROVIDERS_FILE` | Путь к `ai-providers.yaml` (доп. OpenAI-совместимые провайдеры; образец — `ai-providers.example.yaml`) |
@@ -208,7 +205,7 @@ Redirect URI (прописать в кабинете 1:1):
 
 Погода в чате (`/api/chat`): модель может запросить `get_weather` по городу или координатам. Если локация не указана — модель вызывает `get_user_location`, и фронтенд запрашивает доступ к геолокации браузера (`navigator.geolocation`); координаты после разрешения передаются в чат и кешируются на 2 часа. **Геолокация работает только по HTTPS** (или `localhost`) — иначе браузер не даст доступ, и модель попросит назвать город текстом.
 
-Веб-поиск в том же `/api/chat`: на моделях OpenRouter к рукам добавляется серверная `openrouter:web_search`. Модель сама решает, искать ли; OpenRouter ходит в выбранный движок (по умолчанию Exa) и возвращает ссылки. e7 и ol эту руку не получают. Выключить: `OPENROUTER_WEB_SEARCH=0`. Суточный потолок — `OPENROUTER_WEB_SEARCH_DAILY_LIMIT`. В `/v1` рука не отдаётся.
+Веб-поиск в том же `/api/chat`: на моделях OpenRouter к рукам добавляется серверная `openrouter:web_search`. Модель сама решает, искать ли; OpenRouter ходит в выбранный движок (по умолчанию Exa) и возвращает ссылки. ol и yaml-провайдеры эту руку не получают. Выключить: `OPENROUTER_WEB_SEARCH=0`. Суточный потолок — `OPENROUTER_WEB_SEARCH_DAILY_LIMIT`. В `/v1` рука не отдаётся.
 
 Пицца Лисицца (`pzz.by`) в том же `/api/chat`: модель ищет меню (`pzz_search_menu`), проверяет улицу/дом в их справочнике (`pzz_lookup_address`) и может отправить заказ (`pzz_place_order`). Официального партнёрского API нет — используется тот же JSON, что и у сайта (каталог `GET /api/v1/{pizzas|snacks|…}`, заказ через cookie-сессию, корзину и `POST /api/v1/basket/save`). Через чат уходит только оплата **наличными курьеру**; онлайн-оплата bePaid в боте не проводится. Отправка на кухню — только после явного согласия пользователя (`confirm=true`). Имя, телефон и адрес передаются на pzz.by. Выключить меню: `PZZ_ENABLED=0`; запретить отправку, оставив подбор состава: `PZZ_ORDERS_ENABLED=0`.
 

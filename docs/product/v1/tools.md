@@ -21,7 +21,7 @@
 | `pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order` | меню, адрес и заказ с pzz.by | выключается `PZZ_ENABLED=0`; отправка на кухню — только после явного согласия и при `PZZ_ORDERS_ENABLED=1`; через чат проходит только оплата наличными курьеру |
 | `send_feedback` | жалоба, идея или вопрос команде сервиса | нужен `FEEDBACK_WEBHOOK_URL` (Incoming Webhook Slack или аналог); отправка — только после явного согласия; для жалобы модель сначала выясняет, что именно не понравилось; в `/v1` не отдаётся |
 | `web_search` | страницы из Brave и Яндекса со ссылками | нужен ключ хотя бы одной службы; суточный потолок `WEB_SEARCH_DAILY_LIMIT`; в `/v1` не отдаётся |
-| `openrouter:web_search` | поиск в интернете через OpenRouter (по умолчанию Exa), ответ со ссылками | нужны `OPENROUTER_API_KEY` и модель OpenRouter; e7/ol не получают; суточный потолок `OPENROUTER_WEB_SEARCH_DAILY_LIMIT`; в `/v1` не отдаётся; см. [веб-поиск](../v2/websearch.md) |
+| `openrouter:web_search` | поиск в интернете через OpenRouter (по умолчанию Exa), ответ со ссылками | нужны `OPENROUTER_API_KEY` и модель OpenRouter; ol и yaml-провайдеры не получают; суточный потолок `OPENROUTER_WEB_SEARCH_DAILY_LIMIT`; в `/v1` не отдаётся; см. [веб-поиск](../v2/websearch.md) |
 
 Если модель зовёт две руки сразу — два курса валют через `download_file` — сервер исполняет оба вызова. Поток не склеивает имена (`download_filedownload_file`) и JSON-аргументы в один неизвестный инструмент.
 

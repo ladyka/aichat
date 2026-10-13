@@ -73,7 +73,7 @@ def test_build_catalog_includes_yaml_models(monkeypatch):
     monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
     monkeypatch.setattr(get_settings(), "default_model", "default")
     yaml_raw = {"groq": [{"id": "llama-3.3-70b-versatile", "created": 9}]}
-    payload, routes = mc._build_models_catalog([], [], [], yaml_raw)
+    payload, routes = mc._build_models_catalog([], [], yaml_raw)
     ids = [item["id"] for item in payload["data"]]
     assert "groq/llama-3.3-70b-versatile" in ids
     assert routes["groq/llama-3.3-70b-versatile"].provider == "groq"
@@ -196,7 +196,6 @@ providers:
         return [{"id": "openrouter/auto:free", "created": 1}]
 
     monkeypatch.setattr(mc, "_fetch_openrouter_models", fake_or)
-    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
     monkeypatch.setattr(get_settings(), "ol_enabled", False)
 
     payload = asyncio.run(mc.get_models_list(force_refresh=True))

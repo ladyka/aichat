@@ -95,13 +95,7 @@ class Settings:
         self.root = ROOT
         self.openrouter_api_key = _env("OPENROUTER_API_KEY", "")
         self.openrouter_base_url = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        # e7 is an Ollama provider. Empty E7_BY_BASE_URL disables it.
-        # Accept host (http://host:11434) or OpenAI-compatible base (.../v1).
-        self.e7_by_base_url = self._ollama_openai_base(_env("E7_BY_BASE_URL", "") or "")
-        self.e7_by_api_key = _env("E7_BY_API_KEY", "") or ""
-        self.e7_by_timeout = float(_env("E7_BY_TIMEOUT", "300") or "300")
-        self.e7_by_enabled = bool(self.e7_by_base_url)
-        # ol is a second Ollama provider (Ollama Cloud через официальный клиент `ollama`).
+        # ol — Ollama Cloud через официальный клиент `ollama`.
         # Пустой OLLAMA_API_KEY выключает его. Локального инференса нет: только :cloud-модели.
         self.ol_host = (_env("OLL_HOST", "https://ollama.com") or "https://ollama.com").rstrip("/")
         self.ol_api_key = _env("OLLAMA_API_KEY", "") or ""
@@ -111,7 +105,7 @@ class Settings:
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()
         self.default_model = _env("DEFAULT_MODEL", "default")
-        # Белый список публичных id моделей. Пусто — без ограничения (все free/e7/ol).
+        # Белый список публичных id моделей. Пусто — без ограничения (все free/ol/yaml).
         # Админка может переопределить значение в БД; см. app/site_settings.py.
         self.allowed_models = self._parse_model_list(_env("ALLOWED_MODELS", "") or "")
         # Email администраторов (через запятую). Пусто — /admin никому не открыт.
@@ -168,7 +162,7 @@ class Settings:
         self.image_generation_daily_limit = int(_env("IMAGE_GENERATION_DAILY_LIMIT", "5") or "5")
 
         # Веб-поиск OpenRouter (`openrouter:web_search`) в /api/chat. Только модели
-        # OpenRouter: e7/ol эту руку не получают. Движок закрепляем (не auto/native).
+        # OpenRouter: ol и yaml-провайдеры эту руку не получают. Движок закрепляем (не auto/native).
         self.openrouter_web_search = _flag(_env("OPENROUTER_WEB_SEARCH", "1"), default=True)
         engine = (_env("OPENROUTER_WEB_SEARCH_ENGINE", "exa") or "exa").strip().lower()
         if engine not in {"exa", "parallel", "perplexity", "firecrawl"}:
@@ -249,15 +243,6 @@ class Settings:
 
         sqlite_path = ROOT / "aichat.db"
         return f"sqlite:///{sqlite_path}"
-
-    @staticmethod
-    def _ollama_openai_base(raw: str) -> str:
-        value = raw.strip().rstrip("/")
-        if not value:
-            return ""
-        if value.endswith("/v1"):
-            return value
-        return f"{value}/v1"
 
     @staticmethod
     def _parse_model_list(raw: str) -> frozenset[str] | None:

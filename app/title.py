@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db import Conversation, Message, SessionLocal
-from app.models_catalog import PROVIDER_E7_BY, PROVIDER_OL, ModelRoute, resolve_model
+from app.models_catalog import PROVIDER_OL, PROVIDER_OPENROUTER, ModelRoute, resolve_model
 
 logger = logging.getLogger("aichat.title")
 
@@ -65,14 +65,14 @@ def _truncate_title(raw: str) -> str:
 
 
 async def _call_llm(route: ModelRoute, payload: dict[str, Any]) -> Any:
-    from app.model_providers import e7by, ol
+    from app.model_providers import ol, openai_compat
     from app.model_providers.openrouter import chat_completions
 
-    if route.provider == PROVIDER_E7_BY:
-        return await e7by.chat_completions(payload)
     if route.provider == PROVIDER_OL:
         return await ol.chat_completions(payload)
-    return await chat_completions(payload)
+    if route.provider == PROVIDER_OPENROUTER:
+        return await chat_completions(payload)
+    return await openai_compat.chat_completions(route.provider, payload)
 
 
 async def _request_title(transcript: str) -> str:

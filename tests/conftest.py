@@ -15,10 +15,7 @@ os.environ["ADMIN_EMAILS"] = ""
 os.environ["ALLOWED_MODELS"] = ""
 # Локальный ai-providers.yaml не должен подмешивать модели в юнит-тесты.
 os.environ["AI_PROVIDERS_FILE"] = "ai-providers.missing-for-tests.yaml"
-# Keep local .env e7 credentials from hitting the network in unit tests.
-os.environ["E7_BY_BASE_URL"] = ""
-os.environ["E7_BY_API_KEY"] = ""
-# Same for the ol (Ollama Cloud) provider.
+# Keep local .env ol credentials from hitting the network in unit tests.
 os.environ["OLLAMA_API_KEY"] = ""
 # S3 + OpenRouter keys from the local .env would switch generate_image on, and the
 # tool lists asserted below would silently gain an entry.

@@ -28,10 +28,10 @@ def _email() -> str:
 
 
 def test_parse_allowed_models_and_admin_emails(monkeypatch):
-    monkeypatch.setenv("ALLOWED_MODELS", " openrouter/auto , e7/llama ")
+    monkeypatch.setenv("ALLOWED_MODELS", " openrouter/auto , ol/llama ")
     monkeypatch.setenv("ADMIN_EMAILS", "Boss@Example.com, other@x.test")
     settings = Settings()
-    assert settings.allowed_models == frozenset({"openrouter/auto", "e7/llama"})
+    assert settings.allowed_models == frozenset({"openrouter/auto", "ol/llama"})
     assert settings.admin_emails == frozenset({"boss@example.com", "other@x.test"})
 
 
@@ -85,7 +85,7 @@ def test_allowlist_filters_catalog(monkeypatch):
         {"id": "openrouter/auto:free", "created": 1},
         {"id": "other/free-model:free", "created": 2},
     ]
-    payload, routes = mc._build_models_catalog(raw, [], [])
+    payload, routes = mc._build_models_catalog(raw, [])
     payload, routes = mc._filter_by_allowlist(payload, routes)
     ids = [item["id"] for item in payload["data"]]
     assert ids[0] == mc.PUBLIC_DEFAULT_ID
@@ -110,7 +110,7 @@ def test_admin_page_requires_admin(client, monkeypatch):
     assert client.get("/admin", follow_redirects=False).status_code == 303
 
     async def fake_providers():
-        return ([{"id": "openrouter/auto:free", "created": 1}], [], [], {})
+        return ([{"id": "openrouter/auto:free", "created": 1}], [], {})
 
     monkeypatch.setattr(mc, "_fetch_provider_models", fake_providers)
     monkeypatch.setattr(get_settings(), "admin_emails", frozenset({address.lower()}))
@@ -133,7 +133,6 @@ def test_admin_save_allowlist(client, monkeypatch):
                 {"id": "openrouter/auto:free", "created": 1},
                 {"id": "vendor/other:free", "created": 2},
             ],
-            [],
             [],
             {},
         )

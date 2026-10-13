@@ -16,7 +16,7 @@ from app.ai_providers import (
     to_yaml_upstream_id,
 )
 from app.config import get_settings
-from app.model_providers import e7by, ol, openai_compat
+from app.model_providers import ol, openai_compat
 from app.site_settings import (
     get_effective_allowed_models,
     get_effective_default_model,
@@ -29,8 +29,6 @@ PUBLIC_DEFAULT_ID = "default"
 UPSTREAM_DEFAULT_ID = "openrouter/free"
 FREE_SUFFIX = ":free"
 PROVIDER_OPENROUTER = "openrouter"
-PROVIDER_E7_BY = e7by.PROVIDER_ID
-E7_BY_PREFIX = f"{PROVIDER_E7_BY}/"
 PROVIDER_OL = ol.PROVIDER_ID
 OL_PREFIX = f"{PROVIDER_OL}/"
 
@@ -63,22 +61,6 @@ def to_upstream_id(public_id: str) -> str:
     if model.endswith(FREE_SUFFIX):
         return model
     return f"{model}{FREE_SUFFIX}"
-
-
-def to_e7_public_id(upstream_id: str) -> str:
-    model = (upstream_id or "").strip()
-    if not model:
-        return ""
-    if model.startswith(E7_BY_PREFIX):
-        return model
-    return f"{E7_BY_PREFIX}{model.lstrip('/')}"
-
-
-def to_e7_upstream_id(public_id: str) -> str:
-    model = (public_id or "").strip()
-    if model.startswith(E7_BY_PREFIX):
-        return model[len(E7_BY_PREFIX) :]
-    return model
 
 
 def to_ol_public_id(upstream_id: str) -> str:
@@ -135,8 +117,8 @@ def _default_route() -> ModelRoute | None:
 
     Эффективное значение: переопределение из админки, иначе `DEFAULT_MODEL`.
     `default` (или пусто) → openrouter/free, только если OpenRouter включён.
-    Иначе цель может быть конкретным публичным id (`ol/…`, `e7/…`, модель
-    OpenRouter) — тогда `default` указывает на него.
+    Иначе цель может быть конкретным публичным id (`ol/…`, yaml-провайдер,
+    модель OpenRouter) — тогда `default` указывает на него.
     """
     settings = get_settings()
     target = (get_effective_default_model() or "").strip() or PUBLIC_DEFAULT_ID
@@ -160,19 +142,6 @@ def _default_route() -> ModelRoute | None:
         return ModelRoute(
             public_id=PUBLIC_DEFAULT_ID,
             provider=PROVIDER_OL,
-            upstream_id=upstream,
-        )
-
-    if target.startswith(E7_BY_PREFIX):
-        if not settings.e7_by_enabled:
-            logger.warning("DEFAULT_MODEL=%r, но провайдер e7 выключен", target)
-            return None
-        upstream = to_e7_upstream_id(target)
-        if not upstream:
-            return None
-        return ModelRoute(
-            public_id=PUBLIC_DEFAULT_ID,
-            provider=PROVIDER_E7_BY,
             upstream_id=upstream,
         )
 
@@ -227,19 +196,15 @@ def invalidate_models_cache() -> None:
 
 def _build_models_response(
     openrouter_raw: list[dict[str, Any]],
-    e7_raw: list[dict[str, Any]] | None = None,
     ol_raw: list[dict[str, Any]] | None = None,
     yaml_raw: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    payload, _routes = _build_models_catalog(
-        openrouter_raw, e7_raw or [], ol_raw or [], yaml_raw or {}
-    )
+    payload, _routes = _build_models_catalog(openrouter_raw, ol_raw or [], yaml_raw or {})
     return payload
 
 
 def _build_models_catalog(
     openrouter_raw: list[dict[str, Any]],
-    e7_raw: list[dict[str, Any]],
     ol_raw: list[dict[str, Any]],
     yaml_raw: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[dict[str, Any], dict[str, ModelRoute]]:
@@ -270,21 +235,6 @@ def _build_models_catalog(
             upstream_id=(
                 upstream_id if upstream_id.endswith(FREE_SUFFIX) else to_upstream_id(public_id)
             ),
-        )
-
-    for raw in e7_raw:
-        upstream_id = str(raw.get("id") or raw.get("name") or "")
-        public_id = to_e7_public_id(upstream_id)
-        if not public_id or public_id in seen:
-            continue
-        items.append(
-            _openai_model_item(public_id, created=_created_int(raw), owned_by=PROVIDER_E7_BY)
-        )
-        seen.add(public_id)
-        routes[public_id] = ModelRoute(
-            public_id=public_id,
-            provider=PROVIDER_E7_BY,
-            upstream_id=to_e7_upstream_id(public_id),
         )
 
     for raw in ol_raw:
@@ -361,19 +311,16 @@ async def _fetch_yaml_provider_models() -> dict[str, list[dict[str, Any]]]:
 async def _fetch_provider_models() -> tuple[
     list[dict[str, Any]],
     list[dict[str, Any]],
-    list[dict[str, Any]],
     dict[str, list[dict[str, Any]]],
 ]:
     settings = get_settings()
     openrouter_task = (
         asyncio.create_task(_fetch_openrouter_models()) if settings.openrouter_enabled else None
     )
-    e7_task = asyncio.create_task(e7by.list_models()) if settings.e7_by_enabled else None
     ol_task = asyncio.create_task(ol.list_models()) if settings.ol_enabled else None
     yaml_task = asyncio.create_task(_fetch_yaml_provider_models())
-    openrouter_raw, e7_raw, ol_raw, yaml_raw = await asyncio.gather(
+    openrouter_raw, ol_raw, yaml_raw = await asyncio.gather(
         openrouter_task or _empty_models(),
-        e7_task or _empty_models(),
         ol_task or _empty_models(),
         yaml_task,
         return_exceptions=True,
@@ -386,7 +333,7 @@ async def _fetch_provider_models() -> tuple[
     if isinstance(openrouter_raw, BaseException):
         has_fallback = any(
             (not isinstance(raw, BaseException) and raw)
-            for raw in (e7_raw, ol_raw, yaml_raw if isinstance(yaml_raw, dict) else None)
+            for raw in (ol_raw, yaml_raw if isinstance(yaml_raw, dict) else None)
         )
         if not has_fallback:
             if isinstance(openrouter_raw, HTTPException):
@@ -398,15 +345,11 @@ async def _fetch_provider_models() -> tuple[
         logger.warning("OpenRouter models unavailable: %s", openrouter_raw)
         openrouter_raw = []
 
-    if isinstance(e7_raw, BaseException):
-        logger.warning("e7 models unavailable: %s", e7_raw)
-        e7_raw = []
-
     if isinstance(ol_raw, BaseException):
         logger.warning("ol models unavailable: %s", ol_raw)
         ol_raw = []
 
-    return openrouter_raw, e7_raw, ol_raw, yaml_raw
+    return openrouter_raw, ol_raw, yaml_raw
 
 
 async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
@@ -421,8 +364,8 @@ async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
         if not force_refresh and _cache_payload is not None and now < _cache_expires_at:
             return _cache_payload
 
-        openrouter_raw, e7_raw, ol_raw, yaml_raw = await _fetch_provider_models()
-        payload, routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw, yaml_raw)
+        openrouter_raw, ol_raw, yaml_raw = await _fetch_provider_models()
+        payload, routes = _build_models_catalog(openrouter_raw, ol_raw, yaml_raw)
         payload, routes = _filter_by_allowlist(payload, routes)
         settings = get_settings()
         _cache_payload = payload
@@ -435,8 +378,8 @@ async def get_models_list(*, force_refresh: bool = False) -> dict[str, Any]:
 async def get_models_list_unfiltered(*, force_refresh: bool = False) -> dict[str, Any]:
     """Полный каталог без белого списка — для админки."""
     # Не трогаем публичный кеш: собираем отдельно.
-    openrouter_raw, e7_raw, ol_raw, yaml_raw = await _fetch_provider_models()
-    payload, _routes = _build_models_catalog(openrouter_raw, e7_raw, ol_raw, yaml_raw)
+    openrouter_raw, ol_raw, yaml_raw = await _fetch_provider_models()
+    payload, _routes = _build_models_catalog(openrouter_raw, ol_raw, yaml_raw)
     if force_refresh:
         invalidate_models_cache()
     return payload
@@ -461,7 +404,7 @@ def resolve_model(public_id: str | None, *, enforce_allowlist: bool = True) -> M
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "Модель default недоступна: задайте DEFAULT_MODEL на ol/… или e7/… "
+                    "Модель default недоступна: задайте DEFAULT_MODEL на ol/… "
                     "либо укажите OPENROUTER_API_KEY"
                 ),
             )
@@ -471,26 +414,6 @@ def resolve_model(public_id: str | None, *, enforce_allowlist: bool = True) -> M
         raise HTTPException(
             status_code=400,
             detail=f"Model '{requested}' is not available",
-        )
-
-    if requested.startswith(E7_BY_PREFIX):
-        if not settings.e7_by_enabled:
-            raise HTTPException(status_code=503, detail="E7_BY_BASE_URL is not configured")
-        upstream = to_e7_upstream_id(requested)
-        if not upstream:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Model '{requested}' is not available",
-            )
-        if enforce_allowlist and _cache_public_ids and requested not in _cache_public_ids:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Model '{requested}' is not available",
-            )
-        return ModelRoute(
-            public_id=requested,
-            provider=PROVIDER_E7_BY,
-            upstream_id=upstream,
         )
 
     if requested.startswith(OL_PREFIX):

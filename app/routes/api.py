@@ -17,10 +17,9 @@ from app.ai_providers import to_yaml_public_id
 from app.auth import get_user_from_api_token, get_user_from_session
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, UsageLog, User, get_db
-from app.model_providers import e7by, ol, openai_compat
+from app.model_providers import ol, openai_compat
 from app.model_providers.openrouter import chat_completions, stream_chat_completions
 from app.models_catalog import (
-    PROVIDER_E7_BY,
     PROVIDER_OL,
     PROVIDER_OPENROUTER,
     PUBLIC_DEFAULT_ID,
@@ -28,7 +27,6 @@ from app.models_catalog import (
     ModelRoute,
     get_models_list,
     resolve_model,
-    to_e7_public_id,
     to_ol_public_id,
     to_public_id,
 )
@@ -72,11 +70,9 @@ def _response_model_id(route: ModelRoute, reported: str | None) -> str:
     провайдер её сообщил — иначе оставляем `default` (когда цель — openrouter/free).
     """
     if reported:
-        if route.provider == PROVIDER_E7_BY:
-            return to_e7_public_id(reported) or route.public_id
         if route.provider == PROVIDER_OL:
             return to_ol_public_id(reported) or route.public_id
-        if route.provider not in (PROVIDER_OPENROUTER, PROVIDER_E7_BY, PROVIDER_OL):
+        if route.provider not in (PROVIDER_OPENROUTER, PROVIDER_OL):
             return to_yaml_public_id(route.provider, reported) or route.public_id
         public = to_public_id(reported)
         if route.public_id == PUBLIC_DEFAULT_ID and public == PUBLIC_DEFAULT_ID:
@@ -127,8 +123,6 @@ def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]
 
 
 async def _call_chat(route: ModelRoute, payload: dict[str, Any]):
-    if route.provider == PROVIDER_E7_BY:
-        return await e7by.chat_completions(payload)
     if route.provider == PROVIDER_OL:
         return await ol.chat_completions(payload)
     if route.provider == PROVIDER_OPENROUTER:
@@ -137,8 +131,6 @@ async def _call_chat(route: ModelRoute, payload: dict[str, Any]):
 
 
 def _stream_completions(route: ModelRoute, payload: dict[str, Any]) -> AsyncIterator[bytes]:
-    if route.provider == PROVIDER_E7_BY:
-        return e7by.stream_chat_completions(payload)
     if route.provider == PROVIDER_OL:
         return ol.stream_chat_completions(payload)
     if route.provider == PROVIDER_OPENROUTER:

@@ -13,11 +13,10 @@
 
 ### Product facts (не ломать без явной просьбы)
 
-- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **e7** (`E7_BY_BASE_URL`), **ol** (`OLLAMA_API_KEY`) и провайдеры из **`ai-providers.yaml`**. Без ключа OpenRouter встроенный OpenRouter не вызывается.
+- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **ol** (`OLLAMA_API_KEY`) и провайдеры из **`ai-providers.yaml`**. Без ключа OpenRouter встроенный OpenRouter не вызывается.
 - Публичный id `default` указывает на цель из эффективного дефолта: сначала переопределение в админке (`app_settings`), иначе `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash` или `groq/…` из yaml).
 - Белый список моделей: `ALLOWED_MODELS` (пусто — без ограничения) или переопределение в `/admin`. Доступ в админку — по `ADMIN_EMAILS`.
 - Пользователям показываем только **free**-модели OpenRouter; в публичных id **нет** суффикса `:free`.
-- Модели e7 в публичных id: `e7/<ollama-model>` (`owned_by`: `e7`).
 - Модели ol в публичных id: `ol/<ollama-model>` (`owned_by`: `ol`).
 - Yaml-провайдеры: публичные id `<id>/<model>`; ключ и `base_url` в yaml (`api_key` лучше через `${ENV}`); модели — список `models` или GET `models_url`.
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
@@ -46,7 +45,7 @@
 | `app/ai_providers.py` | разбор `ai-providers.yaml` |
 | `app/site_settings.py` | эффективный дефолт и белый список моделей (БД поверх env) |
 | `app/routes/admin.py` | `/admin` — дефолтная модель и разрешённые модели |
-| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7, ol, `openai_compat` (yaml) |
+| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, ol, `openai_compat` (yaml) |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, `web_search`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`), веб-поиск OpenRouter (`attach_openrouter_web_search`) |
 | `app/search.py` | Brave Search API и Yandex Search API v2 для `web_search` |
@@ -102,7 +101,7 @@
 ### Getting started
 
 ```bash
-cp .env.example .env   # OPENROUTER_API_KEY; опционально E7_BY_BASE_URL
+cp .env.example .env   # OPENROUTER_API_KEY; опционально OLLAMA_API_KEY
 make venv              # python3.13 -m venv .venv
 make frontend-install && make frontend-build   # Node 24+
 make hooks             # git core.hooksPath=.githooks: тесты на коммите

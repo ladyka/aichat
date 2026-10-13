@@ -50,7 +50,7 @@ PWA (установка, офлайн) работает только на соб
 
 ## Что не меняется
 
-- Бэкенд LLM: OpenRouter (free-модели), опционально e7 (Ollama), ol (Ollama Cloud) и провайдеры из `ai-providers.yaml`.
+- Бэкенд LLM: OpenRouter (free-модели), опционально ol (Ollama Cloud) и провайдеры из `ai-providers.yaml`.
 - Публичные id моделей без суффикса `:free`; `default` → эффективный дефолт (админка или `DEFAULT_MODEL`, иначе `openrouter/free`).
 - Модель чата выбирается в `/settings`, не на странице чата. Белый список и дефолт витрины — в `/admin` (`ADMIN_EMAILS`).
 

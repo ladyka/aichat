@@ -3,7 +3,7 @@ import uuid
 
 from app.config import Settings, get_settings
 from app.db import UsageLog, get_user_by_email
-from app.models_catalog import PROVIDER_E7_BY, PROVIDER_OPENROUTER
+from app.models_catalog import PROVIDER_OL, PROVIDER_OPENROUTER
 from app.telemetry import payload_for_trace
 from app.tools import (
     attach_openrouter_web_search,
@@ -65,7 +65,7 @@ def test_web_search_requests_from_usage():
 def test_attach_skips_non_openrouter(monkeypatch):
     _enable_web_search(monkeypatch)
     payload = {"tools": [{"type": "function", "function": {"name": "x"}}]}
-    out = attach_openrouter_web_search(payload, provider=PROVIDER_E7_BY, user=None, db=None)
+    out = attach_openrouter_web_search(payload, provider=PROVIDER_OL, user=None, db=None)
     assert _server_tool(out) == []
 
 

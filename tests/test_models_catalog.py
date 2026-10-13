@@ -48,20 +48,6 @@ def test_build_models_response_filters_and_dedupes(monkeypatch):
     assert "openrouter/free" not in ids
 
 
-def test_build_models_response_includes_e7_ids(monkeypatch):
-    from app.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "openrouter_api_key", "sk-test")
-    monkeypatch.setattr(get_settings(), "default_model", "default")
-    raw = [{"id": "vendor/paid-model:free", "created": 1}]
-    e7 = [{"id": "llama3.2:latest"}]
-    payload = mc._build_models_response(raw, e7)
-    ids = [item["id"] for item in payload["data"]]
-    assert "e7/llama3.2:latest" in ids
-    owned = {item["id"]: item["owned_by"] for item in payload["data"]}
-    assert owned["e7/llama3.2:latest"] == "e7"
-
-
 def test_headers_without_key(monkeypatch):
     from app.config import get_settings
 
@@ -117,15 +103,13 @@ def test_fetch_provider_models_skips_openrouter_without_key(monkeypatch):
         return []
 
     monkeypatch.setattr(get_settings(), "openrouter_api_key", "")
-    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
     monkeypatch.setattr(get_settings(), "ol_enabled", True)
     monkeypatch.setattr(mc, "_fetch_openrouter_models", boom)
     monkeypatch.setattr(mc.ol, "list_models", empty)
 
-    openrouter_raw, e7_raw, ol_raw, yaml_raw = asyncio.run(mc._fetch_provider_models())
+    openrouter_raw, ol_raw, yaml_raw = asyncio.run(mc._fetch_provider_models())
     assert called["or"] is False
     assert openrouter_raw == []
-    assert e7_raw == []
     assert ol_raw == []
     assert yaml_raw == {}
 
@@ -144,7 +128,7 @@ def test_default_route_follows_default_model(monkeypatch):
     assert route.public_id == "default"
     assert route.upstream_id == "glm-5.3-flash:cloud"
 
-    payload, routes = mc._build_models_catalog([], [], [{"id": "glm-5.3-flash"}])
+    payload, routes = mc._build_models_catalog([], [{"id": "glm-5.3-flash"}])
     assert routes["default"].upstream_id == "glm-5.3-flash:cloud"
     assert routes["default"].provider == mc.PROVIDER_OL
     assert any(item["id"] == "default" for item in payload["data"])
@@ -155,7 +139,6 @@ def test_default_unavailable_without_openrouter_or_target(monkeypatch):
 
     monkeypatch.setattr(get_settings(), "openrouter_api_key", "")
     monkeypatch.setattr(get_settings(), "ol_enabled", False)
-    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
     monkeypatch.setattr(get_settings(), "default_model", "default")
     monkeypatch.setattr(mc, "_cache_routes", {})
 
@@ -201,23 +184,6 @@ def test_resolve_upstream_model(monkeypatch):
     assert exc.value.status_code == 400
 
 
-def test_resolve_e7_model(monkeypatch):
-    from app.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "e7_by_enabled", True)
-    monkeypatch.setattr(mc, "_cache_public_ids", set())
-    monkeypatch.setattr(mc, "_cache_routes", {})
-    route = mc.resolve_model("e7/llama3.2:latest")
-    assert route.provider == mc.PROVIDER_E7_BY
-    assert route.upstream_id == "llama3.2:latest"
-    assert mc.to_e7_public_id("llama3.2:latest") == "e7/llama3.2:latest"
-
-    monkeypatch.setattr(get_settings(), "e7_by_enabled", False)
-    with pytest.raises(HTTPException) as exc:
-        mc.resolve_model("e7/llama3.2:latest")
-    assert exc.value.status_code == 503
-
-
 def test_to_ol_public_and_upstream_id():
     assert mc.to_ol_public_id("deepseek-v4.1-flash") == "ol/deepseek-v4.1-flash"
     assert mc.to_ol_public_id("deepseek-v4.1-flash:cloud") == "ol/deepseek-v4.1-flash"
@@ -235,12 +201,12 @@ def test_build_models_response_includes_ol_ids(monkeypatch):
     monkeypatch.setattr(get_settings(), "default_model", "default")
     raw = [{"id": "vendor/paid-model:free", "created": 1}]
     ol_raw = [{"id": "deepseek-v4.1-flash", "created": 2}]
-    payload = mc._build_models_response(raw, [], ol_raw)
+    payload = mc._build_models_response(raw, ol_raw)
     ids = [item["id"] for item in payload["data"]]
     assert "ol/deepseek-v4.1-flash" in ids
     owned = {item["id"]: item["owned_by"] for item in payload["data"]}
     assert owned["ol/deepseek-v4.1-flash"] == "ol"
-    routes = mc._build_models_catalog(raw, [], ol_raw)[1]
+    routes = mc._build_models_catalog(raw, ol_raw)[1]
     assert routes["ol/deepseek-v4.1-flash"].upstream_id == "deepseek-v4.1-flash:cloud"
     assert routes["ol/deepseek-v4.1-flash"].provider == mc.PROVIDER_OL
 
