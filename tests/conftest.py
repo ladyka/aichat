@@ -13,6 +13,8 @@ os.environ["DEFAULT_MODEL"] = "default"
 # Admin / allowlist: локальный .env не должен открывать /admin или сужать каталог.
 os.environ["ADMIN_EMAILS"] = ""
 os.environ["ALLOWED_MODELS"] = ""
+# Локальный ai-providers.yaml не должен подмешивать модели в юнит-тесты.
+os.environ["AI_PROVIDERS_FILE"] = "ai-providers.missing-for-tests.yaml"
 # Keep local .env e7 credentials from hitting the network in unit tests.
 os.environ["E7_BY_BASE_URL"] = ""
 os.environ["E7_BY_API_KEY"] = ""
