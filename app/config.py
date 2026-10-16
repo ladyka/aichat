@@ -36,6 +36,14 @@ def _flag(value: str | None, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _bounded_int(value: str | None, default: int, lo: int, hi: int) -> int:
+    try:
+        parsed = int(value if value not in (None, "") else default)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(lo, min(hi, parsed))
+
+
 def compose_s3_access_key(tenant_id: str, key_id: str) -> str:
     """Build Cloud.ru SigV4 access key ``tenant_id:key_id`` without double-prefixing."""
     key = (key_id or "").strip()
@@ -87,13 +95,7 @@ class Settings:
         self.root = ROOT
         self.openrouter_api_key = _env("OPENROUTER_API_KEY", "")
         self.openrouter_base_url = _env("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-        # e7 is an Ollama provider. Empty E7_BY_BASE_URL disables it.
-        # Accept host (http://host:11434) or OpenAI-compatible base (.../v1).
-        self.e7_by_base_url = self._ollama_openai_base(_env("E7_BY_BASE_URL", "") or "")
-        self.e7_by_api_key = _env("E7_BY_API_KEY", "") or ""
-        self.e7_by_timeout = float(_env("E7_BY_TIMEOUT", "300") or "300")
-        self.e7_by_enabled = bool(self.e7_by_base_url)
-        # ol is a second Ollama provider (Ollama Cloud через официальный клиент `ollama`).
+        # ol — Ollama Cloud через официальный клиент `ollama`.
         # Пустой OLLAMA_API_KEY выключает его. Локального инференса нет: только :cloud-модели.
         self.ol_host = (_env("OLL_HOST", "https://ollama.com") or "https://ollama.com").rstrip("/")
         self.ol_api_key = _env("OLLAMA_API_KEY", "") or ""
@@ -103,6 +105,13 @@ class Settings:
         self.session_days = int(_env("SESSION_DAYS", "30") or "30")
         self.database_url = self._database_url()
         self.default_model = _env("DEFAULT_MODEL", "default")
+        # Белый список публичных id моделей. Пусто — без ограничения (все free/ol/yaml).
+        # Админка может переопределить значение в БД; см. app/site_settings.py.
+        self.allowed_models = self._parse_model_list(_env("ALLOWED_MODELS", "") or "")
+        # Email администраторов (через запятую). Пусто — /admin никому не открыт.
+        self.admin_emails = self._parse_email_list(_env("ADMIN_EMAILS", "") or "")
+        # Доп. OpenAI-совместимые провайдеры (см. ai-providers.example.yaml).
+        self.ai_providers_file = (_env("AI_PROVIDERS_FILE", "ai-providers.yaml") or "").strip()
         # Системный промпт на все диалоги (/api/chat и /v1/chat/completions).
         # Не задан — берётся DEFAULT_SYSTEM_PROMPT; задан пустым — отключён.
         self.system_prompt = (
@@ -113,6 +122,14 @@ class Settings:
         self.max_tokens_per_user = int(_env("MAX_TOKENS_PER_USER", "10") or "10")
         self.share_ttl_days = int(_env("SHARE_TTL_DAYS", "30") or "30")
         self.openweather_api_key = _env("OPENWEATHER_API_KEY", "") or ""
+        # Веб-поиск в чате. Пустой ключ выключает соответствующую службу.
+        # Brave Web Search: GET https://api.search.brave.com/res/v1/web/search
+        self.brave_search_api_key = (_env("BRAVE_SEARCH_API_KEY", "") or "").strip()
+        # Yandex Search API v2: POST https://searchapi.api.cloud.yandex.net/v2/web/search
+        self.yandex_search_api_key = (_env("YANDEX_SEARCH_API_KEY", "") or "").strip()
+        self.yandex_search_folder_id = (_env("YANDEX_SEARCH_FOLDER_ID", "") or "").strip()
+        self.web_search_daily_limit = int(_env("WEB_SEARCH_DAILY_LIMIT", "20") or "20")
+        self.web_search_result_count = int(_env("WEB_SEARCH_RESULT_COUNT", "5") or "5")
         # Пицца Лисицца (pzz.by): публичный каталог в чате. Заказы — через их SPA API.
         self.pzz_enabled = _flag(_env("PZZ_ENABLED", "1"), default=True)
         self.pzz_orders_enabled = _flag(_env("PZZ_ORDERS_ENABLED", "1"), default=True)
@@ -143,6 +160,23 @@ class Settings:
             or "black-forest-labs/flux.2-klein-4b"
         )
         self.image_generation_daily_limit = int(_env("IMAGE_GENERATION_DAILY_LIMIT", "5") or "5")
+
+        # Веб-поиск OpenRouter (`openrouter:web_search`) в /api/chat. Только модели
+        # OpenRouter: ol и yaml-провайдеры эту руку не получают. Движок закрепляем (не auto/native).
+        self.openrouter_web_search = _flag(_env("OPENROUTER_WEB_SEARCH", "1"), default=True)
+        engine = (_env("OPENROUTER_WEB_SEARCH_ENGINE", "exa") or "exa").strip().lower()
+        if engine not in {"exa", "parallel", "perplexity", "firecrawl"}:
+            engine = "exa"
+        self.openrouter_web_search_engine = engine
+        self.openrouter_web_search_max_results = _bounded_int(
+            _env("OPENROUTER_WEB_SEARCH_MAX_RESULTS", "5"), 5, 1, 25
+        )
+        self.openrouter_web_search_max_uses = _bounded_int(
+            _env("OPENROUTER_WEB_SEARCH_MAX_USES", "3"), 3, 1, 30
+        )
+        self.openrouter_web_search_daily_limit = _bounded_int(
+            _env("OPENROUTER_WEB_SEARCH_DAILY_LIMIT", "20"), 20, 0, 1000
+        )
 
         # OAuth (Google / Apple Sign-In). Disabled until all required vars are set.
         # PUBLIC_BASE_URL is used to build redirect URIs, e.g. https://example.com
@@ -211,13 +245,14 @@ class Settings:
         return f"sqlite:///{sqlite_path}"
 
     @staticmethod
-    def _ollama_openai_base(raw: str) -> str:
-        value = raw.strip().rstrip("/")
-        if not value:
-            return ""
-        if value.endswith("/v1"):
-            return value
-        return f"{value}/v1"
+    def _parse_model_list(raw: str) -> frozenset[str] | None:
+        """Comma-separated public model ids. Empty → unrestricted (None)."""
+        items = [part.strip() for part in raw.split(",") if part.strip()]
+        return frozenset(items) if items else None
+
+    @staticmethod
+    def _parse_email_list(raw: str) -> frozenset[str]:
+        return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
 
     @property
     def mzg_sites_enabled(self) -> bool:
@@ -242,6 +277,27 @@ class Settings:
     @property
     def image_generation_enabled(self) -> bool:
         return bool(self.openrouter_api_key and self.s3_enabled)
+
+    @property
+    def brave_search_enabled(self) -> bool:
+        return bool(self.brave_search_api_key)
+
+    @property
+    def yandex_search_enabled(self) -> bool:
+        return bool(self.yandex_search_api_key and self.yandex_search_folder_id)
+
+    @property
+    def web_search_enabled(self) -> bool:
+        return self.brave_search_enabled or self.yandex_search_enabled
+
+    @property
+    def openrouter_web_search_enabled(self) -> bool:
+        """Поиск OpenRouter: ключ есть, флаг не снят, суточный лимит не ноль."""
+        return bool(
+            self.openrouter_api_key
+            and self.openrouter_web_search
+            and self.openrouter_web_search_daily_limit > 0
+        )
 
     @property
     def google_redirect_uri(self) -> str:

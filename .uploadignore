@@ -8,6 +8,7 @@
 .env
 .env.*
 .env.example
+ai-providers.yaml
 
 # VCS and tooling
 .git/
@@ -57,5 +58,15 @@ frontend/.gitignore
 frontend/public/
 !frontend/dist/
 !frontend/dist/**
+
+# Admin UI source; upload built assets only
+admin/node_modules/
+admin/src/
+admin/*.json
+admin/*.html
+admin/*.ts
+admin/.gitignore
+!admin/dist/
+!admin/dist/**
 
 .playwright-cli/

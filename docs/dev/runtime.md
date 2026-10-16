@@ -24,18 +24,18 @@ make test-coverage
 
 ## Node.js 24
 
-Нужен только для сборки и разработки чата (`frontend/`). В runtime приложения уходит статика из `frontend/dist` (`/chat-ui/`), плюс `dist/sw.js`, `dist/manifest.webmanifest` и `dist/favicon.ico` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico`), чтобы service worker получил scope `/` и покрыл `/chat`.
+Нужен для сборки чата (`frontend/`) и админки (`admin/`). В runtime уходит статика из `frontend/dist` (`/chat-ui/`) и `admin/dist` (`/admin-ui/`). Плюс `frontend/dist/sw.js`, `dist/manifest.webmanifest` и `dist/favicon.ico` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico`), чтобы service worker получил scope `/` и покрыл `/chat`.
 
 | Pin | Где |
 |-----|-----|
 | `24` | `.nvmrc` (nvm / fnm) |
-| `engines.node = ">=24"` | `frontend/package.json` |
+| `engines.node = ">=24"` | `frontend/package.json`, `admin/package.json` |
 
 ```bash
 nvm use                 # читает .nvmrc → Node 24
 node --version          # v24.x
 make frontend-install
-make frontend-build     # ассеты в frontend/dist (+ dist/sw.js — service worker PWA)
+make frontend-build     # frontend/dist (/chat-ui/) и admin/dist (/admin-ui/)
 cd frontend && npm run test
 ```
 
@@ -50,8 +50,8 @@ PWA (установка, офлайн) работает только на соб
 
 ## Что не меняется
 
-- Бэкенд LLM: OpenRouter (free-модели), опционально e7 (Ollama) и ol (Ollama Cloud).
-- Публичные id моделей без суффикса `:free`; `default` → upstream `openrouter/free`.
-- Модель чата выбирается в `/settings`, не на странице чата.
+- Бэкенд LLM: OpenRouter (free-модели), опционально ol (Ollama Cloud) и провайдеры из `ai-providers.yaml`.
+- Публичные id моделей без суффикса `:free`; `default` → эффективный дефолт (админка или `DEFAULT_MODEL`, иначе `openrouter/free`).
+- Модель чата выбирается в `/settings`, не на странице чата. Белый список и дефолт витрины — в `/admin` (`ADMIN_EMAILS`).
 
 Подробности запуска, env и API — в `README.md` в корне репозитория.

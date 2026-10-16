@@ -13,8 +13,6 @@ def test_settings_defaults(monkeypatch):
         "ARIZE_API_KEY",
         "NEW_RELIC_LICENSE_KEY",
         "NEW_RELIC_USER_KEY",
-        "E7_BY_BASE_URL",
-        "E7_BY_API_KEY",
         "DEFAULT_MODEL",
         "SYSTEM_PROMPT",
         "TITLE_MODEL",
@@ -28,6 +26,11 @@ def test_settings_defaults(monkeypatch):
         "S3_TENANT_ID",
         "LOG_LEVEL",
         "DEBUG",
+        "OPENROUTER_WEB_SEARCH",
+        "OPENROUTER_WEB_SEARCH_ENGINE",
+        "OPENROUTER_WEB_SEARCH_MAX_RESULTS",
+        "OPENROUTER_WEB_SEARCH_MAX_USES",
+        "OPENROUTER_WEB_SEARCH_DAILY_LIMIT",
     ):
         monkeypatch.delenv(key, raising=False)
     settings = Settings()
@@ -43,13 +46,23 @@ def test_settings_defaults(monkeypatch):
     assert not settings.arize_enabled
     assert not settings.new_relic_enabled
     assert not settings.openrouter_enabled
-    assert not settings.e7_by_enabled
-    assert settings.e7_by_base_url == ""
+    assert not settings.ol_enabled
     assert not settings.s3_enabled
     assert not settings.image_generation_enabled
     assert settings.feedback_webhook_url == ""
     assert settings.image_generation_daily_limit == 5
+    assert settings.web_search_daily_limit == 20
+    assert settings.web_search_result_count == 5
+    assert not settings.web_search_enabled
+    assert not settings.brave_search_enabled
+    assert not settings.yandex_search_enabled
     assert settings.image_generation_model == "black-forest-labs/flux.2-klein-4b"
+    assert settings.openrouter_web_search is True
+    assert not settings.openrouter_web_search_enabled
+    assert settings.openrouter_web_search_engine == "exa"
+    assert settings.openrouter_web_search_max_results == 5
+    assert settings.openrouter_web_search_max_uses == 3
+    assert settings.openrouter_web_search_daily_limit == 20
     assert settings.log_level_name == "INFO"
     assert settings.log_level == logging.INFO
     assert not settings.debug
@@ -132,20 +145,6 @@ def test_settings_pzz_flags(monkeypatch):
 def test_settings_feedback_webhook(monkeypatch):
     monkeypatch.setenv("FEEDBACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/x")
     assert Settings().feedback_webhook_url == "https://hooks.slack.com/services/T/B/x"
-
-
-def test_settings_e7_by_base_url(monkeypatch):
-    monkeypatch.setenv("E7_BY_BASE_URL", "http://127.0.0.1:11434")
-    monkeypatch.setenv("E7_BY_API_KEY", "ollama-key")
-    monkeypatch.setenv("E7_BY_TIMEOUT", "120")
-    settings = Settings()
-    assert settings.e7_by_enabled
-    assert settings.e7_by_base_url == "http://127.0.0.1:11434/v1"
-    assert settings.e7_by_api_key == "ollama-key"
-    assert settings.e7_by_timeout == 120.0
-
-    monkeypatch.setenv("E7_BY_BASE_URL", "http://host.example/v1/")
-    assert Settings().e7_by_base_url == "http://host.example/v1"
 
 
 def test_settings_log_level(monkeypatch):

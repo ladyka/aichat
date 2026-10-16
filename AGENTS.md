@@ -13,37 +13,42 @@
 
 ### Product facts (не ломать без явной просьбы)
 
-- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **e7** (`E7_BY_BASE_URL`) и **ol** (`OLLAMA_API_KEY`). Без ключа OpenRouter провайдер не вызывается.
-- Публичный id `default` указывает на цель из `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash`).
+- Бэкенд LLM: **OpenRouter** (при `OPENROUTER_API_KEY`), опционально **ol** (`OLLAMA_API_KEY`) и провайдеры из **`ai-providers.yaml`**. Без ключа OpenRouter встроенный OpenRouter не вызывается.
+- Публичный id `default` указывает на цель из эффективного дефолта: сначала переопределение в админке (`app_settings`), иначе `DEFAULT_MODEL` (`default` → `openrouter/free`, либо конкретный id вроде `ol/glm-5.3-flash` или `groq/…` из yaml).
+- Белый список моделей: `ALLOWED_MODELS` (пусто — без ограничения) или переопределение в `/admin`. Доступ в админку — по `ADMIN_EMAILS`.
 - Пользователям показываем только **free**-модели OpenRouter; в публичных id **нет** суффикса `:free`.
-- Модели e7 в публичных id: `e7/<ollama-model>` (`owned_by`: `e7`).
 - Модели ol в публичных id: `ol/<ollama-model>` (`owned_by`: `ol`).
+- Yaml-провайдеры: публичные id `<id>/<model>`; ключ и `base_url` в yaml (`api_key` лучше через `${ENV}`); модели — список `models` или GET `models_url`.
 - UI и API не должны светить `:free` / `openrouter/free` как имя модели наружу.
 - Модель чата выбирается в **/settings** (`User.preferred_model`), не на странице чата. Страница — одна карточка с двумя разделами: «Чат» (`/settings#chat`: модель и навыки для новых чатов) и «API-токены» (`/settings#api`). Адрес в примере `curl` берётся из `public_origin()` (`PUBLIC_BASE_URL`, иначе хост запроса), а не пишется в шаблоне руками.
 - Истории чатов хранятся в БД (`Conversation` / `Message`).
 - У чата в UI одна markdown-заметка (в БД M2M `notes` ↔ `conversations`); шаринга заметок нет.
 - Skills приватны по умолчанию. В каталоге только опубликованные. В чат и в дефолты — только свои (чужой — через копию). Набор чата можно менять по ходу диалога.
-- Биллинга в MVP нет. У `generate_image` есть суточный лимит (`IMAGE_GENERATION_DAILY_LIMIT`), полный ledger — позже (`docs/product/v2/billing.md`). Эту строку менять только вместе с эпиком и его страницей.
+- Биллинга в MVP нет. У `generate_image` и `web_search` есть суточные лимиты (`IMAGE_GENERATION_DAILY_LIMIT`, `WEB_SEARCH_DAILY_LIMIT`), полный ledger — позже (`docs/product/v2/billing.md`). Эту строку менять только вместе с эпиком и его страницей.
 - **Витрина этого репозитория — для обычных людей** (простой чат, бытовые tools). Не заменять её на LibreChat и не тащить сюда корпоративный ACL/агентский зоопарк.
 - **Деплой сайта**: у пользователя один сайт `<имя>.mzg.by`; содержимое — заметка чата, публикация кладёт `<имя>.md` в `MZG_SITES_FOLDER` (пусто — инструменты выключены). Таблица `user_sites`.
 - **Компании — отдельный деплой LibreChat** (OAuth/SSO, роли, агенты). Бытовые tools витрины туда не вырезать; при необходимости — обёртка снаружи (MCP/OpenAPI). См. `docs/product/audiences.md`.
 - **Версия 1 выпущена** (план исполнен, работает на проде): факт — витрина (чат, tools, API, PWA) и **skills с каталогом навыков**; новых функций в v1 не будет. По функциям — `docs/product/v1/`.
-- **Версия 2 — в планах** (`docs/product/v2/`): решённое, но не сделанное; на витрине — **ИИ-диктофон** (`/dictaphone`, план — `docs/product/v2/dictaphone.md`), голосовой чат, заметки 2, веб-поиск, биллинг, приложение на телефон (вторая часть офлайна и магазины); **отдельной выкладкой** — LibreChat для компаний. Порядка внутри нет, очередь не выбрана. В коде из этого нет ничего. См. `docs/product/roadmap.md`.
+- **Версия 2 — в планах** (`docs/product/v2/`): решённое, но в основном не сделанное. На витрине уже есть веб-поиск: рука `web_search` (Brave Search API и Yandex Search API v2) и серверный `openrouter:web_search` на моделях OpenRouter (план — `docs/product/v2/websearch.md`). Дальше — **ИИ-диктофон** (`/dictaphone`, план — `docs/product/v2/dictaphone.md`), голосовой чат, заметки 2, биллинг, приложение на телефон (вторая часть офлайна и магазины); **отдельной выкладкой** — LibreChat для компаний. Порядка внутри нет, очередь не выбрана. Кроме веб-поиска, в коде из этого списка ничего нет. См. `docs/product/roadmap.md`.
 
 ### Where things live
 
 | Путь | Назначение |
 |------|------------|
-| `app/main.py` | FastAPI app, static + `/chat-ui` mount |
+| `app/main.py` | FastAPI app, static + `/chat-ui` и `/admin-ui` mount |
 | `app/config.py` | env / settings (`LOG_LEVEL` — уровень логов приложения и uvicorn) |
 | `app/db.py` | SQLAlchemy models; `init_db()` гоняет Alembic `upgrade head` |
 | `skills` / `user_skill_defaults` / `conversation_skills` / `skill_shares` | Skills: свой markdown, копия с `parent_id`, дефолты новых чатов, набор чата (можно менять), шаринг в каталог |
 | `alembic.ini`, `migrations/` | Ревизии схемы БД (не `create_all` / ручной `ALTER`) |
 | `app/auth.py` | пароли, cookie-сессии, API tokens |
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
-| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, e7 (Ollama); OpenRouter ещё `POST /images` |
+| `app/ai_providers.py` | разбор `ai-providers.yaml` |
+| `app/site_settings.py` | эффективный дефолт и белый список моделей (БД поверх env) |
+| `app/routes/admin.py` | `/admin` (оболочка) и `/api/admin/models` — дефолт и белый список |
+| `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, ol, `openai_compat` (yaml) |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
-| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`) |
+| `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, `web_search`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`), веб-поиск OpenRouter (`attach_openrouter_web_search`) |
+| `app/search.py` | Brave Search API и Yandex Search API v2 для `web_search` |
 | `app/mzg.py` | mzg.by: сайты пользователей — домен `<имя>.mzg.by`, один сайт на пользователя (создать / сменить домен = удалить+создать / удалить / статус), публикация заметки как `<имя>.md` в `MZG_SITES_FOLDER` |
 | `app/feedback.py` | `send_feedback`: Incoming Webhook Slack/Discord (`FEEDBACK_WEBHOOK_URL`) |
 | `app/notes.py` | CRUD markdown-заметки чата (M2M `notes` / `conversation_notes`) |
@@ -62,6 +67,7 @@
 | `app/og.py` | Open Graph: абсолютные URL превью, сниппет описания |
 | `app/visitors.py` | классификация User-Agent: human / crawler / bot |
 | `frontend/` | React + assistant-ui (чат) |
+| `admin/` | отдельное React-приложение админки (`/admin`, сборка → `/admin-ui/`) |
 | `frontend/src/sw.ts` | PWA: service worker (кеш API + офлайн-оболочка; сборка → `dist/sw.js`). Собирается `tsconfig.sw.json`, `tsconfig.app.json` его исключает — DOM- и WebWorker-lib несовместимы |
 | `frontend/public/` | PWA: `manifest.webmanifest` (версионируемый, `start_url` `/chat`) + иконки + `favicon.ico` (генератор — `scripts/generate_pwa_icons.py`). PWA-теги — только в `templates/chat.html` |
 | `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация, markdown-ссылки, автотема) |
@@ -91,19 +97,19 @@
 - При completions в лог пиши: `aichat_model=…` `provider=…` `upstream_model=…`.
 - Сбой чата или руки — сначала трейс Phoenix (вставка спана, `session.id`, фильтр ERROR). Какие поля смотреть и как выгрузить — `docs/dev/tracing.md`.
 - После изменений API/конфига/запуска — обнови `README.md` (и этот файл, если меняются правила агента).
-- Перед проверкой `/chat`: `make frontend-build` (ассеты в `frontend/dist`, отдаются как `/chat-ui/`).
+- Перед проверкой `/chat` и `/admin`: `make frontend-build` (чат — `frontend/dist` как `/chat-ui/`, админка — `admin/dist` как `/admin-ui/`).
 
 ### Getting started
 
 ```bash
-cp .env.example .env   # OPENROUTER_API_KEY; опционально E7_BY_BASE_URL
+cp .env.example .env   # OPENROUTER_API_KEY; опционально OLLAMA_API_KEY
 make venv              # python3.13 -m venv .venv
-make frontend-install && make frontend-build   # Node 24+
+make frontend-install && make frontend-build   # Node 24+: чат и админка
 make hooks             # git core.hooksPath=.githooks: тесты на коммите
 make run  # http://127.0.0.1:8080/
 ```
 
-`.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test` и не даёт
+`.githooks/pre-commit` прогоняет `make test-coverage`, `cd frontend && npm run test` и `cd admin && npm run test` и не даёт
 закоммитить красные тесты (обход — `--no-verify`). Хук срабатывает и на твоих коммитах: если тесты
 падают, сначала почини их (или скажи пользователю, что падает и почему), а не обходи проверку.
 

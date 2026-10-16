@@ -66,6 +66,7 @@ class User(Base):
         back_populates="user",
     )
     generated_images: Mapped[list["GeneratedImage"]] = relationship(back_populates="user")
+    web_searches: Mapped[list["WebSearch"]] = relationship(back_populates="user")
 
 
 class OAuthIdentity(Base):
@@ -448,6 +449,23 @@ class GeneratedImage(Base):
     user: Mapped[User] = relationship(back_populates="generated_images")
 
 
+class WebSearch(Base):
+    """Один вызов web_search: запрос ушёл в Brave и/или Yandex Search API."""
+
+    __tablename__ = "web_searches"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    query: Mapped[str] = mapped_column(String(400))
+    engines: Mapped[str] = mapped_column(String(32))
+    result_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    user: Mapped[User] = relationship(back_populates="web_searches")
+
+
 class UsageLog(Base):
     __tablename__ = "usage_logs"
 
@@ -461,6 +479,24 @@ class UsageLog(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AppSettings(Base):
+    """Singleton row (id=1): overrides for default and allowed models.
+
+    ``None`` in a column means «брать из переменных окружения».
+    """
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    default_model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    allowed_models: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
 
 _settings = get_settings()

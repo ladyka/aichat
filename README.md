@@ -1,6 +1,6 @@
 # aichat
 
-Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели) и опционально **e7** (Ollama).
+Веб-сервис: чат с LLM в браузере и OpenAI-совместимый API-прокси. Бэкенды: OpenRouter (free-модели), опционально **ol** (Ollama Cloud) и провайдеры из `ai-providers.yaml`.
 
 ## Возможности
 
@@ -11,9 +11,11 @@
 - UI-чат на **assistant-ui** (React): streaming, сворачиваемый список историй (закреплённые сверху; архив открывается кнопкой внизу списка)
 - Модель чата в **/settings** (не на экране чата); там же навыки для новых чатов и API-токены — разделы `/settings#chat` и `/settings#api`
 - API-токены (`aichat_…`) для `POST /v1/chat/completions`
-- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, модели e7 как `e7/<имя>` и облачные модели ollama.com как `ol/<имя>`
+- `GET /v1/models` — список моделей (кеш): free-модели OpenRouter без суффикса `:free`, облачные модели ollama.com как `ol/<имя>` и модели из `ai-providers.yaml` как `<id>/<имя>`
 - Модель `default` → на OpenRouter уходит `openrouter/free`
 - Погодные инструменты в чате (`get_weather` / `get_user_location` через OpenWeatherMap)
+- Веб-поиск в чате (`web_search`): Brave Search API и Yandex Search API v2. Рука появляется, если задан ключ хотя бы одной службы; в ответе — ссылки. Суточный лимит `WEB_SEARCH_DAILY_LIMIT`
+- Веб-поиск через OpenRouter (`openrouter:web_search`, по умолчанию движок Exa): модель сама уходит в интернет и отвечает со ссылками. Только модели OpenRouter; ol и yaml-провайдеры эту руку не получают. Выключается `OPENROUTER_WEB_SEARCH=0`
 - Генерация картинок в чате (`generate_image` → OpenRouter Flux.2 Klein 4B, файлы в S3 Cloud.ru). Нужны `OPENROUTER_API_KEY` и настройки S3; в `/settings` это не модель чата
 - Заказ еды с **pzz.by** (Пицца Лисицца): поиск меню, проверка адреса, оформление через чат
 - Обратная связь из чата (`send_feedback`): жалоба, идея или вопрос команде уходит на Incoming Webhook Slack (или Discord / любой POST JSON). Нужен `FEEDBACK_WEBHOOK_URL`; без него инструмента нет
@@ -29,15 +31,15 @@
 - Python **3.13+** (pin: `.python-version`, `make venv` → `python3.13`)
 - Node.js **24+** (pin: `.nvmrc`, `engines` в `frontend/package.json`)
 - Ключ OpenRouter (`OPENROUTER_API_KEY`)
-- Для моделей e7 — `E7_BY_BASE_URL` (Ollama)
 - Для моделей ol — `OLLAMA_API_KEY` (Ollama Cloud)
+- Для доп. провайдеров — `ai-providers.yaml` (см. `ai-providers.example.yaml`)
 
 ### Запуск
 
 ```bash
 cp .env.example .env
 # заполните OPENROUTER_API_KEY
-# при необходимости: E7_BY_BASE_URL (Ollama e7), OLLAMA_API_KEY (Ollama Cloud ol)
+# при необходимости: OLLAMA_API_KEY (Ollama Cloud ol), ai-providers.yaml
 
 # nvm use   # Node 24 из .nvmrc
 make venv                 # python3.13 -m venv .venv
@@ -80,13 +82,13 @@ Git-хук на коммит (один раз после клонировани�
 make hooks     # git config core.hooksPath .githooks
 ```
 
-Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test`;
+Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage`, `cd frontend && npm run test` и `cd admin && npm run test`;
 если что-то падает — коммит не создаётся. `--no-verify` обходит проверку. Если `.venv` или
 `frontend/node_modules` нет, соответствующие тесты пропускаются с предупреждением (на свежем клоне
 это ожидаемо).
 
 Тесты не должны зависеть от конкретного `.env`: `tests/conftest.py` до импорта приложения
-выставляет окружение (SQLite, `DEFAULT_MODEL`, пустые ключи e7/ol/S3, флаги pzz) — `load_dotenv`
+выставляет окружение (SQLite, `DEFAULT_MODEL`, пустые ключи ol/S3, флаги pzz) — `load_dotenv`
 не перетирает уже заданные переменные, поэтому локальные секреты и `SYSTEM_PROMPT` на юнит-тесты
 не влияют.
 
@@ -130,13 +132,14 @@ cd frontend && npm run dev   # :5173
 | Переменная | Назначение |
 |------------|------------|
 | `OPENROUTER_API_KEY` | Серверный ключ OpenRouter. Пусто — провайдер выключен |
-| `E7_BY_BASE_URL` | Ollama e7: хост или `.../v1`. Пусто — провайдер выключен |
-| `E7_BY_API_KEY` | Опциональный ключ для e7 |
-| `E7_BY_TIMEOUT` | Таймаут completions e7 (сек, по умолчанию 300) |
 | `OLLAMA_API_KEY` | Ключ Ollama Cloud для провайдера ol. Пусто — провайдер выключен |
 | `OLL_HOST` | Хост ollama для ol (по умолчанию `https://ollama.com`) |
 | `OLL_TIMEOUT` | Таймаут completions ol (сек, по умолчанию 300) |
-| `DEFAULT_MODEL` | Куда указывает публичный id `default`: `default` → openrouter/free, или конкретный id (`ol/…`, `e7/…`, модель OpenRouter) |
+| `DEFAULT_MODEL` | Куда указывает публичный id `default`: `default` → openrouter/free, или конкретный id (`ol/…`, yaml `id/…`, модель OpenRouter). Админка `/admin` может переопределить в БД |
+| `ALLOWED_MODELS` | Белый список публичных id через запятую. Пусто — без ограничения. Админка может переопределить в БД |
+| `ADMIN_EMAILS` | Email администраторов через запятую. Пусто — `/admin` никому не открыт |
+| `AI_PROVIDERS_FILE` | Путь к `ai-providers.yaml` (доп. OpenAI-совместимые провайдеры; образец — `ai-providers.example.yaml`, там же Mistral) |
+| `MISTRAL_API_KEY` | Ключ Mistral для провайдера `mistral` в yaml. Публичные id: `mistral/<model>` |
 | `SYSTEM_PROMPT` | Системный промпт всех диалогов. Не задан — дефолт из `app/config.py`, пустой — отключён |
 | `TITLE_MODEL` | Модель фонового определения темы диалога (после 1-го, 2-го, 5-го ответа робота). Пусто — дефолтная из `DEFAULT_MODEL` (id `default`) |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |
@@ -144,6 +147,14 @@ cd frontend && npm run dev   # :5173
 | `MAX_TOKENS_PER_USER` | Максимум активных API-токенов на пользователя (по умолчанию `10`) |
 | `SHARE_TTL_DAYS` | Срок действия ссылки на общий чат `/s/<key>` (по умолчанию `30`) |
 | `OPENWEATHER_API_KEY` | Ключ OpenWeatherMap: включает инструменты погоды `get_weather` и `get_user_location` в `/api/chat`. Пусто — инструменты отключены |
+| `BRAVE_SEARCH_API_KEY` | Ключ Brave Web Search (`X-Subscription-Token`). Включает `web_search` для Brave. Пусто — Brave выключен |
+| `YANDEX_SEARCH_API_KEY` / `YANDEX_SEARCH_FOLDER_ID` | Yandex Search API v2: оба поля включают поиск Яндекса (`Authorization: Api-Key` и `folderId`, `POST https://searchapi.api.cloud.yandex.net/v2/web/search`) |
+| `WEB_SEARCH_DAILY_LIMIT` | Вызовов `web_search` на пользователя в сутки UTC (по умолчанию `20`) |
+| `OPENROUTER_WEB_SEARCH` | Веб-поиск OpenRouter в `/api/chat` (`openrouter:web_search`). По умолчанию включён (`1`); `0` — выключить. Только модели OpenRouter |
+| `OPENROUTER_WEB_SEARCH_ENGINE` | Движок поиска: `exa` (по умолчанию), `parallel`, `perplexity`, `firecrawl`. Не `auto` и не `native` |
+| `OPENROUTER_WEB_SEARCH_MAX_RESULTS` | Результатов на один поиск (1–25, по умолчанию `5`) |
+| `OPENROUTER_WEB_SEARCH_MAX_USES` | Поисков за один ответ (1–30, по умолчанию `3`) |
+| `OPENROUTER_WEB_SEARCH_DAILY_LIMIT` | Поисков на человека в сутки UTC (по умолчанию `20`). `0` — рука выключена |
 | `PZZ_ENABLED` | Инструменты pzz.by в `/api/chat` (`pzz_search_menu`, `pzz_lookup_address`, `pzz_place_order`). По умолчанию включены (`1`) |
 | `PZZ_ORDERS_ENABLED` | Разрешить реальную отправку заказа на pzz.by (`confirm=true`). `0` — только черновик и ссылка на сайт |
 | `FEEDBACK_WEBHOOK_URL` | Incoming Webhook Slack (или Discord / любой POST JSON с полем `text`): включает `send_feedback` в `/api/chat`. Пусто — инструмент выключен |
@@ -194,6 +205,8 @@ Redirect URI (прописать в кабинете 1:1):
 Трейсы смотрим в [Arize app](https://app.ca-central-1a.arize.com/). Как агенту разбирать спаны и какие поля туда пишутся: **[docs/dev/tracing.md](docs/dev/tracing.md)**.
 
 Погода в чате (`/api/chat`): модель может запросить `get_weather` по городу или координатам. Если локация не указана — модель вызывает `get_user_location`, и фронтенд запрашивает доступ к геолокации браузера (`navigator.geolocation`); координаты после разрешения передаются в чат и кешируются на 2 часа. **Геолокация работает только по HTTPS** (или `localhost`) — иначе браузер не даст доступ, и модель попросит назвать город текстом.
+
+Веб-поиск в том же `/api/chat`: на моделях OpenRouter к рукам добавляется серверная `openrouter:web_search`. Модель сама решает, искать ли; OpenRouter ходит в выбранный движок (по умолчанию Exa) и возвращает ссылки. ol и yaml-провайдеры эту руку не получают. Выключить: `OPENROUTER_WEB_SEARCH=0`. Суточный потолок — `OPENROUTER_WEB_SEARCH_DAILY_LIMIT`. В `/v1` рука не отдаётся.
 
 Пицца Лисицца (`pzz.by`) в том же `/api/chat`: модель ищет меню (`pzz_search_menu`), проверяет улицу/дом в их справочнике (`pzz_lookup_address`) и может отправить заказ (`pzz_place_order`). Официального партнёрского API нет — используется тот же JSON, что и у сайта (каталог `GET /api/v1/{pizzas|snacks|…}`, заказ через cookie-сессию, корзину и `POST /api/v1/basket/save`). Через чат уходит только оплата **наличными курьеру**; онлайн-оплата bePaid в боте не проводится. Отправка на кухню — только после явного согласия пользователя (`confirm=true`). Имя, телефон и адрес передаются на pzz.by. Выключить меню: `PZZ_ENABLED=0`; запретить отправку, оставив подбор состава: `PZZ_ORDERS_ENABLED=0`.
 
@@ -246,6 +259,7 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
+admin/         # React-админка (сборка → admin/dist → /admin-ui/; страница /admin, cookie-сессия)
 frontend/public/  # PWA: manifest.webmanifest + иконки + favicon.ico (коммитятся; генератор — scripts/generate_pwa_icons.py)
 frontend/src/sw.ts # PWA: service worker (сборка → dist/sw.js, бэкенд отдаёт его как /sw.js)
 templates/     # Jinja2: лендинг, о сервисе, auth, settings, tokens, skills, catalog, chat shell
@@ -271,7 +285,7 @@ make update-prod   # собирает frontend, затем FTP
 make update-requirements-prod  # заливает на FTP только requirements.txt
 ```
 
-Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
+Сборка чата и админки (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
 
 PWA-артефакты (`dist/sw.js`, `dist/manifest.webmanifest`, иконки — включая `favicon.ico`, который бэкенд отдаёт из корня как `/favicon.ico`) уезжают вместе с остальной сборкой. Иконки в `frontend/public/` **коммитятся**: `scripts/deploy_ftp.py` отказывается работать на «грязном» git-дереве, так что перед `make update-prod` их нужно закоммитить. Учтите и обратную сторону: `plan_sync` удаляет на проде файлы, которых нет в локальной сборке, — если собрать фронт без PWA-плагина, `dist/sw.js` пропадёт локально и будет удалён на сервере (чат при этом продолжит работать, но без офлайна).
 

@@ -65,6 +65,13 @@ def create_app() -> FastAPI:
             StaticFiles(directory=str(chat_ui_dir)),
             name="chat-ui",
         )
+    admin_ui_dir = settings.root / "admin" / "dist"
+    if admin_ui_dir.is_dir():
+        app.mount(
+            "/admin-ui",
+            StaticFiles(directory=str(admin_ui_dir)),
+            name="admin-ui",
+        )
     return app
 
 

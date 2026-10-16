@@ -1,6 +1,7 @@
 .version
 .env
 *.env.local
+ai-providers.yaml
 .DS_Store
 __pycache__/
 .venv/
@@ -11,6 +12,8 @@ data/
 site/
 frontend/node_modules/
 frontend/dist/
+admin/node_modules/
+admin/dist/
 .coverage
 .pytest_cache/
 data/

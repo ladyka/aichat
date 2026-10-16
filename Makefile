@@ -24,9 +24,11 @@ $(VENV)/bin/python:
 
 frontend-install:
 	cd frontend && $(NPM) install
+	cd admin && $(NPM) install
 
 frontend-build:
 	cd frontend && $(NPM) run build
+	cd admin && $(NPM) run build
 
 migrate: $(VENV)/bin/python
 	$(PYTHON) -m alembic upgrade head

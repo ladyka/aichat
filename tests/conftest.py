@@ -10,10 +10,12 @@ os.environ["OPENROUTER_API_KEY"] = "sk-test"
 os.environ["MODELS_CACHE_TTL"] = "3600"
 # Fix the default model so tests don't follow DEFAULT_MODEL from the local .env.
 os.environ["DEFAULT_MODEL"] = "default"
-# Keep local .env e7 credentials from hitting the network in unit tests.
-os.environ["E7_BY_BASE_URL"] = ""
-os.environ["E7_BY_API_KEY"] = ""
-# Same for the ol (Ollama Cloud) provider.
+# Admin / allowlist: локальный .env не должен открывать /admin или сужать каталог.
+os.environ["ADMIN_EMAILS"] = ""
+os.environ["ALLOWED_MODELS"] = ""
+# Локальный ai-providers.yaml не должен подмешивать модели в юнит-тесты.
+os.environ["AI_PROVIDERS_FILE"] = "ai-providers.missing-for-tests.yaml"
+# Keep local .env ol credentials from hitting the network in unit tests.
 os.environ["OLLAMA_API_KEY"] = ""
 # S3 + OpenRouter keys from the local .env would switch generate_image on, and the
 # tool lists asserted below would silently gain an entry.
@@ -53,6 +55,15 @@ os.environ["FEEDBACK_WEBHOOK_URL"] = ""
 # the exact tool lists asserted in tests/test_tools.py. Tests that exercise
 # them (tests/test_mzg.py) enable a temporary folder via monkeypatch.
 os.environ["MZG_SITES_FOLDER"] = ""
+# Ключи поиска из локального .env включили бы web_search в точные списки рук.
+os.environ["BRAVE_SEARCH_API_KEY"] = ""
+os.environ["YANDEX_SEARCH_API_KEY"] = ""
+os.environ["YANDEX_SEARCH_FOLDER_ID"] = ""
+os.environ["WEB_SEARCH_DAILY_LIMIT"] = ""
+os.environ["WEB_SEARCH_RESULT_COUNT"] = ""
+# OpenRouter web_search would append a server tool to every /api/chat payload
+# and break tests that read t["function"]["name"] for each advertised tool.
+os.environ["OPENROUTER_WEB_SEARCH"] = "0"
 # SYSTEM_PROMPT is also a deployment setting; a local value would change the first
 # message of every payload asserted in tests/test_tools.py. Drop it so the built-in
 # default (app.config.DEFAULT_SYSTEM_PROMPT) applies — it is itself covered in

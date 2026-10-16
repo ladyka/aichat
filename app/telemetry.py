@@ -255,6 +255,10 @@ def payload_for_trace(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         function = tool.get("function") or {}
         name = function.get("name") if isinstance(function, dict) else None
+        if not name:
+            tool_type = tool.get("type")
+            if isinstance(tool_type, str) and tool_type.startswith("openrouter:"):
+                name = tool_type
         if name:
             tool_names.append(str(name))
     if tool_names:

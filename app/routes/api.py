@@ -13,13 +13,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import telemetry as telemetry_mod
+from app.ai_providers import to_yaml_public_id
 from app.auth import get_user_from_api_token, get_user_from_session
 from app.config import get_settings
 from app.db import ApiToken, ApiTokenUsage, UsageLog, User, get_db
-from app.model_providers import e7by, ol
+from app.model_providers import ol, openai_compat
 from app.model_providers.openrouter import chat_completions, stream_chat_completions
 from app.models_catalog import (
-    PROVIDER_E7_BY,
     PROVIDER_OL,
     PROVIDER_OPENROUTER,
     PUBLIC_DEFAULT_ID,
@@ -27,16 +27,18 @@ from app.models_catalog import (
     ModelRoute,
     get_models_list,
     resolve_model,
-    to_e7_public_id,
     to_ol_public_id,
     to_public_id,
 )
+from app.site_settings import get_effective_default_model
 from app.skills import inject_conversation_skills
 from app.tools import (
+    attach_openrouter_web_search,
     call_tool,
     enabled_tools,
     extract_tool_calls,
     tool_progress_line,
+    web_search_requests_from_usage,
 )
 
 router = APIRouter()
@@ -55,8 +57,7 @@ def _trace_user(user: User, session_id: str):
 
 
 def _normalize_public_model(model: str | None) -> str:
-    settings = get_settings()
-    value = (model or "").strip() or settings.default_model
+    value = (model or "").strip() or get_effective_default_model()
     if value in (UPSTREAM_DEFAULT_ID, PUBLIC_DEFAULT_ID):
         return PUBLIC_DEFAULT_ID
     return value
@@ -69,10 +70,10 @@ def _response_model_id(route: ModelRoute, reported: str | None) -> str:
     провайдер её сообщил — иначе оставляем `default` (когда цель — openrouter/free).
     """
     if reported:
-        if route.provider == PROVIDER_E7_BY:
-            return to_e7_public_id(reported) or route.public_id
         if route.provider == PROVIDER_OL:
             return to_ol_public_id(reported) or route.public_id
+        if route.provider not in (PROVIDER_OPENROUTER, PROVIDER_OL):
+            return to_yaml_public_id(route.provider, reported) or route.public_id
         public = to_public_id(reported)
         if route.public_id == PUBLIC_DEFAULT_ID and public == PUBLIC_DEFAULT_ID:
             return PUBLIC_DEFAULT_ID
@@ -122,24 +123,26 @@ def _payload_from_body(body: dict[str, Any]) -> tuple[ModelRoute, dict[str, Any]
 
 
 async def _call_chat(route: ModelRoute, payload: dict[str, Any]):
-    if route.provider == PROVIDER_E7_BY:
-        return await e7by.chat_completions(payload)
     if route.provider == PROVIDER_OL:
         return await ol.chat_completions(payload)
-    return await chat_completions(payload)
+    if route.provider == PROVIDER_OPENROUTER:
+        return await chat_completions(payload)
+    return await openai_compat.chat_completions(route.provider, payload)
 
 
 def _stream_completions(route: ModelRoute, payload: dict[str, Any]) -> AsyncIterator[bytes]:
-    if route.provider == PROVIDER_E7_BY:
-        return e7by.stream_chat_completions(payload)
     if route.provider == PROVIDER_OL:
         return ol.stream_chat_completions(payload)
-    return stream_chat_completions(payload)
+    if route.provider == PROVIDER_OPENROUTER:
+        return stream_chat_completions(payload)
+    return openai_compat.stream_chat_completions(route.provider, payload)
 
 
 def _log_usage(db: Session, user: User, model: str, source: str, usage: dict | None) -> None:
     if not usage:
         return
+    searches = web_search_requests_from_usage(usage)
+    detail = json.dumps({"web_search_requests": searches}, ensure_ascii=False) if searches else None
     db.add(
         UsageLog(
             user_id=user.id,
@@ -147,9 +150,17 @@ def _log_usage(db: Session, user: User, model: str, source: str, usage: dict | N
             prompt_tokens=int(usage.get("prompt_tokens") or 0),
             completion_tokens=int(usage.get("completion_tokens") or 0),
             source=source,
+            detail=detail,
         )
     )
     db.commit()
+    if searches:
+        logger.info(
+            "openrouter web_search billed user_id=%s requests=%s source=%s",
+            user.id,
+            searches,
+            source,
+        )
 
 
 def _api_usage_exceeded(db: Session, token: ApiToken) -> JSONResponse | None:
@@ -449,12 +460,12 @@ async def _stream_tool_loop_body(
             elif _sse_has_content(prefix):
                 classified = "text"
         if classified is None:
-            async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
+            async for chunk in _forward_final_stream(prefix, stream, route, db, user, source):
                 yield chunk
             return
         if classified == "text":
             # Plain answer: forward the buffered prefix, stream the rest live.
-            async for chunk in _rewrite_chunks(_prefix_then(prefix, stream), route):
+            async for chunk in _forward_final_stream(prefix, stream, route, db, user, source):
                 yield chunk
             return
 
@@ -560,15 +571,49 @@ async def _prefix_then(prefix: bytes, rest: AsyncIterator[bytes]) -> AsyncIterat
         yield chunk
 
 
-async def _rewrite_chunks(chunks: AsyncIterator[bytes], route: ModelRoute) -> AsyncIterator[bytes]:
+def _sse_usage(raw: bytes) -> dict[str, Any] | None:
+    """Последний объект usage из SSE (OpenRouter отдаёт его в финальном кадре)."""
+    found: dict[str, Any] | None = None
+    for line in raw.split(b"\n"):
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            continue
+        data = stripped[5:].strip()
+        if not data or data == b"[DONE]":
+            continue
+        try:
+            obj = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and isinstance(obj.get("usage"), dict):
+            found = obj["usage"]
+    return found
+
+
+async def _forward_final_stream(
+    prefix: bytes,
+    rest: AsyncIterator[bytes],
+    route: ModelRoute,
+    db: Session,
+    user: User,
+    source: str,
+) -> AsyncIterator[bytes]:
+    """Прокинуть финальный текст и записать поиски OpenRouter из usage потока."""
+    collected = bytearray()
     buffer = b""
-    async for chunk in chunks:
+    async for chunk in _prefix_then(prefix, rest):
         buffer += chunk
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
+            collected.extend(line)
+            collected.extend(b"\n")
             yield _rewrite_sse_line(line, route) + b"\n"
     if buffer:
+        collected.extend(buffer)
         yield _rewrite_sse_line(buffer, route)
+    usage = _sse_usage(bytes(collected))
+    if web_search_requests_from_usage(usage):
+        _log_usage(db, user, route.public_id, source, usage)
 
 
 def _sse_has_content(raw: bytes) -> bool:
@@ -696,6 +741,8 @@ async def _proxy_inner(
         known_location = _body_location(body)
 
     route, payload = _payload_from_body(body)
+    if source == "chat":
+        payload = attach_openrouter_web_search(payload, provider=route.provider, user=user, db=db)
 
     logger.info(
         "completions user_id=%s source=%s aichat_model=%s provider=%s upstream_model=%s",
