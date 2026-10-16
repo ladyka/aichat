@@ -24,18 +24,18 @@ make test-coverage
 
 ## Node.js 24
 
-Нужен только для сборки и разработки чата (`frontend/`). В runtime приложения уходит статика из `frontend/dist` (`/chat-ui/`), плюс `dist/sw.js`, `dist/manifest.webmanifest` и `dist/favicon.ico` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico`), чтобы service worker получил scope `/` и покрыл `/chat`.
+Нужен для сборки чата (`frontend/`) и админки (`admin/`). В runtime уходит статика из `frontend/dist` (`/chat-ui/`) и `admin/dist` (`/admin-ui/`). Плюс `frontend/dist/sw.js`, `dist/manifest.webmanifest` и `dist/favicon.ico` — их бэкенд отдаёт из корня сайта (`/sw.js`, `/manifest.webmanifest`, `/favicon.ico`), чтобы service worker получил scope `/` и покрыл `/chat`.
 
 | Pin | Где |
 |-----|-----|
 | `24` | `.nvmrc` (nvm / fnm) |
-| `engines.node = ">=24"` | `frontend/package.json` |
+| `engines.node = ">=24"` | `frontend/package.json`, `admin/package.json` |
 
 ```bash
 nvm use                 # читает .nvmrc → Node 24
 node --version          # v24.x
 make frontend-install
-make frontend-build     # ассеты в frontend/dist (+ dist/sw.js — service worker PWA)
+make frontend-build     # frontend/dist (/chat-ui/) и admin/dist (/admin-ui/)
 cd frontend && npm run test
 ```
 

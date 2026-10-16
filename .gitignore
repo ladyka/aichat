@@ -12,6 +12,8 @@ data/
 site/
 frontend/node_modules/
 frontend/dist/
+admin/node_modules/
+admin/dist/
 .coverage
 .pytest_cache/
 data/

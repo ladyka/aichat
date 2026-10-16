@@ -59,4 +59,14 @@ frontend/public/
 !frontend/dist/
 !frontend/dist/**
 
+# Admin UI source; upload built assets only
+admin/node_modules/
+admin/src/
+admin/*.json
+admin/*.html
+admin/*.ts
+admin/.gitignore
+!admin/dist/
+!admin/dist/**
+
 .playwright-cli/

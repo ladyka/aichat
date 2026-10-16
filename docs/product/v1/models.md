@@ -17,7 +17,7 @@
 
 ## Где в коде
 
-`app/models_catalog.py` — кеш, маппинг публичных имён в upstream, маршрутизация по провайдерам; `app/ai_providers.py` — разбор `ai-providers.yaml`; `app/model_providers/openai_compat.py` — HTTP к yaml-провайдерам; `app/site_settings.py` — эффективный дефолт и белый список (БД поверх env); `app/routes/admin.py` и `templates/admin.html` — админка; `app/model_providers/openrouter.py`, `app/model_providers/ol.py` — HTTP-прокси к LLM; `app/routes/api.py` — `/v1/models`, `/api/models`; `app/routes/conversations.py` — `/api/settings`; `templates/settings.html` — раздел «Чат» (якорь `#chat`): выбор модели и навыки для новых чатов одной формой.
+`app/models_catalog.py` — кеш, маппинг публичных имён в upstream, маршрутизация по провайдерам; `app/ai_providers.py` — разбор `ai-providers.yaml`; `app/model_providers/openai_compat.py` — HTTP к yaml-провайдерам; `app/site_settings.py` — эффективный дефолт и белый список (БД поверх env); `app/routes/admin.py` и `templates/admin.html` — оболочка `/admin`; `admin/` — отдельное React-приложение (сборка в `/admin-ui/`, данные через `/api/admin/models`, та же cookie-сессия); `app/model_providers/openrouter.py`, `app/model_providers/ol.py` — HTTP-прокси к LLM; `app/routes/api.py` — `/v1/models`, `/api/models`; `app/routes/conversations.py` — `/api/settings`; `templates/settings.html` — раздел «Чат» (якорь `#chat`): выбор модели и навыки для новых чатов одной формой.
 
 ## Что осталось
 

@@ -25,6 +25,13 @@ else
     echo "pre-commit: frontend/node_modules не найден, тесты фронтенда пропущены — make frontend-install"
 fi
 
+if [ -d "admin/node_modules" ]; then
+    echo "pre-commit: тесты админки — npm run test"
+    (cd admin && npm run test) || failed=1
+else
+    echo "pre-commit: admin/node_modules не найден, тесты админки пропущены — make frontend-install"
+fi
+
 if [ "$failed" -ne 0 ]; then
     echo
     echo "pre-commit: тесты упали — коммит отменён."

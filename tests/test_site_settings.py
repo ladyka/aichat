@@ -112,12 +112,17 @@ def test_admin_page_requires_admin(client, monkeypatch):
     async def fake_providers():
         return ([{"id": "openrouter/auto:free", "created": 1}], [], {})
 
+    assert client.get("/api/admin/models").status_code == 403
+
     monkeypatch.setattr(mc, "_fetch_provider_models", fake_providers)
     monkeypatch.setattr(get_settings(), "admin_emails", frozenset({address.lower()}))
     response = client.get("/admin")
     assert response.status_code == 200
     assert "Админка" in response.text
-    assert "Дефолтная модель" in response.text
+    assert "/admin-ui/assets/admin.js" in response.text
+    payload = client.get("/api/admin/models")
+    assert payload.status_code == 200
+    assert "openrouter/auto" in payload.json()["catalog_ids"]
 
 
 def test_admin_save_allowlist(client, monkeypatch):
@@ -139,16 +144,20 @@ def test_admin_save_allowlist(client, monkeypatch):
 
     monkeypatch.setattr(mc, "_fetch_provider_models", fake_providers)
 
-    response = client.post(
-        "/admin",
-        data={
-            "action": "save",
+    response = client.put(
+        "/api/admin/models",
+        json={
+            "use_env_default": False,
+            "use_env_allowed": False,
             "default_model": "openrouter/auto",
+            "unrestricted": False,
             "allowed_models": ["openrouter/auto"],
         },
     )
     assert response.status_code == 200
-    assert "Сохранено" in response.text
+    body = response.json()
+    assert body["effective_default_model"] == "openrouter/auto"
+    assert "openrouter/auto" in body["selected_model_ids"]
     assert ss.get_effective_default_model() == "openrouter/auto"
     assert ss.get_effective_allowed_models() == frozenset({"openrouter/auto"})
 
@@ -157,6 +166,15 @@ def test_admin_save_allowlist(client, monkeypatch):
     assert "openrouter/auto" in ids
     assert "vendor/other" not in ids
 
-    reset = client.post("/admin", data={"action": "reset"})
+    rejected = client.put(
+        "/api/admin/models",
+        json={
+            "default_model": "missing/model",
+            "allowed_models": ["missing/model"],
+        },
+    )
+    assert rejected.status_code == 400
+
+    reset = client.post("/api/admin/models/reset")
     assert reset.status_code == 200
     assert ss.get_db_overrides() == (None, None)

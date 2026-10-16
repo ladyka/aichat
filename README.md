@@ -82,7 +82,7 @@ Git-хук на коммит (один раз после клонировани�
 make hooks     # git config core.hooksPath .githooks
 ```
 
-Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test`;
+Перед каждым коммитом `.githooks/pre-commit` прогоняет `make test-coverage`, `cd frontend && npm run test` и `cd admin && npm run test`;
 если что-то падает — коммит не создаётся. `--no-verify` обходит проверку. Если `.venv` или
 `frontend/node_modules` нет, соответствующие тесты пропускаются с предупреждением (на свежем клоне
 это ожидаемо).
@@ -258,6 +258,7 @@ make docs-build   # strict build в ./site/
 app/           # FastAPI: auth, DB, model_providers, tools, routes
 migrations/    # Alembic: ревизии схемы (alembic.ini в корне)
 frontend/      # React + assistant-ui (сборка → frontend/dist → /chat-ui/; тесты в frontend/src/tests)
+admin/         # React-админка (сборка → admin/dist → /admin-ui/; страница /admin, cookie-сессия)
 frontend/public/  # PWA: manifest.webmanifest + иконки + favicon.ico (коммитятся; генератор — scripts/generate_pwa_icons.py)
 frontend/src/sw.ts # PWA: service worker (сборка → dist/sw.js, бэкенд отдаёт его как /sw.js)
 templates/     # Jinja2: лендинг, о сервисе, auth, settings, tokens, skills, catalog, chat shell
@@ -283,7 +284,7 @@ make update-prod   # собирает frontend, затем FTP
 make update-requirements-prod  # заливает на FTP только requirements.txt
 ```
 
-Сборка чата (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
+Сборка чата и админки (`make update-prod` / `make frontend-build`) — на **Node.js 24+**. На сервере: **Python 3.13+**, зависимости в `.venv` (включая Alembic), `.env` с секретами (не заливается по FTP), перезапуск Python-приложения в панели хостинга — при старте применятся миграции.
 
 PWA-артефакты (`dist/sw.js`, `dist/manifest.webmanifest`, иконки — включая `favicon.ico`, который бэкенд отдаёт из корня как `/favicon.ico`) уезжают вместе с остальной сборкой. Иконки в `frontend/public/` **коммитятся**: `scripts/deploy_ftp.py` отказывается работать на «грязном» git-дереве, так что перед `make update-prod` их нужно закоммитить. Учтите и обратную сторону: `plan_sync` удаляет на проде файлы, которых нет в локальной сборке, — если собрать фронт без PWA-плагина, `dist/sw.js` пропадёт локально и будет удалён на сервере (чат при этом продолжит работать, но без офлайна).
 

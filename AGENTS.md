@@ -35,7 +35,7 @@
 
 | Путь | Назначение |
 |------|------------|
-| `app/main.py` | FastAPI app, static + `/chat-ui` mount |
+| `app/main.py` | FastAPI app, static + `/chat-ui` и `/admin-ui` mount |
 | `app/config.py` | env / settings (`LOG_LEVEL` — уровень логов приложения и uvicorn) |
 | `app/db.py` | SQLAlchemy models; `init_db()` гоняет Alembic `upgrade head` |
 | `skills` / `user_skill_defaults` / `conversation_skills` / `skill_shares` | Skills: свой markdown, копия с `parent_id`, дефолты новых чатов, набор чата (можно менять), шаринг в каталог |
@@ -44,7 +44,7 @@
 | `app/models_catalog.py` | кеш `/v1/models`, маппинг public ↔ upstream, маршрутизация провайдеров |
 | `app/ai_providers.py` | разбор `ai-providers.yaml` |
 | `app/site_settings.py` | эффективный дефолт и белый список моделей (БД поверх env) |
-| `app/routes/admin.py` | `/admin` — дефолтная модель и разрешённые модели |
+| `app/routes/admin.py` | `/admin` (оболочка) и `/api/admin/models` — дефолт и белый список |
 | `app/model_providers/` | HTTP-прокси к LLM: OpenRouter, ol, `openai_compat` (yaml) |
 | `app/storage.py` | S3 Cloud.ru: PutObject + публичный URL |
 | `app/tools.py` | инструменты чата: погода, дата/время, `download_file`, заметка чата, pzz.by, `generate_image`, `web_search`, обратная связь (`send_feedback`), деплой сайта (`create_site` / `update_site` / `delete_site` / `publish_site` / `site_status`), веб-поиск OpenRouter (`attach_openrouter_web_search`) |
@@ -67,6 +67,7 @@
 | `app/og.py` | Open Graph: абсолютные URL превью, сниппет описания |
 | `app/visitors.py` | классификация User-Agent: human / crawler / bot |
 | `frontend/` | React + assistant-ui (чат) |
+| `admin/` | отдельное React-приложение админки (`/admin`, сборка → `/admin-ui/`) |
 | `frontend/src/sw.ts` | PWA: service worker (кеш API + офлайн-оболочка; сборка → `dist/sw.js`). Собирается `tsconfig.sw.json`, `tsconfig.app.json` его исключает — DOM- и WebWorker-lib несовместимы |
 | `frontend/public/` | PWA: `manifest.webmanifest` (версионируемый, `start_url` `/chat`) + иконки + `favicon.ico` (генератор — `scripts/generate_pwa_icons.py`). PWA-теги — только в `templates/chat.html` |
 | `frontend/src/tests/` | Vitest-тесты фронтенда (адаптер модели, геолокация, markdown-ссылки, автотема) |
@@ -96,19 +97,19 @@
 - При completions в лог пиши: `aichat_model=…` `provider=…` `upstream_model=…`.
 - Сбой чата или руки — сначала трейс Phoenix (вставка спана, `session.id`, фильтр ERROR). Какие поля смотреть и как выгрузить — `docs/dev/tracing.md`.
 - После изменений API/конфига/запуска — обнови `README.md` (и этот файл, если меняются правила агента).
-- Перед проверкой `/chat`: `make frontend-build` (ассеты в `frontend/dist`, отдаются как `/chat-ui/`).
+- Перед проверкой `/chat` и `/admin`: `make frontend-build` (чат — `frontend/dist` как `/chat-ui/`, админка — `admin/dist` как `/admin-ui/`).
 
 ### Getting started
 
 ```bash
 cp .env.example .env   # OPENROUTER_API_KEY; опционально OLLAMA_API_KEY
 make venv              # python3.13 -m venv .venv
-make frontend-install && make frontend-build   # Node 24+
+make frontend-install && make frontend-build   # Node 24+: чат и админка
 make hooks             # git core.hooksPath=.githooks: тесты на коммите
 make run  # http://127.0.0.1:8080/
 ```
 
-`.githooks/pre-commit` прогоняет `make test-coverage` и `cd frontend && npm run test` и не даёт
+`.githooks/pre-commit` прогоняет `make test-coverage`, `cd frontend && npm run test` и `cd admin && npm run test` и не даёт
 закоммитить красные тесты (обход — `--no-verify`). Хук срабатывает и на твоих коммитах: если тесты
 падают, сначала почини их (или скажи пользователю, что падает и почему), а не обходи проверку.
 
