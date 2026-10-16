@@ -9,6 +9,14 @@
 #   - иначе — GET models_url (по умолчанию {base_url}/models).
 
 providers:
+  # Mistral. Публичные id: mistral/<model>, например mistral/mistral-small-latest.
+  # Ключ — MISTRAL_API_KEY в .env. Список моделей берётся с GET {base_url}/models.
+  - id: mistral
+    base_url: https://api.mistral.ai/v1
+    api_key: ${MISTRAL_API_KEY}
+    timeout: 120
+    enabled: true
+
   # Пример: автозагрузка списка моделей
   # - id: groq
   #   base_url: https://api.groq.com/openai/v1

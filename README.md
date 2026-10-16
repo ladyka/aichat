@@ -138,7 +138,8 @@ cd frontend && npm run dev   # :5173
 | `DEFAULT_MODEL` | Куда указывает публичный id `default`: `default` → openrouter/free, или конкретный id (`ol/…`, yaml `id/…`, модель OpenRouter). Админка `/admin` может переопределить в БД |
 | `ALLOWED_MODELS` | Белый список публичных id через запятую. Пусто — без ограничения. Админка может переопределить в БД |
 | `ADMIN_EMAILS` | Email администраторов через запятую. Пусто — `/admin` никому не открыт |
-| `AI_PROVIDERS_FILE` | Путь к `ai-providers.yaml` (доп. OpenAI-совместимые провайдеры; образец — `ai-providers.example.yaml`) |
+| `AI_PROVIDERS_FILE` | Путь к `ai-providers.yaml` (доп. OpenAI-совместимые провайдеры; образец — `ai-providers.example.yaml`, там же Mistral) |
+| `MISTRAL_API_KEY` | Ключ Mistral для провайдера `mistral` в yaml. Публичные id: `mistral/<model>` |
 | `SYSTEM_PROMPT` | Системный промпт всех диалогов. Не задан — дефолт из `app/config.py`, пустой — отключён |
 | `TITLE_MODEL` | Модель фонового определения темы диалога (после 1-го, 2-го, 5-го ответа робота). Пусто — дефолтная из `DEFAULT_MODEL` (id `default`) |
 | `MODELS_CACHE_TTL` | TTL кеша `/v1/models` (сек) |

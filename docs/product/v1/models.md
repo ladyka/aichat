@@ -13,7 +13,7 @@
 - Провайдеры: OpenRouter (серверный ключ), облачный ollama.com (`OLLAMA_API_KEY`) и доп. OpenAI-совместимые из `ai-providers.yaml`. Выключенный провайдер просто не появляется в списке — молчащей модели не бывает.
 - Тема диалога считается отдельной моделью (`TITLE_MODEL`).
 - Дефолт алиаса `default` и белый список моделей: сначала переменные окружения (`DEFAULT_MODEL`, `ALLOWED_MODELS`), при необходимости — переопределение в админке `/admin` (доступ по `ADMIN_EMAILS`). Пустой белый список в окружении значит «без ограничения».
-- Дополнительные OpenAI-совместимые провайдеры — файл `ai-providers.yaml` (образец `ai-providers.example.yaml`): `base_url`, `api_key` (удобно через `${ENV}`), модели вручную (`models`) или автоматически (`models_url`, по умолчанию `{base_url}/models`). Публичные id: `<id>/<model>`.
+- Дополнительные OpenAI-совместимые провайдеры — файл `ai-providers.yaml` (образец `ai-providers.example.yaml`): `base_url`, `api_key` (удобно через `${ENV}`), модели вручную (`models`) или автоматически (`models_url`, по умолчанию `{base_url}/models`). Публичные id: `<id>/<model>`. В образце включён Mistral (`mistral/…`, ключ `MISTRAL_API_KEY`).
 
 ## Где в коде
 
